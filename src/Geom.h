@@ -1,0 +1,145 @@
+#ifndef GEOM_H_
+#include <string>
+#include <map>
+#include <vector>
+#include <string>
+#include <climits>
+#include <set>
+#include "nlohmann/json.hpp"
+
+namespace Geom {
+
+using namespace std;
+using json = nlohmann::json;
+
+class Transform;
+
+class Point {
+  private:
+    int _x, _y;
+  public:
+    Point(int x = INT_MAX, int y = INT_MAX) : _x(x), _y(y) {}
+    Point(const Point& p) : _x(p._x), _y(p._y) {}
+    const int& x() const { return _x; }
+    const int& y() const { return _y; }
+    int& x() { return _x; }
+    int& y() { return _y; }
+    void scale(int t) { _x *= t; _y *= t; }
+    void translate(int x, int y) { _x += x; _y += y; }
+    void translate(int c) { _x += c; _y += c; }
+    void translate(const Point& p) { _x += p.x(); _y += p.y(); }
+    string toString() const { return to_string(_x) + "," + to_string(_y); }
+    Point transform(const Transform& tr, const int width, const int height) const;
+    const json toJSON() const { return std::move(json{{"x", _x}, {"y", _y}}); }
+
+};
+
+class Transform {
+  private:
+    Point _origin;
+    unsigned _hflip : 1;
+    unsigned _vflip : 1;
+
+  public:
+    Transform(const Point& o, const int hf, const int vf) :
+      _origin(o), _hflip(hf == 0 ? 0 : 1), _vflip(vf == 0 ? 0 : 1) {}
+    const Point& origin() const { return _origin; }
+    bool hflip() const { return _hflip; }
+    bool vflip() const { return _vflip; }
+    const json toJSON() const { return std::move(json{{"Origin", _origin.toJSON()}, {"hflip", _hflip}, {"vflip", _vflip}}); }
+};
+
+class Rect {
+  private:
+    Point _ll, _ur;
+
+  public:
+    const int& xmin() const { return _ll.x(); }
+    const int& ymin() const { return _ll.y(); }
+    const int& xmax() const { return _ur.x(); }
+    const int& ymax() const { return _ur.y(); }
+    int& xmin() { return _ll.x(); }
+    int& ymin() { return _ll.y(); }
+    int& xmax() { return _ur.x(); }
+    int& ymax() { return _ur.y(); }
+    const int xcenter() const { return (_ll.x() + _ur.x())/2; }
+    const int ycenter() const { return (_ll.y() + _ur.y())/2; }
+
+    void fix()
+    {
+      if (xmin() > xmax()) std::swap(xmin(), xmax());
+      if (ymin() > ymax()) std::swap(ymin(), ymax());
+    }
+    Rect(const Point& ll, const Point& ur) : _ll(ll), _ur(ur) { fix(); }
+    Rect(const int x1 = INT_MAX, const int y1 = INT_MAX, const int x2 = -INT_MAX, const int y2 = -INT_MAX) : _ll(x1, y1), _ur(x2, y2)
+    {
+      if (x1 != INT_MAX) fix();
+    }
+    void set(int x1 = INT_MAX, int y1 = INT_MAX, int x2 = -INT_MAX, int y2 = -INT_MAX)
+    {
+      _ll.x() = x1; _ll.y() = y1; _ur.x() = x2; _ur.y() = y2;
+      if (x1 != INT_MAX) fix();
+    }
+
+    bool valid() const { return _ll.x() <= _ur.x() && _ll.y() <= _ur.y(); }
+
+    bool intersect(const Rect& r)
+    {
+      int x1 = max(xmin(), r.xmin());
+      int y1 = max(ymin(), r.ymin());
+      int x2 = min(xmax(), r.xmax());
+      int y2 = min(ymax(), r.ymax());
+      xmin() = x1;
+      ymin() = y1;
+      xmax() = x2;
+      ymax() = y2;
+      return valid();
+    }
+
+    void merge(const Rect& r)
+    {
+      xmin() = min(xmin(), r.xmin());
+      ymin() = min(ymin(), r.ymin());
+      xmax() = max(xmax(), r.xmax());
+      ymax() = max(ymax(), r.ymax());
+    }
+
+    void merge(const int x1, const int y1, const int x2, const int y2)
+    {
+      xmin() = min(xmin(), x1);
+      ymin() = min(ymin(), y1);
+      xmax() = max(xmax(), x2);
+      ymax() = max(ymax(), y2);
+    }
+
+    void bloat(const int c) { _ll.translate(-c); _ur.translate(c); }
+    Rect bloated(const int c) { return move(Rect(xmin() - c, ymin() - c, xmax() + c, ymax() + c)); }
+    
+    int width() const { return xmax() - xmin(); }
+    int height() const { return ymax() - ymin(); }
+
+    bool isVert() const { return width() <= height(); }
+    bool isHor() const { return height() <= width(); }
+
+    void translate(const int x, const int y) { _ll.translate(x, y); _ur.translate(x, y); }
+    void translate(const int c) { _ll.translate(c); _ur.translate(c); }
+
+    Rect translate(const Point& pt) const
+    {
+      auto r = Rect(_ll, _ur);
+      r.translate(pt.x(), pt.y());
+      return move(r);
+    }
+
+    Rect transform(const Transform& tr, const int width, const int height) const;
+
+    long area() const { return ((long)width()) * height(); }
+    string toString() const { return _ll.toString() + " -- " + _ur.toString(); }
+    const json toJSON() const { return std::move(json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}); }
+};
+
+typedef vector<Rect> Rects;
+
+}
+
+#endif
