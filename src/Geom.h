@@ -30,7 +30,7 @@ class Point {
     void translate(const Point& p) { _x += p.x(); _y += p.y(); }
     string toString() const { return to_string(_x) + "," + to_string(_y); }
     Point transform(const Transform& tr, const int width, const int height) const;
-    const json toJSON() const { return std::move(json{{"x", _x}, {"y", _y}}); }
+    const json toJSON() const { return json{{"x", _x}, {"y", _y}}; }
 
 };
 
@@ -46,7 +46,7 @@ class Transform {
     const Point& origin() const { return _origin; }
     bool hflip() const { return _hflip; }
     bool vflip() const { return _vflip; }
-    const json toJSON() const { return std::move(json{{"Origin", _origin.toJSON()}, {"hflip", _hflip}, {"vflip", _vflip}}); }
+    const json toJSON() const { return json{{"Origin", _origin.toJSON()}, {"hflip", _hflip}, {"vflip", _vflip}}; }
 };
 
 class Rect {
@@ -113,7 +113,7 @@ class Rect {
     }
 
     void bloat(const int c) { _ll.translate(-c); _ur.translate(c); }
-    Rect bloated(const int c) { return move(Rect(xmin() - c, ymin() - c, xmax() + c, ymax() + c)); }
+    Rect bloated(const int c) { return Rect(xmin() - c, ymin() - c, xmax() + c, ymax() + c); }
     
     int width() const { return xmax() - xmin(); }
     int height() const { return ymax() - ymin(); }
@@ -128,14 +128,14 @@ class Rect {
     {
       auto r = Rect(_ll, _ur);
       r.translate(pt.x(), pt.y());
-      return move(r);
+      return r;
     }
 
     Rect transform(const Transform& tr, const int width, const int height) const;
 
     long area() const { return ((long)width()) * height(); }
     string toString() const { return _ll.toString() + " -- " + _ur.toString(); }
-    const json toJSON() const { return std::move(json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}); }
+    const json toJSON() const { return json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}; }
 };
 
 typedef vector<Rect> Rects;
