@@ -1,5 +1,4 @@
 CPP = g++
-
 CCFLAGS = -Wall -O3 -g -std=c++11
 INCLUDES = ./include/
 LFLAGS = 
@@ -8,7 +7,9 @@ BIN = bin
 SRC = src
 SRCS = $(wildcard $(SRC)/*.cpp)
 OBJS:= $(patsubst ${SRC}%.cpp,${BIN}%.o,$(SRCS))
-
+DEPS := $(OBJS:.o=.d)
+DEPDIR := $(BIN)/.deps
+DEPFLAGS = -MT $@ -MMD 
 
 # define the executable file 
 MAIN = hanan_router
@@ -18,10 +19,12 @@ MAIN = hanan_router
 $(MAIN): $(OBJS) 
 	$(CPP) $(CCFLAGS) -I$(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
 
-$(BIN)/%.o: $(SRC)/%.cpp ${SRC}/%.h
-	mkdir -p $(BIN)
-	$(CPP) $(CCFLAGS) -I$(INCLUDES) -c $<  -o $@
+-include $(DEPS)
+
+$(BIN)/%.o: $(SRC)/%.cpp 
+	@mkdir -p $(BIN)
+	$(CPP) $(CCFLAGS) $(DEPFLAGS) -I$(INCLUDES) -c $<  -o $@
 
 clean:
-	rm -f $(MAIN) $(BIN)/*.o
+	rm -rf $(MAIN) $(BIN)/*.o $(DEPDIR)
 

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <map>
 
 namespace DRC {
 
@@ -48,6 +49,19 @@ class MetalLayer : public Layer {
       : Layer(gdsNo, name, mur, lr, ur), _pitch(0), _width(0), _minL(0), _maxL(0), _e2e(0), _offset(0),
     _c{0,0,0}, _cc{0, 0, 0}, _dir(Direction::ORTHOGONAL) {}
     void setPitch(const int p) {_pitch = p;}
+    void setWidth(const int w) {_width = w;}
+    void setMinL(const int l) {_minL = l;}
+    void setMaxL(const int l) {_maxL = l;}
+    void setE2E(const int e) {_e2e = e;}
+    void setOffset(const int o) {_offset = o;}
+    void setDirection(const bool horiz) { _dir = horiz ? Direction::HORIZONTAL : Direction::VERTICAL; }
+    void setC(const float muc, const float lc, const float uc) { _c[0] = muc; _c[1] = lc; _c[2] = uc; }
+    void setCC(const float muc, const float lc, const float uc) { _cc[0] = muc; _cc[1] = lc; _cc[2] = uc; }
+    ~MetalLayer()
+    {
+      std::cout << _pitch << ' ' << _width << ' ' << _minL << ' ' << _maxL << ' ' << _e2e << ' ' << _offset << ' ';
+      std::cout << (_dir == Direction::HORIZONTAL ? "hor" : "ver") << ' ';
+    }
 };
 typedef std::vector<MetalLayer*> MetalLayers;
 
@@ -55,8 +69,24 @@ class ViaLayer : public Layer {
   private:
     int _space[2]; // 0 : x, 1 : y
     int _width[2]; // 0 : x, 1 : y
-    std::pair<MetalLayer*, MetalLayer*> _layerPair; // first : lower, second : upper
+    std::pair<const MetalLayer*, const MetalLayer*> _layerPair; // first : lower, second : upper
     int _coverl[2], _coveru[2]; // 0 : low, 1 : high
+  public:
+    ViaLayer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur)
+      : Layer(gdsNo, name, mur, lr, ur), _space{0, 0}, _width{0, 0},
+      _layerPair(nullptr, nullptr), _coverl{0, 0}, _coveru{0, 0} {}
+    void setSpace(const int x, const int y) {_space[0] = x; _space[1] = y;}
+    void setWidth(const int x, const int y) {_width[0] = x; _width[1] = y;}
+    void setCoverL(const int x, const int y) {_coverl[0] = x; _coverl[1] = y;}
+    void setCoverU(const int x, const int y) {_coveru[0] = x; _coveru[1] = y;}
+    void setLayerPair(const MetalLayer* m1, const MetalLayer* m2) {_layerPair = std::make_pair(m1, m2); }
+    ~ViaLayer()
+    {
+      std::cout << _space[0] << ' ' << _space[1] << " -- " << _width[0] << ' ' << _width[1] << ' ';
+      std::cout << (_layerPair.first ? _layerPair.first->name() : " ") << ' ';
+      std::cout << (_layerPair.second ? _layerPair.second->name() : " ") << ' ';
+      std::cout << _coverl[0] << ' ' << _coverl[1] << " -- " << _coveru[0] << ' ' << _coveru[1] << ' ';
+    }
 
 };
 typedef std::vector<ViaLayer*> ViaLayers;
@@ -66,6 +96,7 @@ class LayerInfo {
     MetalLayers _mlayers;
     ViaLayers _vlayers;
     std::vector<ViaLayer*> _vldn, _vlup;
+    std::map<std::string, MetalLayer*> _mlayerNameMap;
   public:
     LayerInfo(const std::string& lj);
     void print() const;
