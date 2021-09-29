@@ -1,4 +1,5 @@
 #ifndef GEOM_H_
+#define GEOM_H_
 #include <string>
 #include <map>
 #include <vector>

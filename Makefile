@@ -18,7 +18,7 @@ MAIN = hanan_router
 $(MAIN): $(OBJS) 
 	$(CPP) $(CCFLAGS) -I$(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
 
-$(BIN)/%.o: $(SRC)/%.cpp 
+$(BIN)/%.o: $(SRC)/%.cpp ${SRC}/%.h
 	mkdir -p $(BIN)
 	$(CPP) $(CCFLAGS) -I$(INCLUDES) -c $<  -o $@
 
