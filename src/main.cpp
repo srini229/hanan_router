@@ -7,7 +7,7 @@
 std::string parseArgs(const int argc, char* const argv[], const std::string& arg)
 {
   std::string str;
-  for (unsigned i = 0; i < argc; ++i) {
+  for (int i = 0; i < argc; ++i) {
     if (std::string(argv[i]) == arg && i != (argc - 1)) {
       str = argv[i+1];
       break;
