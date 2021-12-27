@@ -8,9 +8,8 @@
 
 typedef long CostType;
 
-std::string parseArgs(const int argc, char* const argv[], const std::string& arg)
+std::string parseArgs(const int argc, char* const argv[], const std::string& arg, std::string str = "")
 {
-  std::string str;
   for (int i = 0; i < argc; ++i) {
     if (std::string(argv[i]) == arg && i != (argc - 1)) {
       str = argv[i+1];
@@ -213,12 +212,16 @@ int main(int argc, char* argv[])
 {
   Geom::Point pt(10, 10);
 
-  std::string layerJSONFile = parseArgs(argc, argv, "-l");
-
+  std::string layerJSONFile = parseArgs(argc, argv, "-d");
   DRC::LayerInfo linfo(layerJSONFile);
+  int uu{1000};
+  try {
+    uu = std::stoi(parseArgs(argc, argv, "-uu"));
+  } catch (const std::invalid_argument& ia) {}
 
   std::string plfile = parseArgs(argc, argv, "-p");
-  Placement::Netlist netlist(plfile);
+  std::string leffile = parseArgs(argc, argv, "-l");
+  Placement::Netlist netlist(plfile, leffile, linfo, uu);
   netlist.print();
 
   std::string stfile = parseArgs(argc, argv, "-s");

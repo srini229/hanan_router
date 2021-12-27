@@ -32,6 +32,7 @@ class Layer {
       std::cout << "layer : " << _name << ' ' << _gdsNo << " {" << _r[0] << ',' << _r[1] << ',' << _r[2] << "}\n";
     }
 };
+typedef std::vector<Layer*> Layers;
 
 class gdsDatatype {
   public:
@@ -95,12 +96,19 @@ class LayerInfo {
   private:
     MetalLayers _mlayers;
     ViaLayers _vlayers;
+    Layers _layers;
+    std::map<std::string, int> _layerIndex;
     std::vector<ViaLayer*> _vldn, _vlup;
     std::map<std::string, MetalLayer*> _mlayerNameMap;
   public:
     LayerInfo(const std::string& lj);
     void print() const;
     ~LayerInfo();
+    int getLayerIndex(const std::string& name) const
+    {
+      auto it = _layerIndex.find(name);
+      return ((it != _layerIndex.end()) ? it->second : -1);
+    }
 };
 
 }

@@ -1,8 +1,11 @@
 #include "Placement.h"
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 namespace Placement {
+
+const auto& npos = std::string::npos;
 
 void Net::print() const
 {
@@ -22,18 +25,29 @@ Module::~Module()
 
 void Module::print() const
 {
-  std::cout << "\tpins : [";
   for (const auto& p : _pins) {
-    std::cout << " " << p.first;
+    std::cout << "\tpin : " << p.first << '\n';
+    for (const auto& l : p.second->shapes()) {
+      std::cout << "\t\tlayer : " << l.first << '\n';
+      for (const auto& r : l.second) {
+        std::cout << "\t\t\t" << r.str() << '\n';
+      }
+    }
   }
-  std::cout << " ]\n";
   for (const auto& n : _nets) {
     std::cout << "\tnet : " << n.first << " : {";
     n.second.print();
     std::cout << "}\n";
   }
   for (const auto& inst : _instances) {
-    std::cout << "\tinst : " << inst->name() << ' ' << inst->moduleName() << ' ' << inst->transform().str() << '\n';
+    std::cout << "\tinst : " ;
+    inst->print("\t");
+  }
+  for (const auto& l : _obstacles) {
+    std::cout << "\tobstacle : layer : " << l.first;
+    for (const auto& r : l.second) {
+      std::cout << "\t\t" << r.str() << '\n';
+    }
   }
 }
 
@@ -48,6 +62,7 @@ void Module::build()
       }
     }
   }
+  _tmpnetpins.clear();
 }
 
 
@@ -74,14 +89,30 @@ void Instance::build()
 }
 
 
+void Instance::print(const std::string& prefix) const
+{
+  std::cout << prefix << "name : " << _name << " module : " << _modname << '\n';
+  std::cout << prefix << "\ttr : " << _tr.str() << '\n';
+  for (const auto& p : _pins) {
+    std::cout << prefix << "\tpin : " << p.first << '\n';
+    for (const auto& l : p.second->shapes()) {
+      std::cout << prefix << "\t\tlayer : " << l.first << '\n';
+      for (const auto& r : l.second) {
+        std::cout << prefix << "\t\t\t" << r.str() << '\n';
+      }
+    }
+  }
+}
+
 using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
-Netlist::Netlist(const std::string& plfile)
+Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu) : _uu(uu)
 {
   if (plfile.empty()) return;
   std::ifstream ifs(plfile);
   if (!ifs) return;
   ordered_json oj = json::parse(ifs);
+  ifs.close();
   auto it = oj.find("leaves");
   if (it != oj.end()) {
     for (auto& l : *it) {
@@ -143,6 +174,7 @@ Netlist::Netlist(const std::string& plfile)
       }
     }
   }
+  loadLEF(leffile, lf);
   build();
 }
 
@@ -174,6 +206,117 @@ void Netlist::build()
     }
   }
   for (auto& m : _modules) m.second->build();
+}
+
+
+void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
+{
+  if (leffile.empty()) {
+    std::cerr << "missing leffile" <<std::endl;
+    return;
+  }
+  std::ifstream ifs(leffile);
+  if (!ifs) {
+    std::cerr << "unable to open leffile " << leffile <<std::endl;
+    return;
+  }
+  std::string line;
+  bool inMacro{false}, inPin{false}, inObs{false}, inPort{false}, inUnits{false};
+  Module* curr_module{nullptr};
+  Pin* curr_pin{nullptr};
+  std::string macroName, pinName;
+  int layer{-1};
+  double macroUnits{1.};
+  int units = _uu;
+  while (std::getline(ifs, line)) {
+    std::string str;
+    std::stringstream ss(line);
+    if (line.find("MACRO") != npos) {
+      ss >> str >> macroName;
+      auto it = _modules.find(macroName);
+      if (it != _modules.end()) {
+        curr_module =  it->second;
+      }
+      inMacro = true;
+      continue;
+    }
+    if (line.find("END") != npos) {
+      if (inUnits) {
+        if (line.find("UNITS") != npos) {
+          inUnits = false;
+        }
+      }
+      if (inPort) {
+        inPort = false;
+      } else if (inPin) {
+        if (line.find(pinName) != npos) {
+          inPin = false;
+          curr_pin = nullptr;
+          pinName.clear();
+        }
+      } else if (inMacro) {
+        if (line.find(macroName) != npos) {
+          inMacro = false;
+          curr_module = nullptr;
+          macroName.clear();
+        }
+      } else if (inObs) {
+        inObs = false;
+        layer = -1;
+      }
+      continue;
+    }
+    if (inMacro && curr_module && line.find("PIN") != npos) {
+      ss >> str >> pinName;
+      curr_pin = curr_module->getPin(pinName);
+      inPin = true;
+      continue;
+    }
+    if (inUnits && line.find("DATABASE") != npos) {
+      ss >> str >> str >> str >> macroUnits;
+      units /= macroUnits;
+    }
+    if (inPin && curr_pin && line.find("PORT") != npos) {
+      inPort = true;
+      layer = -1;
+      continue;
+    }
+    if (line.find("OBS") != npos) {
+      inObs = true;
+      continue;
+    }
+    if (inPort && curr_pin) {
+      if (line.find("LAYER") != npos) {
+        ss >> str >> str;
+        layer = lf.getLayerIndex(str);
+        continue;
+      }
+      if (line.find("RECT") != npos) {
+        double llx{0}, lly{0}, urx{0}, ury{0};
+        ss >> str >> llx >> lly >> urx >> ury;
+        if (layer > 0) {
+          curr_pin->addRect(layer, Geom::Rect(llx * units, lly * units, urx * units, ury * units));
+        }
+        continue;
+      }
+    }
+    if (inObs && curr_module) {
+      if (line.find("LAYER") != npos) {
+        ss >> str >> str;
+        layer = lf.getLayerIndex(str);
+        continue;
+      }
+      if (line.find("RECT") != npos) {
+        double llx{0}, lly{0}, urx{0}, ury{0};
+        ss >> str >> llx >> lly >> urx >> ury;
+        if (layer > 0) {
+          curr_module->addObstacle(layer, Geom::Rect(llx * units, lly * units, urx * units, ury * units));
+        }
+        continue;
+      }
+    }
+  }
+  ifs.close();
 }
 
 };

@@ -2,6 +2,7 @@
 #define PLACEMENT_H_
 #include "nlohmann/json.hpp"
 #include "Geom.h"
+#include "Layer.h"
 
 namespace Placement {
 
@@ -61,6 +62,7 @@ class Instance {
     const std::string& moduleName() const { return _modname; }
     const Geom::Transform& transform() const { return _tr; }
     void setModule(const Module* m) { _m = m; }
+    void print(const std::string& prefix = "") const;
 };
 
 
@@ -74,6 +76,7 @@ class Module {
     Instances _instances;
     std::map<const Net*, std::vector<std::pair<Instance*, std::string>>> _tmpnetpins;
     void build();
+    LayerRects _obstacles;
   public:
     Module(const std::string& name, const int leaf) : _name(name), _leaf(leaf) {_instances.reserve(64);}
     ~Module();
@@ -119,16 +122,25 @@ class Module {
     const Nets& nets() const { return _nets; }
     const Pins& pins() const { return _pins; }
     void print() const;
+
+    Pin* getPin(const std::string& pn)
+    {
+      auto it = _pins.find(pn);
+      return ((it != _pins.end()) ? it->second : nullptr);
+    }
+    void addObstacle(const int layer, const Geom::Rect& r) { _obstacles[layer].push_back(r); }
 };
 
 
 class Netlist {
   private:
+    const int _uu;
     Modules _modules;
     void build();
+    void loadLEF(const std::string& leffile, const DRC::LayerInfo& lf);
 
   public:
-    Netlist(const std::string& plfile);
+    Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu);
     ~Netlist();
     void print() const;
 };

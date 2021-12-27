@@ -123,6 +123,13 @@ LayerInfo::LayerInfo(const std::string& ljfile)
       }
     }
   }
+
+  _layers.insert(_layers.end(), _mlayers.begin(), _mlayers.end());
+  _layers.insert(_layers.end(), _vlayers.begin(), _vlayers.end());
+  for (unsigned i = 0; i < _layers.size(); ++i) {
+    _layerIndex[_layers[i]->name()] = static_cast<int>(i);
+    std::cout << "layer : " << _layers[i]->name() << " index : " << i << '\n';
+  }
 }
 
 LayerInfo::~LayerInfo()
