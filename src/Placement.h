@@ -52,15 +52,17 @@ class Instance {
     Geom::Transform _tr;
     const Module* _m;
     Pins _pins;
+    LayerRects _routeshapes;
     void build();
   public:
     Instance(const std::string& iname = "", const std::string& mname = "", const Geom::Transform& tr = Geom::Transform()) :
       _name(iname), _modname(mname), _tr(tr), _m(nullptr) {}
     ~Instance();
-    void addModule(const Module* m) { _m = m; }
+    const Module* module() const {return _m; }
     const std::string& name() const { return _name; }
     const std::string& moduleName() const { return _modname; }
     const Geom::Transform& transform() const { return _tr; }
+    Geom::Rect transform(const Geom::Rect& r) const { return _tr.transform(r); }
     void setModule(const Module* m) { _m = m; }
     void print(const std::string& prefix = "") const;
 };
@@ -71,24 +73,32 @@ class Module {
   private:
     std::string _name;
     int _leaf : 1;
+    int _routed : 1;
     Nets _nets;
     Pins _pins;
     Instances _instances;
     std::map<const Net*, std::vector<std::pair<Instance*, std::string>>> _tmpnetpins;
-    void build();
     LayerRects _obstacles;
+
+    void build();
   public:
-    Module(const std::string& name, const int leaf) : _name(name), _leaf(leaf) {_instances.reserve(64);}
+    Module(const std::string& name, const int leaf) : _name(name), _leaf(leaf), _routed{leaf} {_instances.reserve(64);}
     ~Module();
     Instance* addInstance(const std::string& name, const std::string& mname, const Geom::Transform& tr)
     {
       _instances.emplace_back(new Instance(name, mname, tr)); 
       return _instances.back();
     }
+    bool routed() const { return (_routed ? true : false); }
     const std::string& name() const { return _name; }
     const Instances& instances() const { return _instances; }
     Instances& instances() { return _instances; }
+    const LayerRects& obstacles() const { return _obstacles; }
     bool isLeaf() const { return _leaf ? true : false; }
+    const Nets& nets() const { return _nets; }
+    const Pins& pins() const { return _pins; }
+
+    void setRouted() { _routed = 1; }
     Pin* addPin(const std::string& name)
     {
       Pin* p{nullptr};
@@ -119,16 +129,19 @@ class Module {
     {
       if(n) _tmpnetpins[n].push_back(std::make_pair(inst, pname));
     }
-    const Nets& nets() const { return _nets; }
-    const Pins& pins() const { return _pins; }
-    void print() const;
-
     Pin* getPin(const std::string& pn)
     {
       auto it = _pins.find(pn);
       return ((it != _pins.end()) ? it->second : nullptr);
     }
-    void addObstacle(const int layer, const Geom::Rect& r) { _obstacles[layer].push_back(r); }
+    void addObstacle(const int layer, const Geom::Rect& r)
+    {
+      _obstacles[layer].push_back(r);
+    }
+
+    void print() const;
+    void route();
+    void plot() const;
 };
 
 
@@ -143,6 +156,10 @@ class Netlist {
     Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu);
     ~Netlist();
     void print() const;
+    void route()
+    {
+      for (auto& m : _modules) m.second->route();
+    }
 };
 
 

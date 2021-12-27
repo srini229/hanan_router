@@ -66,6 +66,31 @@ void Module::build()
 }
 
 
+void Module::route()
+{
+  if (!_routed) {
+    for (auto& inst : _instances) {
+      auto m = inst->module();
+      if (!m->routed()) {
+        const_cast<Module*>(m)->route();
+      }
+      for (const auto& l : m->obstacles()) {
+        for (const auto& r : l.second) {
+          _obstacles[l.first].push_back(inst->transform(r));
+        }
+      }
+    }
+    std::cout << " routing : " << _name << std::endl;
+  }
+  _routed = 1;
+}
+
+
+void Module::plot() const
+{
+}
+
+
 Instance::~Instance()
 {
   for (auto& p : _pins) delete p.second;

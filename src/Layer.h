@@ -29,7 +29,7 @@ class Layer {
     float meanR() const { return _r[0]; }
     ~Layer()
     {
-      std::cout << "layer : " << _name << ' ' << _gdsNo << " {" << _r[0] << ',' << _r[1] << ',' << _r[2] << "}\n";
+      //std::cout << "layer : " << _name << ' ' << _gdsNo << " {" << _r[0] << ',' << _r[1] << ',' << _r[2] << "}\n";
     }
 };
 typedef std::vector<Layer*> Layers;
@@ -60,8 +60,8 @@ class MetalLayer : public Layer {
     void setCC(const float muc, const float lc, const float uc) { _cc[0] = muc; _cc[1] = lc; _cc[2] = uc; }
     ~MetalLayer()
     {
-      std::cout << _pitch << ' ' << _width << ' ' << _minL << ' ' << _maxL << ' ' << _e2e << ' ' << _offset << ' ';
-      std::cout << (_dir == Direction::HORIZONTAL ? "hor" : "ver") << ' ';
+      //std::cout << _pitch << ' ' << _width << ' ' << _minL << ' ' << _maxL << ' ' << _e2e << ' ' << _offset << ' ';
+      //std::cout << (_dir == Direction::HORIZONTAL ? "hor" : "ver") << ' ';
     }
 };
 typedef std::vector<MetalLayer*> MetalLayers;
@@ -83,10 +83,10 @@ class ViaLayer : public Layer {
     void setLayerPair(const MetalLayer* m1, const MetalLayer* m2) {_layerPair = std::make_pair(m1, m2); }
     ~ViaLayer()
     {
-      std::cout << _space[0] << ' ' << _space[1] << " -- " << _width[0] << ' ' << _width[1] << ' ';
-      std::cout << (_layerPair.first ? _layerPair.first->name() : " ") << ' ';
-      std::cout << (_layerPair.second ? _layerPair.second->name() : " ") << ' ';
-      std::cout << _coverl[0] << ' ' << _coverl[1] << " -- " << _coveru[0] << ' ' << _coveru[1] << ' ';
+      //std::cout << _space[0] << ' ' << _space[1] << " -- " << _width[0] << ' ' << _width[1] << ' ';
+      //std::cout << (_layerPair.first ? _layerPair.first->name() : " ") << ' ';
+      //std::cout << (_layerPair.second ? _layerPair.second->name() : " ") << ' ';
+      //std::cout << _coverl[0] << ' ' << _coverl[1] << " -- " << _coveru[0] << ' ' << _coveru[1] << ' ';
     }
 
 };

@@ -222,6 +222,7 @@ int main(int argc, char* argv[])
   std::string plfile = parseArgs(argc, argv, "-p");
   std::string leffile = parseArgs(argc, argv, "-l");
   Placement::Netlist netlist(plfile, leffile, linfo, uu);
+  netlist.route();
   netlist.print();
 
   std::string stfile = parseArgs(argc, argv, "-s");
