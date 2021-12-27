@@ -10,6 +10,7 @@
 
 namespace Geom {
 
+
 using namespace std;
 using json = nlohmann::json;
 
@@ -29,26 +30,12 @@ class Point {
     void translate(int x, int y) { _x += x; _y += y; }
     void translate(int c) { _x += c; _y += c; }
     void translate(const Point& p) { _x += p.x(); _y += p.y(); }
-    string toString() const { return to_string(_x) + "," + to_string(_y); }
     Point transform(const Transform& tr, const int width, const int height) const;
     const json toJSON() const { return json{{"x", _x}, {"y", _y}}; }
+    const std::string str() const { return "x : " + std::to_string(_x) + " y : " + std::to_string(_y); }
 
 };
 
-class Transform {
-  private:
-    Point _origin;
-    unsigned _hflip : 1;
-    unsigned _vflip : 1;
-
-  public:
-    Transform(const Point& o, const int hf, const int vf) :
-      _origin(o), _hflip(hf == 0 ? 0 : 1), _vflip(vf == 0 ? 0 : 1) {}
-    const Point& origin() const { return _origin; }
-    bool hflip() const { return _hflip; }
-    bool vflip() const { return _vflip; }
-    const json toJSON() const { return json{{"Origin", _origin.toJSON()}, {"hflip", _hflip}, {"vflip", _vflip}}; }
-};
 
 class Rect {
   private:
@@ -63,6 +50,8 @@ class Rect {
     int& ymin() { return _ll.y(); }
     int& xmax() { return _ur.x(); }
     int& ymax() { return _ur.y(); }
+    const Point& ll() const { return _ll; }
+    const Point& ur() const { return _ur; }
     const int xcenter() const { return (_ll.x() + _ur.x())/2; }
     const int ycenter() const { return (_ll.y() + _ur.y())/2; }
 
@@ -135,12 +124,48 @@ class Rect {
     Rect transform(const Transform& tr, const int width, const int height) const;
 
     long area() const { return ((long)width()) * height(); }
-    string toString() const { return _ll.toString() + " -- " + _ur.toString(); }
+    string str() const { return "LL : {" + _ll.str() + "} UR : {" + _ur.str() + "}"; }
     const json toJSON() const { return json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}; }
 };
-
 typedef vector<Rect> Rects;
 
-}
 
+class Transform {
+  private:
+    Point _o;
+    int _sX, _sY; 
+
+  public:
+    Transform(const int x = 0, const int y = 0, const int sx = 1, const int sy = 1) :
+      _o{x, y}, _sX{sx}, _sY{sy} {}
+    const Point& origin() const { return _o; }
+    bool sX() const { return _sX; }
+    bool sY() const { return _sY; }
+    void apply(Point& pt) const 
+    {
+      pt.x() = _o.x() + _sX * pt.x();
+      pt.y() = _o.y() + _sY * pt.y();
+    }
+    Point transform(const Point& pt) const
+    {
+      return Point(_o.x() + _sX * pt.x(), _o.y() + _sY * pt.y());
+    }
+    void apply(Rect& r) const 
+    {
+      r.xmin() = _o.x() + _sX * r.xmin();
+      r.ymin() = _o.y() + _sY * r.ymin();
+      r.xmax() = _o.x() + _sX * r.xmax();
+      r.ymax() = _o.y() + _sY * r.ymax();
+      r.fix();
+    }
+    Rect transform(const Rect& r) const
+    {
+      return Rect(transform(r.ll()), transform(r.ur()));
+    }
+    const json toJSON() const { return json{{"Origin", _o.toJSON()}, {"sX", _sX}, {"sY", _sY}}; }
+    const std::string str() const { return ("origin : {" + _o.str() + "} sX : " + std::to_string(_sX) + " sY : " + std::to_string(_sY)); }
+};
+
+
+}
 #endif

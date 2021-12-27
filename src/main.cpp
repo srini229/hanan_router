@@ -1,11 +1,10 @@
 #include <iostream>
+#include <fstream>
+#include <queue>
 
 #include "Geom.h"
 #include "Layer.h"
-
-#include <queue>
-#include <limits>
-#include <fstream>
+#include "Placement.h"
 
 typedef long CostType;
 
@@ -206,7 +205,7 @@ void HananRouterDB::printSol() const
     t->print("targets : ");
   }
   for (auto& obs : _obstacles) {
-    std::cout << "obs : " << obs.first.toString() << ' ' << obs.second << '\n';
+    std::cout << "obs : " << obs.first.str() << ' ' << obs.second << '\n';
   }
 }
 
@@ -217,6 +216,10 @@ int main(int argc, char* argv[])
   std::string layerJSONFile = parseArgs(argc, argv, "-l");
 
   DRC::LayerInfo linfo(layerJSONFile);
+
+  std::string plfile = parseArgs(argc, argv, "-p");
+  Placement::Netlist netlist(plfile);
+  netlist.print();
 
   std::string stfile = parseArgs(argc, argv, "-s");
   HananRouterDB hrdb;
