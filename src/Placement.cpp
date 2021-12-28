@@ -89,9 +89,8 @@ void Module::route()
 void Module::plot() const
 {
   std::ofstream ofs(_name + ".gplt");
-  if (ofs->is_open()) {
+  if (ofs.is_open()) {
     std::cout << "plotting module " << _name << " to " << _name << ".gplt\n";
-    auto &ofs = *fs;
     ofs << "unset key\nset label noenhanced\nset title noenhanced\n";
     ofs << "set title '" << _name << "'\n";
     unsigned cnt{1};
@@ -151,7 +150,7 @@ void Module::plot() const
     ofs << "EOF\n";
     ofs << "set size ratio GPVAL_DATA_Y_MAX/GPVAL_DATA_X_MAX\nrepl\npause -1";
   }
-  ofs.close()
+  ofs.close();
 }
 
 
