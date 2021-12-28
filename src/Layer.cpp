@@ -9,7 +9,8 @@ namespace DRC {
 
 using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
-LayerInfo::LayerInfo(const std::string& ljfile)
+LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullptr},
+ _cbottom{nullptr}, _ctop{nullptr}, _pbottom{nullptr}, _ptop{nullptr}
 {
   if (ljfile.empty()) return;
   std::ifstream ifs(ljfile);
@@ -116,8 +117,44 @@ LayerInfo::LayerInfo(const std::string& ljfile)
               if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it);
               vlayer->setCoverU(x, y);
               x = y = 0;
+              it = l.find("ViaCut");
+              if (it != l.end()) {
+                auto itv = it->find("Gen");
+                if (itv != it->end() && *itv == "ViaArrayGenerator") {
+                  int wx{0}, wy{0}, sx{0}, sy{0}, nx{1}, ny{1};
+                  itv = it->find("WidthX");
+                  if (itv != it->end() && itv->is_number_integer()) wx = static_cast<int>(*itv);
+                  itv = it->find("WidthY");
+                  if (itv != it->end() && itv->is_number_integer()) wy = static_cast<int>(*itv);
+                  itv = it->find("SpaceX");
+                  if (itv != it->end() && itv->is_number_integer()) sx = static_cast<int>(*itv);
+                  itv = it->find("SpaceY");
+                  if (itv != it->end() && itv->is_number_integer()) sy = static_cast<int>(*itv);
+                  itv = it->find("NumX");
+                  if (itv != it->end() && itv->is_number_integer()) nx = static_cast<int>(*itv);
+                  itv = it->find("NumY");
+                  if (itv != it->end() && itv->is_number_integer()) ny = static_cast<int>(*itv);
+                  vlayer->addViaArray(wx, wy, sx, sy, nx, ny);
+                }
+              }
               _vlayers.push_back(vlayer);
             }
+          }
+        }
+      }
+    }
+    auto itd = oj.find("design_info");
+    if (itd != oj.end()) {
+      std::string layers[] = {"top_signal_routing_layer", "bottom_signal_routing_layer",
+        "top_power_routing_layer", "bottom_power_grid_layer",
+        "top_clock_routing_layer", "bottom_clock_routing_layer"};
+      MetalLayer** mlayers[] = {&_stop, &_sbottom, &_ptop, &_pbottom, &_ctop, &_cbottom};
+      for (unsigned i = 0; i < 6; ++i) {
+        auto it = itd->find(layers[i]);
+        if (it != itd->end()) {
+          auto itm = _mlayerNameMap.find(*it);
+          if (itm != _mlayerNameMap.end()) {
+            *mlayers[i] = itm->second;
           }
         }
       }
@@ -129,7 +166,16 @@ LayerInfo::LayerInfo(const std::string& ljfile)
   for (unsigned i = 0; i < _layers.size(); ++i) {
     _layerIndex[_layers[i]->name()] = static_cast<int>(i);
     std::cout << "layer : " << _layers[i]->name() << " index : " << i << '\n';
+    if (_layers[i]->type() == 0) {
+      auto vl = static_cast<ViaLayer*>(_layers[i]);
+      for (auto& it : vl->viaArray()) {
+        std::cout << "\t va : " << it._sw._space.first << ' ' << it._sw._space.second << ' ' << it._nx << ' ' << it._ny << '\n';
+      }
+    }
   }
+  std::cout << "signal routing layers : " << (_sbottom? _sbottom->name() : "") << " : " << (_stop ? _stop->name() : "") << "\n";
+  std::cout << "power  routing layers : " << (_pbottom? _pbottom->name() : "") << " : " << (_ptop ? _ptop->name() : "") << "\n";
+  std::cout << "clock  routing layers : " << (_cbottom? _cbottom->name() : "") << " : " << (_ctop ? _ctop->name() : "") << "\n";
 }
 
 LayerInfo::~LayerInfo()
