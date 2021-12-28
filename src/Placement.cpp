@@ -19,7 +19,9 @@ void Net::print() const
 Module::~Module()
 {
   for (auto& p : _pins) delete p.second;
+  for (auto& i : _instances) delete i;
   _pins.clear();
+  _instances.clear();
 }
 
 

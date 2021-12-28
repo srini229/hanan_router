@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <queue>
+#include <fstream>
 
 #include "Geom.h"
 #include "Layer.h"
@@ -208,10 +209,40 @@ void HananRouterDB::printSol() const
   }
 }
 
+class SaveRestoreStream {
+  private:
+    std::ofstream _ofs, _efs;
+    std::streambuf *_ostream, *_estream;
+  public:
+    SaveRestoreStream(const std::string& logname, const std::string& errname = "err.log") : _ofs(logname), _efs(errname),
+    _ostream(std::cout.rdbuf()), _estream(std::cerr.rdbuf())
+    {
+      if (_ofs) {
+        std::cout.rdbuf(_ofs.rdbuf());
+      } else {
+        _ofs.close();
+      }
+      if (_efs) {
+        std::cerr.rdbuf(_efs.rdbuf());
+      } else {
+        _efs.close();
+      }
+    }
+    ~SaveRestoreStream()
+    {
+      if (_ofs) {
+        std::cout.rdbuf(_ostream);
+      }
+      if (_efs) {
+        std::cerr.rdbuf(_estream);
+      }
+    }
+};
+
 int main(int argc, char* argv[])
 {
-  Geom::Point pt(10, 10);
-
+  const std::string logfile = parseArgs(argc, argv, "-log", "route.log");
+  SaveRestoreStream srs(logfile);
   std::string layerJSONFile = parseArgs(argc, argv, "-d");
   DRC::LayerInfo linfo(layerJSONFile);
   int uu{1000};

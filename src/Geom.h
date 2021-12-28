@@ -6,13 +6,13 @@
 #include <string>
 #include <climits>
 #include <set>
-#include "nlohmann/json.hpp"
+//#include "nlohmann/json.hpp"
 
 namespace Geom {
 
 
 using namespace std;
-using json = nlohmann::json;
+//using json = nlohmann::json;
 
 class Transform;
 
@@ -31,7 +31,7 @@ class Point {
     void translate(int c) { _x += c; _y += c; }
     void translate(const Point& p) { _x += p.x(); _y += p.y(); }
     Point transform(const Transform& tr, const int width, const int height) const;
-    const json toJSON() const { return json{{"x", _x}, {"y", _y}}; }
+    //const json toJSON() const { return json{{"x", _x}, {"y", _y}}; }
     const std::string str() const { return "x : " + std::to_string(_x) + " y : " + std::to_string(_y); }
 
 };
@@ -125,7 +125,7 @@ class Rect {
 
     long area() const { return ((long)width()) * height(); }
     string str() const { return "LL : {" + _ll.str() + "} UR : {" + _ur.str() + "}"; }
-    const json toJSON() const { return json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}; }
+    //const json toJSON() const { return json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}; }
 };
 typedef vector<Rect> Rects;
 
@@ -162,7 +162,7 @@ class Transform {
     {
       return Rect(transform(r.ll()), transform(r.ur()));
     }
-    const json toJSON() const { return json{{"Origin", _o.toJSON()}, {"sX", _sX}, {"sY", _sY}}; }
+    //const json toJSON() const { return json{{"Origin", _o.toJSON()}, {"sX", _sX}, {"sY", _sY}}; }
     const std::string str() const { return ("origin : {" + _o.str() + "} sX : " + std::to_string(_sX) + " sY : " + std::to_string(_sY)); }
 };
 
