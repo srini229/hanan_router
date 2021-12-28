@@ -57,18 +57,19 @@ class Rect {
 
     void fix()
     {
+      if (xmin() == INT_MAX || ymin() == INT_MAX) return;
       if (xmin() > xmax()) std::swap(xmin(), xmax());
       if (ymin() > ymax()) std::swap(ymin(), ymax());
     }
     Rect(const Point& ll, const Point& ur) : _ll(ll), _ur(ur) { fix(); }
-    Rect(const int x1 = INT_MAX, const int y1 = INT_MAX, const int x2 = -INT_MAX, const int y2 = -INT_MAX) : _ll(x1, y1), _ur(x2, y2)
+    Rect(const int x1 = INT_MAX, const int y1 = INT_MAX, const int x2 = INT_MIN, const int y2 = INT_MIN) : _ll(x1, y1), _ur(x2, y2)
     {
-      if (x1 != INT_MAX) fix();
+      fix();
     }
-    void set(int x1 = INT_MAX, int y1 = INT_MAX, int x2 = -INT_MAX, int y2 = -INT_MAX)
+    void set(int x1 = INT_MAX, int y1 = INT_MAX, int x2 = INT_MIN, int y2 = INT_MIN)
     {
       _ll.x() = x1; _ll.y() = y1; _ur.x() = x2; _ur.y() = y2;
-      if (x1 != INT_MAX) fix();
+      fix();
     }
 
     bool valid() const { return _ll.x() <= _ur.x() && _ll.y() <= _ur.y(); }

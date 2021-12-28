@@ -255,6 +255,7 @@ int main(int argc, char* argv[])
   Placement::Netlist netlist(plfile, leffile, linfo, uu);
   netlist.route();
   netlist.print();
+  netlist.plot();
 
   std::string stfile = parseArgs(argc, argv, "-s");
   HananRouterDB hrdb;

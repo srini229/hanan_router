@@ -1,6 +1,4 @@
 #include "Placement.h"
-#include <fstream>
-#include <iostream>
 #include <sstream>
 
 namespace Placement {
@@ -90,6 +88,70 @@ void Module::route()
 
 void Module::plot() const
 {
+  std::ofstream ofs(_name + ".gplt");
+  if (ofs->is_open()) {
+    std::cout << "plotting module " << _name << " to " << _name << ".gplt\n";
+    auto &ofs = *fs;
+    ofs << "unset key\nset label noenhanced\nset title noenhanced\n";
+    ofs << "set title '" << _name << "'\n";
+    unsigned cnt{1};
+    for (const auto& p : _pins) {
+      auto& b = p.second->bbox();
+      if (b.valid()) {
+        ofs << "set object " << cnt << " rect from ";
+        ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << "\n";
+        ofs << "set object " << cnt++ << " fillstyle solid fillcolor \"light-green\" behind\n";
+        ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center\n";
+      }
+    }
+    for (auto& i : _instances) {
+      auto& b = i->bbox();
+      if (b.valid()) {
+        ofs << "set label \"" << i->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center tc lt 1\n";
+      }
+      for (const auto& p : i->pins()) {
+        auto& b = p.second->bbox();
+        if (b.valid()) {
+          ofs << "set object " << cnt << " rect from ";
+          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << "\n";
+          ofs << "set object " << cnt++ << " fillstyle solid fillcolor \"light-green\" behind\n";
+          ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center\n";
+        }
+      }
+    }
+    auto& b = _bbox;
+    ofs << "plot[:][:] '-' using 1:2 w l lt -1 lw 2 lc -1, '-' using 1:2 w l lt 0 lw 2 lc 0 \n";
+    if (b.valid()) {
+      ofs << b.xmin() << " " << b.ymin() << "\n";
+      ofs << b.xmax() << " " << b.ymin() << "\n";
+      ofs << b.xmax() << " " << b.ymax() << "\n";
+      ofs << b.xmin() << " " << b.ymax() << "\n";
+      ofs << b.xmin() << " " << b.ymin() << "\n\n";
+    }
+    for (auto& i : _instances) {
+      auto& b = i->bbox();
+      if (b.valid()) {
+        ofs << b.xmin() << " " << b.ymin() << "\n";
+        ofs << b.xmax() << " " << b.ymin() << "\n";
+        ofs << b.xmax() << " " << b.ymax() << "\n";
+        ofs << b.xmin() << " " << b.ymax() << "\n";
+        ofs << b.xmin() << " " << b.ymin() << "\n\n";
+      }
+    }
+    ofs << "EOF\n";
+    for (auto& n : _nets) {
+      for (auto& p : n.second.pins()) {
+        auto& b = p->bbox();
+        if (b.valid()) {
+          ofs << b.xcenter() << " " << b.ycenter() << "\n";
+        }
+      }
+      ofs << "\n";
+    }
+    ofs << "EOF\n";
+    ofs << "set size ratio GPVAL_DATA_Y_MAX/GPVAL_DATA_X_MAX\nrepl\npause -1";
+  }
+  ofs.close()
 }
 
 
@@ -130,6 +192,14 @@ void Instance::print(const std::string& prefix) const
     }
   }
 }
+
+
+void Instance::setModule(const Module* m)
+{
+  _m = m;
+  _bbox = _tr.transform(m->bbox());
+}
+
 
 using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
@@ -293,11 +363,18 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
       }
       continue;
     }
-    if (inMacro && curr_module && line.find("PIN") != npos) {
-      ss >> str >> pinName;
-      curr_pin = curr_module->getPin(pinName);
-      inPin = true;
-      continue;
+    if (inMacro && curr_module) {
+      if (line.find("SIZE") != npos) {
+        double w{0.}, h{0.};
+        ss >> str >> w >> str >> h;
+        curr_module->setBBox(Geom::Rect(0, 0, w * units, h * units));
+      }
+      if (line.find("PIN") != npos) {
+        ss >> str >> pinName;
+        curr_pin = curr_module->getPin(pinName);
+        inPin = true;
+        continue;
+      }
     }
     if (inUnits && line.find("DATABASE") != npos) {
       ss >> str >> str >> str >> macroUnits;
