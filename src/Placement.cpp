@@ -106,7 +106,7 @@ void Module::plot() const
     for (auto& i : _instances) {
       auto& b = i->bbox();
       if (b.valid()) {
-        ofs << "set label \"" << i->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center tc lt 1\n";
+        ofs << "set label \"" << i->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center tc lt 3 font \",15\"\n";
       }
       for (const auto& p : i->pins()) {
         auto& b = p.second->bbox();
@@ -119,7 +119,7 @@ void Module::plot() const
       }
     }
     auto& b = _bbox;
-    ofs << "plot[:][:] '-' using 1:2 w l lt -1 lw 2 lc -1, '-' using 1:2 w l lt 0 lw 2 lc 0 \n";
+    ofs << "plot[:][:] '-' using 1:2 w l lt -1 lw 2 lc -1, '-' using 1:2 w l lt 1 lw 2 lc 1 \n";
     if (b.valid()) {
       ofs << b.xmin() << " " << b.ymin() << "\n";
       ofs << b.xmax() << " " << b.ymin() << "\n";
