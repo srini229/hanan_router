@@ -59,6 +59,7 @@ class SaveRestoreStream {
     }
 };
 
+extern const std::vector<std::string> LAYER_COLORS;
 
 #define TIME_MA(X) TimeMeasure __FUNC__##t(__PRETTY_FUNCTION__, X)
 #define TIME_M()  TimeMeasure __FUNC__##t(__PRETTY_FUNCTION__)

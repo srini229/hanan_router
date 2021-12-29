@@ -138,11 +138,20 @@ void Module::plot() const
     ofs << "unset key\n";
     ofs << "set title '" << _name << "' noenhanced\n";
     unsigned cnt{1};
+    for (auto& l : _obstacles) {
+      const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
+      for (auto& b : l.second) {
+        if (b.valid() && b.width() && b.height()) {
+          ofs << "set object " << cnt++ << " rect from ";
+          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.5 fillcolor \"" << color << "\" behind\n";
+        }
+      }
+    }
     for (const auto& p : _pins) {
       auto& b = p.second->bbox();
       if (b.valid()) {
         ofs << "set object " << cnt++ << " rect from ";
-        ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent pattern " << ((cnt % 8) + 1) << " behind\n";
+        ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillcolor 'black' fillstyle pattern " << ((cnt % 2) + 5) << " transparent behind\n";
         ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
       }
     }
@@ -155,16 +164,8 @@ void Module::plot() const
         auto& b = p.second->bbox();
         if (b.valid()) {
           ofs << "set object " << cnt++ << " rect from ";
-          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle solid fillcolor \"light-blue\" behind\n";
+          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillcolor 'black' fillstyle pattern 2 transparent behind\n";
           ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
-        }
-      }
-    }
-    for (auto& l : _obstacles) {
-      for (auto& b : l.second) {
-        if (b.valid() && b.width() && b.height()) {
-          ofs << "set object " << cnt++ << " rect from ";
-          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle solid fillcolor \"gray\" behind\n";
         }
       }
     }

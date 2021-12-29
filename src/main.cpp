@@ -10,6 +10,8 @@
 
 typedef long CostType;
 
+const std::vector<std::string> LAYER_COLORS = {"red", "green", "blue", "cyan", "magenta", "black", "grey", "violet", "yellow", "orange"};
+
 std::string parseArgs(const int argc, char* const argv[], const std::string& arg, std::string str = "")
 {
   for (int i = 0; i < argc; ++i) {
