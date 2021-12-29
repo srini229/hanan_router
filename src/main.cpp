@@ -3,6 +3,7 @@
 #include <queue>
 #include <fstream>
 
+#include "Util.h"
 #include "Geom.h"
 #include "Layer.h"
 #include "Placement.h"
@@ -74,7 +75,7 @@ class Node {
     }
     void print(const std::string& s) const
     {
-      std::cout << s << ' ' << _x << ' ' << _y << ' ' << _z << '\n';
+      COUT << s << ' ' << _x << ' ' << _y << ' ' << _z << '\n';
     }
 };
 typedef std::vector<Node*> NodePtrVec;
@@ -205,44 +206,15 @@ void HananRouterDB::printSol() const
     t->print("targets : ");
   }
   for (auto& obs : _obstacles) {
-    std::cout << "obs : " << obs.first.str() << ' ' << obs.second << '\n';
+    COUT << "obs : " << obs.first.str() << ' ' << obs.second << '\n';
   }
 }
-
-class SaveRestoreStream {
-  private:
-    std::ofstream _ofs, _efs;
-    std::streambuf *_ostream, *_estream;
-  public:
-    SaveRestoreStream(const std::string& logname, const std::string& errname = "err.log") : _ofs(logname), _efs(errname),
-    _ostream(std::cout.rdbuf()), _estream(std::cerr.rdbuf())
-    {
-      if (_ofs) {
-        std::cout.rdbuf(_ofs.rdbuf());
-      } else {
-        _ofs.close();
-      }
-      if (_efs) {
-        std::cerr.rdbuf(_efs.rdbuf());
-      } else {
-        _efs.close();
-      }
-    }
-    ~SaveRestoreStream()
-    {
-      if (_ofs) {
-        std::cout.rdbuf(_ostream);
-      }
-      if (_efs) {
-        std::cerr.rdbuf(_estream);
-      }
-    }
-};
 
 int main(int argc, char* argv[])
 {
   const std::string logfile = parseArgs(argc, argv, "-log", "route.log");
   SaveRestoreStream srs(logfile);
+  TIME_M();
   std::string layerJSONFile = parseArgs(argc, argv, "-d");
   DRC::LayerInfo linfo(layerJSONFile);
   int uu{1000};

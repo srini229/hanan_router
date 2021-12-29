@@ -1,13 +1,30 @@
+#include "Util.h"
 #include "Placement.h"
 #include <sstream>
+
+#include "nlohmann/json.hpp"
 
 namespace Placement {
 
 const auto& npos = std::string::npos;
 
-void Net::print() const
+inline void MergeLayerRects(LayerRects& l1, const LayerRects& l2, Geom::Rect* b)
 {
-  std::cout << "pins :";
+  for (auto& l : l2) {
+    l1[l.first].insert(l1[l.first].end(), l.second.begin(), l.second.end());
+  }
+  if (b != nullptr) {
+    for (const auto& l : l2) {
+      for (const auto& r : l.second) {
+        b->merge(r);
+      }
+    }
+  }
+}
+
+inline void Net::print() const
+{
+  COUT << "pins :";
   for (const auto& p : _pins) {
     std::cout << " " << p->name();
   }
@@ -16,7 +33,10 @@ void Net::print() const
 
 void Net::route(const LayerRects& l1, const LayerRects& l2, const LayerRects& l3)
 {
-  std::cout << "routing net : " << _name << '\n';
+  COUT << "routing net : " << _name << '\n';
+  for (auto& pin : _pins) {
+    MergeLayerRects(_routeshapes, pin->shapes(), &_bbox);
+  }
 }
 
 
@@ -32,7 +52,7 @@ Module::~Module()
 void Module::print() const
 {
   for (const auto& p : _pins) {
-    std::cout << "\tpin : " << p.first << '\n';
+    COUT << "\tpin : " << p.first << '\n';
     for (const auto& l : p.second->shapes()) {
       std::cout << "\t\tlayer : " << l.first << '\n';
       for (const auto& r : l.second) {
@@ -41,16 +61,16 @@ void Module::print() const
     }
   }
   for (const auto& n : _nets) {
-    std::cout << "\tnet : " << n.first << " : {";
+    COUT << "\tnet : " << n.first << " : {";
     n.second.print();
     std::cout << "}\n";
   }
   for (const auto& inst : _instances) {
-    std::cout << "\tinst : " ;
+    COUT << "\tinst : " ;
     inst->print("\t");
   }
   for (const auto& l : _obstacles) {
-    std::cout << "\tobstacle : layer : " << l.first;
+    COUT << "\tobstacle : layer : " << l.first;
     for (const auto& r : l.second) {
       std::cout << "\t\t" << r.str() << '\n';
     }
@@ -69,13 +89,6 @@ void Module::build()
     }
   }
   _tmpnetpins.clear();
-}
-
-inline void MergeLayerRects(LayerRects& l1, const LayerRects& l2)
-{
-  for (auto& l : l2) {
-    l1[l.first].insert(l1[l.first].end(), l.second.begin(), l.second.end());
-  }
 }
 
 void Module::route()
@@ -103,7 +116,15 @@ void Module::route()
       it->second.route(_obstacles, _netObstaclesRouted, _netObstaclesUnrouted);
       MergeLayerRects(_netObstaclesRouted, it->second.routeShapes());
     }
-    std::cout << " routing : " << _name << std::endl;
+    COUT << " routing : " << _name << '\n';
+    for (auto& p : _pins) {
+      auto itn = _nets.find(p.first);
+      std::cout << "DEBUG pin name " << p.first << '\n';
+      if (itn != _nets.end()) {
+        std::cout << "DEBUG found net : " << itn->second.name() << '\n';
+        p.second->copyRects(itn->second.routeShapes());
+      }
+    }
   }
   _routed = 1;
 }
@@ -113,31 +134,32 @@ void Module::plot() const
 {
   std::ofstream ofs(_name + ".gplt");
   if (ofs.is_open()) {
-    std::cout << "plotting module " << _name << " to " << _name << ".gplt\n";
-    ofs << "unset key\nset label noenhanced\nset title noenhanced\n";
-    ofs << "set title '" << _name << "'\n";
+    COUT << "plotting module " << _name << " to " << _name << ".gplt\n";
+    ofs << "unset key\n";
+    ofs << "set title '" << _name << "' noenhanced\n";
     unsigned cnt{1};
     for (const auto& p : _pins) {
       auto& b = p.second->bbox();
       if (b.valid()) {
         ofs << "set object " << cnt << " rect from ";
         ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << "\n";
-        ofs << "set object " << cnt++ << " fillstyle solid fillcolor \"light-green\" behind\n";
-        ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center\n";
+        ofs << "set object " << cnt++ ;
+        ofs << " fillstyle transparent pattern " << ((cnt % 8) + 1) << " behind\n";
+        ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
       }
     }
     for (auto& i : _instances) {
       auto& b = i->bbox();
       if (b.valid()) {
-        ofs << "set label \"" << i->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center tc lt 3 font \",15\"\n";
+        ofs << "set label \"" << i->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center tc lt 3 font \",15\" noenhanced\n";
       }
       for (const auto& p : i->pins()) {
         auto& b = p.second->bbox();
         if (b.valid()) {
           ofs << "set object " << cnt << " rect from ";
           ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << "\n";
-          ofs << "set object " << cnt++ << " fillstyle solid fillcolor \"light-green\" behind\n";
-          ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center\n";
+          ofs << "set object " << cnt++ << " fillstyle solid fillcolor \"light-blue\" behind\n";
+          ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
         }
       }
     }
@@ -202,14 +224,14 @@ void Instance::build()
 
 void Instance::print(const std::string& prefix) const
 {
-  std::cout << prefix << "name : " << _name << " module : " << _modname << '\n';
-  std::cout << prefix << "\ttr : " << _tr.str() << '\n';
+  COUT << prefix << "name : " << _name << " module : " << _modname << '\n';
+  COUT << prefix << "\ttr : " << _tr.str() << '\n';
   for (const auto& p : _pins) {
-    std::cout << prefix << "\tpin : " << p.first << '\n';
+    COUT << prefix << "\tpin : " << p.first << '\n';
     for (const auto& l : p.second->shapes()) {
-      std::cout << prefix << "\t\tlayer : " << l.first << '\n';
+      COUT << prefix << "\t\tlayer : " << l.first << '\n';
       for (const auto& r : l.second) {
-        std::cout << prefix << "\t\t\t" << r.str() << '\n';
+        COUT << prefix << "\t\t\t" << r.str() << '\n';
       }
     }
   }
@@ -227,9 +249,15 @@ using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
 Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu) : _uu(uu)
 {
-  if (plfile.empty()) return;
+  if (plfile.empty()) {
+    CERR<< "missing placement file" <<std::endl;
+    return;
+  }
   std::ifstream ifs(plfile);
-  if (!ifs) return;
+  if (!ifs) {
+    CERR << "unable to open placement file " << plfile <<std::endl;
+    return;
+  }
   ordered_json oj = json::parse(ifs);
   ifs.close();
   auto it = oj.find("leaves");
@@ -264,6 +292,11 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
             modu->addPin(p);
           }
         }
+        auto bbox = m.find("bbox");
+        if (bbox != m.end()) {
+          const auto& b = (*bbox);
+          modu->setBBox(Geom::Rect(b[0], b[1], b[2], b[3]));
+        }
         auto insts = m.find("instances");
         if (insts != m.end()) {
           for (auto& inst : *insts) {
@@ -285,7 +318,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
                 }
               }
             } else {
-              std::cout << "instptr nullptr\n";
+              COUT << "instptr nullptr\n";
             }
           }
         }
@@ -308,7 +341,7 @@ Netlist::~Netlist()
 void Netlist::print() const
 {
   for (const auto& m : _modules) {
-    std::cout << "module : " << m.second->name() << '\n';
+    COUT << "module : " << m.second->name() << '\n';
     m.second->print();
   }
 }
@@ -331,12 +364,12 @@ void Netlist::build()
 void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
 {
   if (leffile.empty()) {
-    std::cerr << "missing leffile" <<std::endl;
+    CERR<< "missing leffile" <<std::endl;
     return;
   }
   std::ifstream ifs(leffile);
   if (!ifs) {
-    std::cerr << "unable to open leffile " << leffile <<std::endl;
+    CERR << "unable to open leffile " << leffile <<std::endl;
     return;
   }
   std::string line;
@@ -355,6 +388,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
       auto it = _modules.find(macroName);
       if (it != _modules.end()) {
         curr_module =  it->second;
+        COUT << "loading macro " << macroName << '\n';
       }
       inMacro = true;
       continue;

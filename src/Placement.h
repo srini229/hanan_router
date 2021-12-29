@@ -1,7 +1,6 @@
 #ifndef PLACEMENT_H_
 #define PLACEMENT_H_
 #include <fstream>
-#include "nlohmann/json.hpp"
 #include "Geom.h"
 #include "Layer.h"
 
@@ -15,6 +14,7 @@ typedef std::vector<Instance*> Instances;
 typedef std::map<std::string, Module*> Modules;
 typedef std::map<int, Geom::Rects> LayerRects;
 
+void MergeLayerRects(LayerRects& l1, const LayerRects& l2, Geom::Rect* b = nullptr);
 
 class Pin {
   private:
@@ -32,6 +32,10 @@ class Pin {
     }
     const LayerRects& shapes() const { return _shapes; }
     const Geom::Rect& bbox() const { return _bbox; }
+    void copyRects(const LayerRects& lr)
+    {
+      MergeLayerRects(_shapes, lr, &_bbox);
+    }
 };
 typedef std::map<std::string, Pin*> Pins;
 
@@ -41,14 +45,16 @@ class Net {
     std::string _name;
     std::set<const Pin*> _pins;
     LayerRects _routeshapes;
+    Geom::Rect _bbox;
   public:
-    Net(const std::string& name) : _name{name} {}
+    Net(const std::string& name) : _name{name}, _bbox{} {}
     const std::set<const Pin*>& pins() const { return _pins; }
     void addPin(const Pin* p) { _pins.insert(p); }
     void print() const;
     const std::string& name() const { return _name; }
     void route(const LayerRects& l1, const LayerRects& l2, const LayerRects& l3);
     const LayerRects& routeShapes() const { return _routeshapes; }
+    const Geom::Rect& bbox() const { return _bbox; }
 };
 typedef std::map<std::string, Net> Nets;
 
