@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <vector>
 
 #define COUT std::cout << __PRETTY_FUNCTION__ << " -:- "
 #define CERR std::cerr << __PRETTY_FUNCTION__ << " -:- "
