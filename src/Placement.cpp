@@ -141,10 +141,8 @@ void Module::plot() const
     for (const auto& p : _pins) {
       auto& b = p.second->bbox();
       if (b.valid()) {
-        ofs << "set object " << cnt << " rect from ";
-        ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << "\n";
-        ofs << "set object " << cnt++ ;
-        ofs << " fillstyle transparent pattern " << ((cnt % 8) + 1) << " behind\n";
+        ofs << "set object " << cnt++ << " rect from ";
+        ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent pattern " << ((cnt % 8) + 1) << " behind\n";
         ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
       }
     }
@@ -156,15 +154,22 @@ void Module::plot() const
       for (const auto& p : i->pins()) {
         auto& b = p.second->bbox();
         if (b.valid()) {
-          ofs << "set object " << cnt << " rect from ";
-          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << "\n";
-          ofs << "set object " << cnt++ << " fillstyle solid fillcolor \"light-blue\" behind\n";
+          ofs << "set object " << cnt++ << " rect from ";
+          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle solid fillcolor \"light-blue\" behind\n";
           ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
         }
       }
     }
+    for (auto& l : _obstacles) {
+      for (auto& b : l.second) {
+        if (b.valid() && b.width() && b.height()) {
+          ofs << "set object " << cnt++ << " rect from ";
+          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle solid fillcolor \"gray\" behind\n";
+        }
+      }
+    }
     auto& b = _bbox;
-    ofs << "plot[:][:] '-' using 1:2 w l lt -1 lw 2 lc -1, '-' using 1:2 w l lt 1 lw 2 lc 1 \n";
+    ofs << "plot[:][:] '-' using 1:2 w l lt -1 lw 2 lc -1, '-' using 1:2 w l lt 1 lw 2 lc 1\n";
     if (b.valid()) {
       ofs << b.xmin() << " " << b.ymin() << "\n";
       ofs << b.xmax() << " " << b.ymin() << "\n";
@@ -263,10 +268,11 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
   auto it = oj.find("leaves");
   if (it != oj.end()) {
     for (auto& l : *it) {
-      auto lname = l.find("abstract_name");
+      auto lname = l.find("concrete_name");
       if (_modules.find(*lname) != _modules.end()) continue;
       if (lname != l.end()) {
         auto modu = new Module(*lname, 1);
+        COUT << "adding leaf : " << *lname << '\n';
         auto terms = l.find("terminals");
         if (terms != l.end()) {
           for (auto& term : *terms) {
@@ -282,7 +288,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
   it = oj.find("modules");
   if (it != oj.end()) {
     for (auto& m : *it) {
-      auto mname = m.find("abstract_name");
+      auto mname = m.find("concrete_name");
       if (mname != m.end()) {
         if (_modules.find(*mname) != _modules.end()) continue;
         auto modu = new Module(*mname, 0);
@@ -301,7 +307,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
         if (insts != m.end()) {
           for (auto& inst : *insts) {
             auto iname = inst.find("instance_name");
-            auto mname = inst.find("abstract_template_name");
+            auto mname = inst.find("concrete_template_name");
             auto tritr = inst.find("transformation");
             auto tr = (tritr == inst.end()) ? Geom::Transform() :
               Geom::Transform((*tritr)["oX"], (*tritr)["oY"], (*tritr)["sX"], (*tritr)["sY"]) ;
@@ -385,6 +391,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     std::stringstream ss(line);
     if (line.find("MACRO") != npos) {
       ss >> str >> macroName;
+      COUT << "macro " << macroName << '\n';
       auto it = _modules.find(macroName);
       if (it != _modules.end()) {
         curr_module =  it->second;
