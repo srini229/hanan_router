@@ -28,7 +28,7 @@ $(BIN)/%.o: $(SRC)/%.cpp
 	$(CPP) $(CCFLAGS) -I$(INCLUDES) $(DEPFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(MAIN) $(BIN)/*.o
+	rm -rf $(MAIN) $(BIN)/*.o $(BIN)/*.d
 
 -include $(DEPS)
 
