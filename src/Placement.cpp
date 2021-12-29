@@ -14,6 +14,12 @@ void Net::print() const
 }
 
 
+void Net::route(const LayerRects& l1, const LayerRects& l2, const LayerRects& l3)
+{
+  std::cout << "routing net : " << _name << '\n';
+}
+
+
 Module::~Module()
 {
   for (auto& p : _pins) delete p.second;
@@ -65,6 +71,12 @@ void Module::build()
   _tmpnetpins.clear();
 }
 
+inline void MergeLayerRects(LayerRects& l1, const LayerRects& l2)
+{
+  for (auto& l : l2) {
+    l1[l.first].insert(l1[l.first].end(), l.second.begin(), l.second.end());
+  }
+}
 
 void Module::route()
 {
@@ -79,6 +91,17 @@ void Module::route()
           _obstacles[l.first].push_back(inst->transform(r));
         }
       }
+    }
+    LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
+    for (auto it = _nets.begin(); it != _nets.end(); ++it) {
+      _netObstaclesUnrouted.clear();
+      for (auto itn = std::next(it); itn != _nets.end(); ++itn) {
+        for (auto& p : itn->second.pins()) {
+          MergeLayerRects(_netObstaclesUnrouted, p->shapes());
+        }
+      }
+      it->second.route(_obstacles, _netObstaclesRouted, _netObstaclesUnrouted);
+      MergeLayerRects(_netObstaclesRouted, it->second.routeShapes());
     }
     std::cout << " routing : " << _name << std::endl;
   }

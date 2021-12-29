@@ -13,8 +13,9 @@ class Netlist;
 class Instance;
 typedef std::vector<Instance*> Instances;
 typedef std::map<std::string, Module*> Modules;
-
 typedef std::map<int, Geom::Rects> LayerRects;
+
+
 class Pin {
   private:
     std::string _name;
@@ -39,12 +40,15 @@ class Net {
   private:
     std::string _name;
     std::set<const Pin*> _pins;
+    LayerRects _routeshapes;
   public:
     Net(const std::string& name) : _name{name} {}
     const std::set<const Pin*>& pins() const { return _pins; }
     void addPin(const Pin* p) { _pins.insert(p); }
     void print() const;
     const std::string& name() const { return _name; }
+    void route(const LayerRects& l1, const LayerRects& l2, const LayerRects& l3);
+    const LayerRects& routeShapes() const { return _routeshapes; }
 };
 typedef std::map<std::string, Net> Nets;
 
@@ -72,6 +76,7 @@ class Instance {
     void print(const std::string& prefix = "") const;
     const Geom::Rect& bbox() const { return _bbox; }
     const Pins& pins() const { return _pins; }
+    const LayerRects& routeShapes() const { return _routeshapes; }
 };
 
 
