@@ -12,14 +12,11 @@ class Netlist;
 class Instance;
 typedef std::vector<Instance*> Instances;
 typedef std::map<std::string, Module*> Modules;
-typedef std::map<int, Geom::Rects> LayerRects;
-
-void MergeLayerRects(LayerRects& l1, const LayerRects& l2, Geom::Rect* b = nullptr);
 
 class Pin {
   private:
     std::string _name;
-    LayerRects _shapes;
+    Geom::LayerRects _shapes;
     Geom::Rect _bbox;
   public:
     Pin(const std::string& name = "") : _name{name}, _bbox{} {}
@@ -30,11 +27,11 @@ class Pin {
       _shapes[layer].push_back(r);
       _bbox.merge(r);
     }
-    const LayerRects& shapes() const { return _shapes; }
+    const Geom::LayerRects& shapes() const { return _shapes; }
     const Geom::Rect& bbox() const { return _bbox; }
-    void copyRects(const LayerRects& lr)
+    void copyRects(const Geom::LayerRects& lr)
     {
-      MergeLayerRects(_shapes, lr, &_bbox);
+      Geom::MergeLayerRects(_shapes, lr, &_bbox);
     }
 };
 typedef std::map<std::string, Pin*> Pins;
@@ -44,7 +41,7 @@ class Net {
   private:
     std::string _name;
     std::set<const Pin*> _pins;
-    LayerRects _routeshapes;
+    Geom::LayerRects _routeshapes;
     Geom::Rect _bbox;
   public:
     Net(const std::string& name) : _name{name}, _bbox{} {}
@@ -52,8 +49,8 @@ class Net {
     void addPin(const Pin* p) { _pins.insert(p); }
     void print() const;
     const std::string& name() const { return _name; }
-    void route(const LayerRects& l1, const LayerRects& l2, const LayerRects& l3);
-    const LayerRects& routeShapes() const { return _routeshapes; }
+    void route(const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3);
+    const Geom::LayerRects& routeShapes() const { return _routeshapes; }
     const Geom::Rect& bbox() const { return _bbox; }
 };
 typedef std::map<std::string, Net> Nets;
@@ -66,7 +63,7 @@ class Instance {
     Geom::Transform _tr;
     const Module* _m;
     Pins _pins;
-    LayerRects _routeshapes;
+    Geom::LayerRects _routeshapes;
     void build();
     Geom::Rect _bbox;
   public:
@@ -82,7 +79,7 @@ class Instance {
     void print(const std::string& prefix = "") const;
     const Geom::Rect& bbox() const { return _bbox; }
     const Pins& pins() const { return _pins; }
-    const LayerRects& routeShapes() const { return _routeshapes; }
+    const Geom::LayerRects& routeShapes() const { return _routeshapes; }
 };
 
 
@@ -96,7 +93,7 @@ class Module {
     Pins _pins;
     Instances _instances;
     std::map<const Net*, std::vector<std::pair<Instance*, std::string>>> _tmpnetpins;
-    LayerRects _obstacles;
+    Geom::LayerRects _obstacles;
     Geom::Rect _bbox;
 
     void build();
@@ -112,7 +109,7 @@ class Module {
     const std::string& name() const { return _name; }
     const Instances& instances() const { return _instances; }
     Instances& instances() { return _instances; }
-    const LayerRects& obstacles() const { return _obstacles; }
+    const Geom::LayerRects& obstacles() const { return _obstacles; }
     bool isLeaf() const { return _leaf ? true : false; }
     const Nets& nets() const { return _nets; }
     const Pins& pins() const { return _pins; }

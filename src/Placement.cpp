@@ -8,20 +8,6 @@ namespace Placement {
 
 const auto& npos = std::string::npos;
 
-inline void MergeLayerRects(LayerRects& l1, const LayerRects& l2, Geom::Rect* b)
-{
-  for (auto& l : l2) {
-    l1[l.first].insert(l1[l.first].end(), l.second.begin(), l.second.end());
-  }
-  if (b != nullptr) {
-    for (const auto& l : l2) {
-      for (const auto& r : l.second) {
-        b->merge(r);
-      }
-    }
-  }
-}
-
 inline void Net::print() const
 {
   COUT << "pins :";
@@ -31,11 +17,11 @@ inline void Net::print() const
 }
 
 
-void Net::route(const LayerRects& l1, const LayerRects& l2, const LayerRects& l3)
+void Net::route(const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3)
 {
   COUT << "routing net : " << _name << '\n';
   for (auto& pin : _pins) {
-    MergeLayerRects(_routeshapes, pin->shapes(), &_bbox);
+    Geom::MergeLayerRects(_routeshapes, pin->shapes(), &_bbox);
   }
 }
 
@@ -105,16 +91,16 @@ void Module::route()
         }
       }
     }
-    LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
+    Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
     for (auto it = _nets.begin(); it != _nets.end(); ++it) {
       _netObstaclesUnrouted.clear();
       for (auto itn = std::next(it); itn != _nets.end(); ++itn) {
         for (auto& p : itn->second.pins()) {
-          MergeLayerRects(_netObstaclesUnrouted, p->shapes());
+          Geom::MergeLayerRects(_netObstaclesUnrouted, p->shapes());
         }
       }
       it->second.route(_obstacles, _netObstaclesRouted, _netObstaclesUnrouted);
-      MergeLayerRects(_netObstaclesRouted, it->second.routeShapes());
+      Geom::MergeLayerRects(_netObstaclesRouted, it->second.routeShapes());
     }
     COUT << " routing : " << _name << '\n';
     for (auto& p : _pins) {

@@ -128,7 +128,7 @@ class Rect {
     //const json toJSON() const { return json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}; }
 };
 typedef vector<Rect> Rects;
-
+typedef map<int, Rects> LayerRects;
 
 class Transform {
   private:
@@ -166,6 +166,6 @@ class Transform {
     const std::string str() const { return ("origin : {" + _o.str() + "} sX : " + std::to_string(_sX) + " sY : " + std::to_string(_sY)); }
 };
 
-
+void MergeLayerRects(Geom::LayerRects& l1, const Geom::LayerRects& l2, Geom::Rect* b = nullptr);
 }
 #endif

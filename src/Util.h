@@ -29,6 +29,8 @@ class TimeMeasure {
       }
     }
 };
+#define TIME_MA(X) TimeMeasure __FUNC__##t(__PRETTY_FUNCTION__, X)
+#define TIME_M()  TimeMeasure __FUNC__##t(__PRETTY_FUNCTION__)
 
 class SaveRestoreStream {
   private:
@@ -62,7 +64,6 @@ class SaveRestoreStream {
 
 extern const std::vector<std::string> LAYER_COLORS;
 
-#define TIME_MA(X) TimeMeasure __FUNC__##t(__PRETTY_FUNCTION__, X)
-#define TIME_M()  TimeMeasure __FUNC__##t(__PRETTY_FUNCTION__)
+std::string parseArgs(const int argc, char* const argv[], const std::string& arg, std::string str = "");
 
 #endif
