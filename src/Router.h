@@ -5,6 +5,7 @@
 #include <map>
 #include <queue>
 #include "Geom.h"
+#include <bitset>
 
 namespace Router {
 
@@ -18,7 +19,7 @@ class CostFn {
     std::vector<std::vector<CostType>> _layerPairCost;
   public:
     CostType deltaCost(const Node& n1, const Node& n2) const;
-    CostFn(const int numLayers = 0, const int minHLayer = 0, const int minVLayer = 1) : _topLayer(numLayers - 1), _layerHCost(numLayers, 10000), _layerVCost(numLayers, 10000),
+    CostFn(const int numLayers = 0, const int minHLayer = 1, const int minVLayer = 0) : _topLayer(numLayers - 1), _layerHCost(numLayers, 10000), _layerVCost(numLayers, 10000),
     _layerPairCost(numLayers, std::vector<CostType>(numLayers, 10000))
     {
       for (int i = minHLayer; i < numLayers; i += 2) {
@@ -30,6 +31,9 @@ class CostFn {
       for (int i = 0; i < numLayers; ++i) {
         if (i > 0) _layerPairCost[i][i-1] = 2;
         if (i < numLayers-1) _layerPairCost[i][i+1] = 2;
+      }
+      for (int i = 0; i < numLayers; ++i) {
+        COUT << "layer : " << i << " cost : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
       }
     }
 };
@@ -166,6 +170,8 @@ class HananRouterDB {
     bool isVert(const int l) const { return (l % 2) == 0; }
     void checkAndInsert(Node* newn, const Node* n);
     int snap(const Node* n, const bool vert, const bool up) const;
+    void insertTarget(std::set<int>& s, const Node* n, const bool up, const int snapc);
+    void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);
     
   public:
     HananRouterDB() : _cf{}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}

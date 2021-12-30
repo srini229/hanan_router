@@ -1,5 +1,4 @@
 #include "Router.h"
-#include <bitset>
 
 namespace Router {
 
@@ -8,7 +7,21 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
 {
   CostType dc = 0;
 
-  if (n1.x() == n2.x() && n1.y() == n2.y() && n1.z() == n2.z()) return dc;
+  if (n1.z() == n2.z()) {
+    if (n1.x() == n2.x() && _layerVCost[n1.z()] < 10) {
+      return (_layerVCost[n1.z()] * std::abs(n1.y() - n2.y()));
+    }
+    if (n1.y() == n2.y() && _layerHCost[n1.z()] < 10) {
+      return (_layerHCost[n1.z()] * std::abs(n1.x() - n2.x()));
+    }
+  }
+  if (n1.x() == n2.x() && n1.y() == n2.y()) {
+    if (n2.z() - n1.z() == 1) {
+      return _layerPairCost[n1.z()][n2.z()];
+    } else if (n1.z() - n2.z() == 1) {
+      return _layerPairCost[n2.z()][n1.z()];
+    }
+  }
   auto minz = std::min(n1.z(), n2.z());
   auto maxz = std::max(n1.z(), n2.z());
   CostType minHCost(20000), minVCost(20000);
@@ -69,7 +82,7 @@ void HananRouterDB::readDataFile(const std::string& ifile)
         break;
     };
   }
-  _cf = CostFn(zmax + 1, zmin, zmin + 1);
+  _cf = CostFn(zmax + 1, zmin + 1, zmin);
   _minLayer = zmin;
   _maxLayer = zmax;
   COUT << "min layer : " << _minLayer << " max layer : " << _maxLayer << '\n';
@@ -115,8 +128,8 @@ void HananRouterDB::checkAndInsert(Node* newn, const Node* n)
 
 int HananRouterDB::snap(const Node* n, const bool vert, const bool up) const
 {
-  int snapc = (vert ? (up ? (_bbox.ymax() + 10) : (_bbox.ymin() - 10))
-      : (up ? (_bbox.xmax() + 10) : (_bbox.xmin() - 10)));
+  int snapc = (vert ? (up ? _bbox.ymin() : _bbox.ymax())
+      : (up ? _bbox.xmin() : _bbox.xmax()));
   auto it = _hanangrid.find(n->z());
   if (it != _hanangrid.end()) {
     int pos = n->y(), lkp = n->x();
@@ -126,20 +139,53 @@ int HananRouterDB::snap(const Node* n, const bool vert, const bool up) const
     auto itp = it->second.find(pos);
     if (itp != it->second.end()) {
       for (const auto& r : itp->second) {
-        if (lkp >= r.first && lkp < r.second) {
+        if (lkp >= r.first && lkp <= r.second) {
           snapc = (up ? r.second : r.first);
           break;
         }
       }
+    } else {
+      snapc = (vert ? (up ? _bbox.ymax() : _bbox.ymin())
+          : (up ? _bbox.xmax() : _bbox.xmin()));
     }
   }
   return snapc;
 }
 
+void HananRouterDB::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc)
+{
+  int adjLayer = (above ? (n->z() < _maxLayer ? n->z() + 1 : -1) : (n->z() > _minLayer ? n->z() - 1 : -1));
+  if (adjLayer >= 0) {
+    auto ith = _hanangrid.find(adjLayer);
+    if (ith != _hanangrid.end()) {
+      auto coord = (isVert(n->z()) ? n->y() : n->x());
+      for (auto& pos : ith->second) {
+        if ((up && pos.first > coord && pos.first < snapc) || (!up && pos.first < coord && pos.first > snapc)) {
+          s.insert(pos.first);
+        }
+      }
+    }
+  }
+}
+
+void HananRouterDB::insertTarget(std::set<int>& s, const Node* n, const bool up, const int snapc)
+{
+  auto coord = (isVert(n->z()) ? n->y() : n->x());
+  for (auto& t : _targets) {
+    auto tcoord = (isVert(t->z()) ? t->y() : t->x());
+    if (t->z() == n->z()) {
+      if ((up && coord < tcoord && snapc > tcoord) 
+          || (!up && coord > tcoord && snapc < tcoord)) {
+        s.insert(tcoord);
+      }
+    }
+  }
+}
+
 void HananRouterDB::expand(const Node* n)
 {
-  n->print("expanding node :");
   std::bitset<4> expanddir{0xF}; // 0:dn, 1:up, 2:left/down, 3:right/up
+  n->print("expanding node :");
   if (n->z() <= _minLayer || (n->parent() && n->parent()->z() < n->z())) {
     expanddir.set(0, false);
   }
@@ -163,47 +209,82 @@ void HananRouterDB::expand(const Node* n)
     }
   }
 
-  COUT << "expanding : " << expanddir.to_string() << '\n';
 
   Node* newn{nullptr};
   if (expanddir.test(0)) {
+    COUT << "expanding via down\n";
     newn = createNode(n->x(), n->y(), n->z() - 1, n);
     checkAndInsert(newn, n);
   }
   if (expanddir.test(1)) {
+    COUT << "expanding via up\n";
     newn = createNode(n->x(), n->y(), n->z() + 1, n);
     checkAndInsert(newn, n);
   }
+  std::set<int> gridpos;
   if (expanddir.test(2)) {
+    COUT << "expanding left/down\n";
     int snapc = snap(n, vert, false);
     COUT << "snapcd : " << snapc << '\n';
     newn = nullptr;
     if (vert) {
-      if (snapc != n->y() && snapc >= _bbox.xmin()) {
+      if (snapc < n->y()) {
         newn = createNode(n->x(), snapc, n->z(), n);
       }
     } else {
-      if (snapc != n->x() && snapc >= _bbox.xmax()) {
+      if (snapc < n->x()) {
         newn = createNode(snapc, n->y(), n->z(), n);
       }
     }
     if (newn) checkAndInsert(newn, n);
+    getAdjacentGrid(gridpos, n, true, false, snapc);
+    getAdjacentGrid(gridpos, n, false, false, snapc);
+    for (auto &pos : gridpos) {
+      COUT << "grid pos : " << pos << '\n';
+      if (vert) {
+        if (pos < n->y()) {
+          newn = createNode(n->x(), pos, n->z(), n);
+        }
+      } else {
+        if (pos < n->x()) {
+          newn = createNode(pos, n->y(), n->z(), n);
+        }
+      }
+      if (newn) checkAndInsert(newn, n);
+    }
+    gridpos.clear();
   }
   if (expanddir.test(3)) {
+    COUT << "expanding top/right\n";
     Node* newn{nullptr};
     int snapc = snap(n, vert, true);
     COUT << "snapcu : " << snapc << '\n';
     newn = nullptr;
     if (vert) {
-      if (snapc != n->y() && snapc >= _bbox.ymin()) {
+      if (snapc > n->y()) {
         newn = createNode(n->x(), snapc, n->z(), n);
       }
     } else {
-      if (snapc != n->x() && snapc <= _bbox.ymax()) {
+      if (snapc > n->x()) {
         newn = createNode(snapc, n->y(), n->z(), n);
       }
     }
     if (newn) checkAndInsert(newn, n);
+    getAdjacentGrid(gridpos, n, true, true, snapc);
+    getAdjacentGrid(gridpos, n, false, true, snapc);
+    for (auto &pos : gridpos) {
+      COUT << "grid pos : " << pos << '\n';
+      if (vert) {
+        if (pos > n->y()) {
+          newn = createNode(n->x(), pos, n->z(), n);
+        }
+      } else {
+        if (pos > n->x()) {
+          newn = createNode(pos, n->y(), n->z(), n);
+        }
+      }
+      if (newn) checkAndInsert(newn, n);
+    }
   }
 }
 
@@ -242,26 +323,28 @@ void HananRouterDB::invertRange(IntRangeSet& s, const bool vert)
 
 void HananRouterDB::generateHananGrid()
 {
+  std::set<int> xcoords, ycoords;
+  for (auto& l : _obstacles) {
+    for (auto& o : l.second) {
+      xcoords.insert(o.xmin());
+      xcoords.insert(o.xmax());
+      ycoords.insert(o.ymin());
+      ycoords.insert(o.ymax());
+    }
+  }
+  for (bool src : {true, false}) {
+    for (auto& s : (src ? _sources : _targets)) {
+      xcoords.insert(s->x());
+      xcoords.insert(s->y());
+    }
+  }
   for (auto& l : _obstacles) {
     bool vert = isVert(l.first);
     std::map<int, IntRangeSet> tmpranges;
-    for (bool src : {true, false}) {
-      for (auto& s : (src ? _sources : _targets)) {
-        if (s->z() == l.first || !src) {
-          if (vert) tmpranges[s->x()].clear();
-          else tmpranges[s->y()].clear();
-        }
-      }
+    for (auto& x : (vert ? xcoords : ycoords)) {
+      tmpranges[x].clear();
     }
-    for (auto& o : l.second) {
-      if (vert) {
-        tmpranges[o.xmin()].clear();
-        tmpranges[o.xmax()].clear();
-      } else {
-        tmpranges[o.ymin()].clear();
-        tmpranges[o.ymax()].clear();
-      }
-    }
+
     for (auto& v : tmpranges) {
       for (auto& o : l.second) {
         if (vert) {
@@ -277,13 +360,13 @@ void HananRouterDB::generateHananGrid()
     }
     /*for (auto& o : l.second) {
       if (vert) {
-        insertRange(tmpranges[o.xmin()], std::make_pair(o.ymin(), o.ymax()));
-        insertRange(tmpranges[o.xmax()], std::make_pair(o.ymin(), o.ymax()));
+      insertRange(tmpranges[o.xmin()], std::make_pair(o.ymin(), o.ymax()));
+      insertRange(tmpranges[o.xmax()], std::make_pair(o.ymin(), o.ymax()));
       } else {
-        insertRange(tmpranges[o.ymin()], std::make_pair(o.xmin(), o.xmax()));
-        insertRange(tmpranges[o.ymax()], std::make_pair(o.xmin(), o.xmax()));
+      insertRange(tmpranges[o.ymin()], std::make_pair(o.xmin(), o.xmax()));
+      insertRange(tmpranges[o.ymax()], std::make_pair(o.xmin(), o.xmax()));
       }
-    }*/
+      }*/
     for (auto& r : tmpranges) {
       invertRange(r.second, vert);
     }
@@ -348,6 +431,13 @@ void HananRouterDB::printSol() const
   for (auto& obs : _obstacles) {
     for (auto& o : obs.second) {
       COUT << "obs : " << o.str() << ' ' << obs.first << '\n';
+    }
+  }
+  if (_sol) {
+    const Node* n = _sol;
+    while (n) {
+      n->print("sol");
+      n = n->parent();
     }
   }
 }
