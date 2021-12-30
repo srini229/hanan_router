@@ -49,18 +49,20 @@ class Node {
     int x() const { return _x; }
     int y() const { return _y; }
     int z() const { return _z; }
+    Node const* parent() const { return _parent; }
 
     CostType fcost() const { return _fcost; }
     CostType tcost() const { return _tcost; }
     CostType cost()  const { return _fcost + _tcost;  }
-    void setCost(CostType fcost, CostType tcost) { _fcost = fcost; _tcost = tcost; }
+    void setFCost(CostType fcost) { _fcost = fcost; }
     void setTCost(CostType tcost) { _tcost = tcost; }
+    void setParent(const Node* n) { _parent = n; }
     void evalFCost(const CostFn& c)
     {
       if (_parent != nullptr) {
         _fcost = _parent->_fcost + c.deltaCost(*_parent, *this);
       } else {
-        _fcost = 0;
+        _fcost = -1;
       }
     }
     CostType evalTCost(const Node* t, const CostFn& c) const
@@ -72,21 +74,12 @@ class Node {
     }
     void print(const std::string& s) const
     {
-      COUT << s << ' ' << _x << ' ' << _y << ' ' << _z << '\n';
+      COUT << s << ' ' << _x << ' ' << _y << ' ' << _z << ' ' << _fcost << ' ' << _tcost <<  ' ' << cost() << '\n';
     }
 };
 typedef std::vector<Node*> NodePtrVec;
 typedef std::vector<const Node*> NodeCPtrVec;
 typedef std::vector<Node> NodeVec;
-struct NodeCostComp {
-  bool operator() (const Node* n1, const Node* n2) const
-  {
-    if (n1 != nullptr && n2 != nullptr) return n1->cost() < n2->cost();
-    if (n1 == nullptr) return true;
-    return false;
-  }
-};
-
 struct NodeComp {
   bool operator () (const Node* n1, const Node* n2) const
   {
@@ -99,45 +92,88 @@ struct NodeComp {
     return n1->x() < n2->x();
   }
 };
+struct NodeCostComp {
+  bool operator() (const Node* n1, const Node* n2) const
+  {
+    if (n1 != nullptr && n2 != nullptr) {
+      if (n1->cost() == n2->cost()) {
+        return NodeComp()(n1, n2);
+      }
+      return n1->cost() < n2->cost();
+    }
+    if (n1 == nullptr) return true;
+    return false;
+  }
+};
+
+typedef std::pair<int, int> IntRange;
+struct RangeComp {
+  bool operator() (const IntRange& p1, const IntRange& p2) const
+  {
+    if (p1.first == p2.first) return p1.second < p2.second;
+    return p1.first < p2.first;
+  }
+};
+typedef std::set<IntRange, RangeComp> IntRangeSet;
 typedef std::set<Node*, NodeComp> NodeSet;
-typedef std::set<const Node*, NodeCostComp> PriorityQueue;
+typedef std::multiset<const Node*, NodeCostComp> PriorityQueue;
+typedef std::map<std::tuple<int, int, int>, Node*> NodeMap;
 class HananRouterDB {
   private:
     PriorityQueue _pq;
     NodeSet _sources, _targets;
-    NodePtrVec _nodes;
+    NodeMap _nodes;
     Geom::LayerRects _obstacles, _tobstacles;
     CostFn _cf;
-    std::map<int, std::map<int, std::vector<std::pair<int, int>>>> _hgrid;
+    std::map<int, std::map<int, IntRangeSet>> _hanangrid;
+    Geom::Rect _bbox;
+    const Node *_sol;
+
+    int _minLayer, _maxLayer;
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
-        const int fcost = -1, const int tcost = -1, const Node* parent = nullptr)
+        const Node* parent = nullptr,
+        const int fcost = -1, const int tcost = -1)
     {
-      auto n = new Node(x, y, z, fcost, tcost, parent);
-      _nodes.push_back(n);
+      auto tpl = std::make_tuple(x, y, z);
+      auto it = _nodes.find(tpl);
+      Node* n = nullptr;
+      if (it == _nodes.end()) {
+        n = new Node(x, y, z, fcost, tcost, parent);
+        _nodes[tpl] = n;
+        COUT << "creating new node : " << x << ',' << y << ',' << z << '\n';
+      } else {
+        n = it->second;
+      }
       return n;
     }
 
-    CostType evalTCost(Node* n) const
+    void evalTCost(Node* n)
     {
       CostType tcost = 1e10;
       for (auto& t : _targets) {
         tcost = std::min(tcost, n->evalTCost(t, _cf));
       }
-      return tcost;
+      n->setTCost(tcost);
     }
 
+    void insert(const Node* n);
+
+    void invertRange(IntRangeSet& s, const bool vert);
+    void insertRange(IntRangeSet& s, const IntRange& r);
     void expand(const Node* n);
     void generateHananGrid();
+    bool isVert(const int l) const { return (l % 2) == 0; }
+    void checkAndInsert(Node* newn, const Node* n);
+    int snap(const Node* n, const bool vert, const bool up) const;
     
   public:
-    HananRouterDB() : _cf{}
+    HananRouterDB() : _cf{}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}
     {
-      _nodes.reserve(1e4);
     }
     ~HananRouterDB()
     {
-      for (auto& n : _nodes) delete n;
+      for (auto& n : _nodes) delete n.second;
       _nodes.clear();
       _pq.clear();
       _sources.clear();
@@ -145,8 +181,9 @@ class HananRouterDB {
     }
     void readDataFile(const std::string& ifile);
 
-    const Node* findSol();
+    void findSol();
     void printSol() const;
+    void plot() const;
 };
 
 }

@@ -30,6 +30,7 @@ int main(int argc, char* argv[])
   if (!stfile.empty()) hrdb.readDataFile(stfile);
   hrdb.findSol();
   hrdb.printSol();
+  hrdb.plot();
 
   return 0;
 }
