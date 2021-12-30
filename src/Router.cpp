@@ -37,6 +37,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
 
 void HananRouterDB::readDataFile(const std::string& ifile)
 {
+  COUT << "reading datafile : " << ifile << '\n';
   std::ifstream ifs(ifile);
   std::string tmps;
   int zmax = -1, zmin = 100;
@@ -114,8 +115,8 @@ void HananRouterDB::checkAndInsert(Node* newn, const Node* n)
 
 int HananRouterDB::snap(const Node* n, const bool vert, const bool up) const
 {
-  int snapc = (vert ? (up ? (_bbox.ymax()) : (_bbox.ymin()))
-      : (up ? (_bbox.xmax()) : (_bbox.xmin())));
+  int snapc = (vert ? (up ? (_bbox.ymax() + 10) : (_bbox.ymin() - 10))
+      : (up ? (_bbox.xmax() + 10) : (_bbox.xmin() - 10)));
   auto it = _hanangrid.find(n->z());
   if (it != _hanangrid.end()) {
     int pos = n->y(), lkp = n->x();
@@ -208,20 +209,19 @@ void HananRouterDB::expand(const Node* n)
 
 void HananRouterDB::insertRange(IntRangeSet& s, const IntRange& r)
 {
-  auto it = s.begin();
-  for (; it != s.end(); ++it) {
-    if (it->first > r.second) {
-      s.insert(r);
+  IntRange rc = r;
+  std::vector<IntRangeSet::iterator> overlapit;
+  for (auto it = s.begin(); it != s.end(); ++it) {
+    if (it->first > rc.second) {
       break;
-    } else if (it->first <= r.second && it->second >= r.first) {
-      s.erase(it);
-      s.insert(std::make_pair(std::min(it->first, r.first), std::max(it->second, r.second)));
-      break;
+    } else if (it->first <= rc.second && it->second >= rc.first) {
+      rc.first = std::min(it->first, rc.first);
+      rc.second = std::max(it->second, rc.second);
+      overlapit.push_back(it);
     }
   }
-  if (it == s.end()) {
-    s.insert(r);
-  }
+  for (auto& i : overlapit) s.erase(i);
+  s.insert(rc);
 }
 
 void HananRouterDB::invertRange(IntRangeSet& s, const bool vert)
@@ -243,9 +243,39 @@ void HananRouterDB::invertRange(IntRangeSet& s, const bool vert)
 void HananRouterDB::generateHananGrid()
 {
   for (auto& l : _obstacles) {
-    std::map<int, IntRangeSet> tmpranges;
     bool vert = isVert(l.first);
+    std::map<int, IntRangeSet> tmpranges;
+    for (bool src : {true, false}) {
+      for (auto& s : (src ? _sources : _targets)) {
+        if (s->z() == l.first || !src) {
+          if (vert) tmpranges[s->x()].clear();
+          else tmpranges[s->y()].clear();
+        }
+      }
+    }
     for (auto& o : l.second) {
+      if (vert) {
+        tmpranges[o.xmin()].clear();
+        tmpranges[o.xmax()].clear();
+      } else {
+        tmpranges[o.ymin()].clear();
+        tmpranges[o.ymax()].clear();
+      }
+    }
+    for (auto& v : tmpranges) {
+      for (auto& o : l.second) {
+        if (vert) {
+          if (v.first > o.xmin() && v.first < o.xmax()) {
+            insertRange(tmpranges[v.first], std::make_pair(o.ymin(), o.ymax()));
+          }
+        } else {
+          if (v.first > o.ymin() && v.first < o.ymax()) {
+            insertRange(tmpranges[v.first], std::make_pair(o.xmin(), o.xmax()));
+          }
+        }
+      }
+    }
+    /*for (auto& o : l.second) {
       if (vert) {
         insertRange(tmpranges[o.xmin()], std::make_pair(o.ymin(), o.ymax()));
         insertRange(tmpranges[o.xmax()], std::make_pair(o.ymin(), o.ymax()));
@@ -253,7 +283,7 @@ void HananRouterDB::generateHananGrid()
         insertRange(tmpranges[o.ymin()], std::make_pair(o.xmin(), o.xmax()));
         insertRange(tmpranges[o.ymax()], std::make_pair(o.xmin(), o.xmax()));
       }
-    }
+    }*/
     for (auto& r : tmpranges) {
       invertRange(r.second, vert);
     }
