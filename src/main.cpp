@@ -22,19 +22,21 @@ int main(int argc, char* argv[])
     return 0;
   }
   DRC::LayerInfo linfo(layerJSONFile);
+  Router::Router hrdb{linfo};
   if (!plfile.empty() && !leffile.empty()) {
     Placement::Netlist netlist(plfile, leffile, linfo, uu);
-    netlist.route();
+    netlist.route(hrdb);
     netlist.print();
     netlist.plot();
   }
 
   std::string stfile = parseArgs(argc, argv, "-s");
-  Router::HananRouterDB hrdb{linfo};
-  if (!stfile.empty()) hrdb.readDataFile(stfile);
-  hrdb.findSol();
-  hrdb.printSol();
-  hrdb.plot();
+  if (!stfile.empty()) {
+    hrdb.readDataFile(stfile);
+    hrdb.findSol();
+    hrdb.printSol();
+    hrdb.plot();
+  }
 
   return 0;
 }

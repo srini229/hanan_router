@@ -3,9 +3,9 @@
 #include <fstream>
 #include "Geom.h"
 #include "Layer.h"
+#include "Router.h"
 
 namespace Placement {
-
 
 class Module;
 class Netlist;
@@ -21,7 +21,6 @@ class Pin {
   public:
     Pin(const std::string& name = "") : _name{name}, _bbox{} {}
     const std::string& name() const { return _name; }
-    const std::map<int, Geom::Rects>& getShapes() const { return _shapes; }
     void addRect(const int layer, const Geom::Rect& r)
     {
       _shapes[layer].push_back(r);
@@ -49,7 +48,7 @@ class Net {
     void addPin(const Pin* p) { _pins.insert(p); }
     void print() const;
     const std::string& name() const { return _name; }
-    void route(const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3);
+    void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2);
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
     const Geom::Rect& bbox() const { return _bbox; }
 };
@@ -157,7 +156,7 @@ class Module {
     }
 
     void print() const;
-    void route();
+    void route(Router::Router& r);
     void plot() const;
 
     const Geom::Rect& bbox() const { return _bbox; }
@@ -175,9 +174,9 @@ class Netlist {
     Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu);
     ~Netlist();
     void print() const;
-    void route()
+    void route(Router::Router& r)
     {
-      for (auto& m : _modules) m.second->route();
+      for (auto& m : _modules) m.second->route(r);
     }
     void plot() const
     {

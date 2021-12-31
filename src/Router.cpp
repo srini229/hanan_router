@@ -16,7 +16,7 @@ CostFn::CostFn(const DRC::LayerInfo& lf)
         _layerHCost.push_back(10000 * r);
         _layerVCost.push_back(r);
       }
-      _topLayer = static_cast<int>(i);
+      _topRoutingLayer = static_cast<int>(i);
     }
   }
   _layerPairCost.resize(_layerHCost.size(), std::vector<CostType>(_layerHCost.size(), 100000));
@@ -66,7 +66,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   auto maxz = std::max(n1.z(), n2.z());
   CostType minHCost(20000), minVCost(20000);
   if (minz == maxz) {
-    if (minz < _topLayer) maxz = minz + 1;
+    if (minz < _topRoutingLayer) maxz = minz + 1;
     else minz -= 1;
   }
   for (int i = minz; i <= maxz; ++i) {
@@ -88,8 +88,22 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
 }
 
 
-void HananRouterDB::readDataFile(const std::string& ifile)
+Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}, _maxRoutingLayer{0}, _name{}
 {
+  auto& layers = lf.layers();
+  _width.reserve(layers.size());
+  for (unsigned i = 0; i < layers.size(); ++i) {
+    if (layers[i]->type()) {
+      _width.push_back(static_cast<DRC::MetalLayer*>(layers[i])->width());
+      COUT << "layer : " << i << " width : " << _width.back() << '\n';
+    }
+  }
+  _maxRoutingLayer = static_cast<int>(_width.size()) - 1;
+}
+
+void Router::readDataFile(const std::string& ifile)
+{
+  setName(ifile);
   COUT << "reading datafile : " << ifile << '\n';
   std::ifstream ifs(ifile);
   std::string tmps;
@@ -128,14 +142,14 @@ void HananRouterDB::readDataFile(const std::string& ifile)
   COUT << "min layer : " << _minLayer << " max layer : " << _maxLayer << '\n';
 }
 
-void HananRouterDB::insert(const Node* n)
+void Router::insert(const Node* n)
 {
   n->print("adding to pq :");
   if (n->parent()) n->parent()->print("\tparent:");
   _pq.insert(n);
 }
 
-void HananRouterDB::checkAndInsert(Node* newn, const Node* n)
+void Router::checkAndInsert(Node* newn, const Node* n)
 {
   newn->print("newn bef :");
   if (newn->parent()) {
@@ -143,15 +157,14 @@ void HananRouterDB::checkAndInsert(Node* newn, const Node* n)
   }
   if (newn->cost() < 0) {
     if (newn->parent() != n) newn->setParent(n);
-    newn->evalFCost(_cf);
-    evalTCost(newn);
+    evalCost(newn);
     insert(newn);
   } else if (newn->parent() != n) {
     auto oldfcost = newn->fcost();
     auto oldparent = newn->parent();
     auto it = _pq.find(newn);
     newn->setParent(n);
-    newn->evalFCost(_cf);
+    evalFCost(newn);
     if (newn->fcost() > oldfcost) {
       newn->setParent(oldparent);
       newn->setFCost(oldfcost);
@@ -166,7 +179,7 @@ void HananRouterDB::checkAndInsert(Node* newn, const Node* n)
   }
 }
 
-int HananRouterDB::snap(const Node* n, const bool vert, const bool up) const
+int Router::snap(const Node* n, const bool vert, const bool up) const
 {
   int snapc = (vert ? (up ? _bbox.ymin() : _bbox.ymax())
       : (up ? _bbox.xmin() : _bbox.xmax()));
@@ -192,7 +205,7 @@ int HananRouterDB::snap(const Node* n, const bool vert, const bool up) const
   return snapc;
 }
 
-void HananRouterDB::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc)
+void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc)
 {
   int adjLayer = (above ? (n->z() < _maxLayer ? n->z() + 1 : -1) : (n->z() > _minLayer ? n->z() - 1 : -1));
   if (adjLayer >= 0) {
@@ -208,21 +221,7 @@ void HananRouterDB::getAdjacentGrid(std::set<int>& s, const Node* n, const bool 
   }
 }
 
-void HananRouterDB::insertTarget(std::set<int>& s, const Node* n, const bool up, const int snapc)
-{
-  auto coord = (isVert(n->z()) ? n->y() : n->x());
-  for (auto& t : _targets) {
-    auto tcoord = (isVert(t->z()) ? t->y() : t->x());
-    if (t->z() == n->z()) {
-      if ((up && coord < tcoord && snapc > tcoord) 
-          || (!up && coord > tcoord && snapc < tcoord)) {
-        s.insert(tcoord);
-      }
-    }
-  }
-}
-
-void HananRouterDB::expand(const Node* n)
+void Router::expand(const Node* n)
 {
   std::bitset<4> expanddir{0xF}; // 0:dn, 1:up, 2:left/down, 3:right/up
   n->print("expanding node :");
@@ -328,7 +327,7 @@ void HananRouterDB::expand(const Node* n)
   }
 }
 
-void HananRouterDB::insertRange(IntRangeSet& s, const IntRange& r)
+void Router::insertRange(IntRangeSet& s, const IntRange& r)
 {
   IntRange rc = r;
   std::vector<IntRangeSet::iterator> overlapit;
@@ -345,7 +344,7 @@ void HananRouterDB::insertRange(IntRangeSet& s, const IntRange& r)
   s.insert(rc);
 }
 
-void HananRouterDB::invertRange(IntRangeSet& s, const bool vert)
+void Router::invertRange(IntRangeSet& s, const bool vert)
 {
   IntRangeSet sout;
   int start = _bbox.xmin(), end = _bbox.xmax();
@@ -361,15 +360,17 @@ void HananRouterDB::invertRange(IntRangeSet& s, const bool vert)
   s = sout;
 }
 
-void HananRouterDB::generateHananGrid()
+void Router::generateHananGrid()
 {
   std::set<int> xcoords, ycoords;
-  for (auto& l : _obstacles) {
-    for (auto& o : l.second) {
-      xcoords.insert(o.xmin());
-      xcoords.insert(o.xmax());
-      ycoords.insert(o.ymin());
-      ycoords.insert(o.ymax());
+  for (auto tmp : {false, true}) {
+    for (auto& l : (tmp ? _tobstacles : _obstacles)) {
+      for (auto& o : l.second) {
+        xcoords.insert(o.xmin());
+        xcoords.insert(o.xmax());
+        ycoords.insert(o.ymin());
+        ycoords.insert(o.ymax());
+      }
     }
   }
   for (bool src : {true, false}) {
@@ -378,56 +379,58 @@ void HananRouterDB::generateHananGrid()
       xcoords.insert(s->y());
     }
   }
-  for (auto& l : _obstacles) {
-    bool vert = isVert(l.first);
-    std::map<int, IntRangeSet> tmpranges;
-    for (auto& x : (vert ? xcoords : ycoords)) {
-      tmpranges[x].clear();
-    }
+  for (auto tmp : {false, true}) {
+    for (auto& l : (tmp ? _tobstacles : _obstacles)) {
+      bool vert = isVert(l.first);
+      std::map<int, IntRangeSet> tmpranges;
+      for (auto& x : (vert ? xcoords : ycoords)) {
+        tmpranges[x].clear();
+      }
 
-    for (auto& v : tmpranges) {
-      for (auto& o : l.second) {
-        if (vert) {
-          if (v.first > o.xmin() && v.first < o.xmax()) {
-            insertRange(tmpranges[v.first], std::make_pair(o.ymin(), o.ymax()));
-          }
-        } else {
-          if (v.first > o.ymin() && v.first < o.ymax()) {
-            insertRange(tmpranges[v.first], std::make_pair(o.xmin(), o.xmax()));
+      for (auto& v : tmpranges) {
+        for (auto& o : l.second) {
+          if (vert) {
+            if (v.first > o.xmin() && v.first < o.xmax()) {
+              insertRange(tmpranges[v.first], std::make_pair(o.ymin(), o.ymax()));
+            }
+          } else {
+            if (v.first > o.ymin() && v.first < o.ymax()) {
+              insertRange(tmpranges[v.first], std::make_pair(o.xmin(), o.xmax()));
+            }
           }
         }
       }
-    }
-    /*for (auto& o : l.second) {
-      if (vert) {
-      insertRange(tmpranges[o.xmin()], std::make_pair(o.ymin(), o.ymax()));
-      insertRange(tmpranges[o.xmax()], std::make_pair(o.ymin(), o.ymax()));
-      } else {
-      insertRange(tmpranges[o.ymin()], std::make_pair(o.xmin(), o.xmax()));
-      insertRange(tmpranges[o.ymax()], std::make_pair(o.xmin(), o.xmax()));
+      /*for (auto& o : l.second) {
+        if (vert) {
+        insertRange(tmpranges[o.xmin()], std::make_pair(o.ymin(), o.ymax()));
+        insertRange(tmpranges[o.xmax()], std::make_pair(o.ymin(), o.ymax()));
+        } else {
+        insertRange(tmpranges[o.ymin()], std::make_pair(o.xmin(), o.xmax()));
+        insertRange(tmpranges[o.ymax()], std::make_pair(o.xmin(), o.xmax()));
+        }
+        }*/
+      for (auto& r : tmpranges) {
+        invertRange(r.second, vert);
       }
-      }*/
-    for (auto& r : tmpranges) {
-      invertRange(r.second, vert);
+      _hanangrid.emplace(l.first, tmpranges);
     }
-    _hanangrid.emplace(l.first, tmpranges);
   }
 }
 
-void HananRouterDB::findSol()
+void Router::findSol()
 {
   for (auto& s : _sources) {
     evalTCost(s);
     _bbox.merge(s->x(), s->y(), s->x(), s->y());
   }
   for (auto& t : _targets) {
-    t->evalFCost(_cf);
-    t->setTCost(0);
     _bbox.merge(t->x(), t->y(), t->x(), t->y());
   }
-  for (auto& l : _obstacles) {
-    for (auto& o : l.second) {
-      _bbox.merge(o);
+  for (auto tmp : {false, true}) {
+    for (auto& l : (tmp ? _tobstacles : _obstacles)) {
+      for (auto& o : l.second) {
+        _bbox.merge(o);
+      }
     }
   }
 
@@ -457,10 +460,12 @@ void HananRouterDB::findSol()
     }
     _pq.erase(_pq.begin());
     expand(t);
+    ++_expansions;
+    if (_expansions >= _maxExpansions) break;
   }
 }
 
-void HananRouterDB::printSol() const
+void Router::printSol() const
 {
   for (auto& s : _sources) {
     s->print("source : ");
@@ -468,9 +473,11 @@ void HananRouterDB::printSol() const
   for (auto& t : _targets) {
     t->print("targets : ");
   }
-  for (auto& obs : _obstacles) {
-    for (auto& o : obs.second) {
-      COUT << "obs : " << o.str() << ' ' << obs.first << '\n';
+  for (auto tmp : {false, true}) {
+    for (auto& l : (tmp ? _tobstacles : _obstacles)) {
+      for (auto& o : l.second) {
+        COUT << "obs : " << o.str() << ' ' << l.first << '\n';
+      }
     }
   }
   if (_sol) {
@@ -482,19 +489,22 @@ void HananRouterDB::printSol() const
   }
 }
 
-void HananRouterDB::plot() const
+void Router::plot() const
 {
-  std::ofstream ofs("route.gplt");
+  std::ofstream ofs(_name + "_route.gplt");
+  COUT << "plotting route to " << _name << "_route.gplt\n";
   if (ofs.is_open()) {
-    COUT << "plotting route to route.gplt\n";
+    COUT << "plotting route to " << _name << "_route.gplt\n";
     ofs << "unset key\n";
     unsigned cnt{1};
-    for (auto& l : _obstacles) {
-      const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
-      for (auto& b : l.second) {
-        if (b.valid() && b.width() && b.height()) {
-          ofs << "set object " << cnt++ << " rect from ";
-          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.5 fillcolor \"" << color << "\" behind\n";
+    for (auto tmp : {false, true}) {
+      for (auto& l : (tmp ? _tobstacles : _obstacles)) {
+        const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
+        for (auto& b : l.second) {
+          if (b.valid() && b.width() && b.height()) {
+            ofs << "set object " << cnt++ << " rect from ";
+            ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.5 fillcolor \"" << color << "\" behind\n";
+          }
         }
       }
     }
@@ -532,6 +542,19 @@ void HananRouterDB::plot() const
     ofs << "EOF\n\n";
     ofs << "set size ratio GPVAL_DATA_Y_MAX/GPVAL_DATA_X_MAX\nrepl\npause -1";
 
+  }
+}
+
+void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
+{
+  auto& obs(temp ? _tobstacles : _obstacles);
+  for (auto& l : lr) {
+    const auto& layer = l.first;
+    for (auto& r : l.second) {
+      int hw = (layer < static_cast<int>(_width.size())) ? 
+        ((_width[layer] % 2 == 0) ? _width[layer]/2 : (_width[layer]/2 + 1)) : 0;
+      obs[layer].push_back(r.bloatby(hw));
+    }
   }
 }
 

@@ -51,6 +51,8 @@ class MetalLayer : public Layer {
     MetalLayer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur)
       : Layer(gdsNo, name, mur, lr, ur, 1), _pitch(0), _width(0), _minL(0), _maxL(0), _e2e(0), _offset(0),
     _c{0,0,0}, _cc{0, 0, 0}, _dir(Direction::ORTHOGONAL) {}
+    int pitch() const { return _pitch;}
+    int width() const { return _width;}
     void setPitch(const int p) {_pitch = p;}
     void setWidth(const int w) {_width = w;}
     void setMinL(const int l) {_minL = l;}

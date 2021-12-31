@@ -103,7 +103,7 @@ class Rect {
     }
 
     void bloat(const int c) { _ll.translate(-c); _ur.translate(c); }
-    Rect bloated(const int c) { return Rect(xmin() - c, ymin() - c, xmax() + c, ymax() + c); }
+    Rect bloatby(const int c) const { return Rect(xmin() - c, ymin() - c, xmax() + c, ymax() + c); }
     
     int width() const { return xmax() - xmin(); }
     int height() const { return ymax() - ymin(); }

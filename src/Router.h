@@ -4,6 +4,7 @@
 #include <map>
 #include <queue>
 #include <bitset>
+#include <limits>
 
 #include "Util.h"
 #include "Geom.h"
@@ -12,18 +13,19 @@
 namespace Router {
 
 typedef long CostType;
+const auto CostMax = std::numeric_limits<CostType>::max();
 class Node;
 
 class CostFn {
   private:
-    int _topLayer;
+    int _topRoutingLayer;
     std::vector<CostType> _layerHCost, _layerVCost;
     std::vector<std::vector<CostType>> _layerPairCost;
   public:
     CostType deltaCost(const Node& n1, const Node& n2) const;
     CostFn(const DRC::LayerInfo& lf);
 
-    CostFn(const int numLayers = 0, const int minHLayer = 1, const int minVLayer = 0): _topLayer(numLayers - 1), _layerHCost(numLayers, 10000), _layerVCost(numLayers, 10000),
+    CostFn(const int numLayers = 0, const int minHLayer = 1, const int minVLayer = 0): _topRoutingLayer(numLayers - 1), _layerHCost(numLayers, 10000), _layerVCost(numLayers, 10000),
     _layerPairCost(numLayers, std::vector<CostType>(numLayers, 10000))
     {
       for (int i = minHLayer; i < numLayers; i += 2) {
@@ -42,11 +44,11 @@ class CostFn {
     }
 };
 
-class HananRouterDB;
+class Router;
 
 class Node {
   private:
-    friend class HananRouterDB;
+    friend class Router;
     int _x, _y, _z;
     CostType _fcost, _tcost;
     Node const* _parent;
@@ -65,21 +67,6 @@ class Node {
     void setFCost(CostType fcost) { _fcost = fcost; }
     void setTCost(CostType tcost) { _tcost = tcost; }
     void setParent(const Node* n) { _parent = n; }
-    void evalFCost(const CostFn& c)
-    {
-      if (_parent != nullptr) {
-        _fcost = _parent->_fcost + c.deltaCost(*_parent, *this);
-      } else {
-        _fcost = -1;
-      }
-    }
-    CostType evalTCost(const Node* t, const CostFn& c) const
-    {
-      if (t) {
-        return c.deltaCost(*this, *t);
-      }
-      return 0;
-    }
     void print(const std::string& s) const
     {
       COUT << s << ' ' << _x << ' ' << _y << ' ' << _z << ' ' << _fcost << ' ' << _tcost <<  ' ' << cost() << '\n';
@@ -126,7 +113,7 @@ typedef std::set<IntRange, RangeComp> IntRangeSet;
 typedef std::set<Node*, NodeComp> NodeSet;
 typedef std::multiset<const Node*, NodeCostComp> PriorityQueue;
 typedef std::map<std::tuple<int, int, int>, Node*> NodeMap;
-class HananRouterDB {
+class Router {
   private:
     PriorityQueue _pq;
     NodeSet _sources, _targets;
@@ -136,8 +123,13 @@ class HananRouterDB {
     std::map<int, std::map<int, IntRangeSet>> _hanangrid;
     Geom::Rect _bbox;
     const Node *_sol;
+    std::vector<int> _width;
+    int _minLayer, _maxLayer, _maxRoutingLayer;
 
-    int _minLayer, _maxLayer;
+    std::string _name;
+
+    size_t _expansions{0};
+    const size_t _maxExpansions{1000000};
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr,
@@ -156,14 +148,25 @@ class HananRouterDB {
       return n;
     }
 
+    void evalFCost(Node* n)
+    {
+      CostType fcost{0};
+      if (n->parent()) {
+        fcost = _cf.deltaCost(*n, *(n->parent())) + n->parent()->fcost();
+      }
+      n->setFCost(fcost);
+    }
+
     void evalTCost(Node* n)
     {
-      CostType tcost = 1e10;
+      CostType tcost = CostMax;
       for (auto& t : _targets) {
-        tcost = std::min(tcost, n->evalTCost(t, _cf));
+        tcost = std::min(tcost, _cf.deltaCost(*n, *t));
       }
       n->setTCost(tcost);
     }
+
+    void evalCost(Node* n) { evalFCost(n); evalTCost(n); }
 
     void insert(const Node* n);
 
@@ -174,14 +177,11 @@ class HananRouterDB {
     bool isVert(const int l) const { return (l % 2) == 0; }
     void checkAndInsert(Node* newn, const Node* n);
     int snap(const Node* n, const bool vert, const bool up) const;
-    void insertTarget(std::set<int>& s, const Node* n, const bool up, const int snapc);
     void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);
     
   public:
-    HananRouterDB(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}
-    {
-    }
-    ~HananRouterDB()
+    Router(const DRC::LayerInfo& lf);
+    ~Router()
     {
       for (auto& n : _nodes) delete n.second;
       _nodes.clear();
@@ -190,10 +190,35 @@ class HananRouterDB {
       _targets.clear();
     }
     void readDataFile(const std::string& ifile);
+    const int maxRoutingLayer() const { return _maxRoutingLayer; }
+    void setName(const std::string& n) { _name = n; }
 
+    void clearSourceTargets() {
+      _sources.clear();
+      _targets.clear();
+      _sol = nullptr;
+      for (auto& n : _nodes) delete n.second;
+      _nodes.clear();
+    }
     void findSol();
     void printSol() const;
     void plot() const;
+
+    void clearObstacles(bool temp = false)
+    {
+      if(temp) _tobstacles.clear();
+      else _obstacles.clear();
+    }
+    void addObstacles(const Geom::LayerRects& lr, const bool temp = false);
+
+    void addSource(const int x, const int y, const int z)
+    {
+      _sources.insert(createNode(x, y, z, nullptr, 0));
+    }
+    void addTarget(const int x, const int y, const int z)
+    {
+      _targets.insert(createNode(x, y, z, nullptr, -1, 0));
+    }
 };
 
 }

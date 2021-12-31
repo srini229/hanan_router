@@ -1,12 +1,7 @@
 #include "Util.h"
 #include "Placement.h"
-#include <sstream>
-
-#include "nlohmann/json.hpp"
 
 namespace Placement {
-
-const auto& npos = std::string::npos;
 
 inline void Net::print() const
 {
@@ -17,9 +12,43 @@ inline void Net::print() const
 }
 
 
-void Net::route(const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3)
+void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2)
 {
-  COUT << "routing net : " << _name << '\n';
+  if (_pins.size() > 1) {
+    router.addObstacles(l1, true);
+    router.addObstacles(l2, true);
+    COUT << "routing net : " << _name << '\n';
+    auto it1 = _pins.rbegin();
+    auto it2 = std::next(it1);
+    while (it2 != _pins.rend()) {
+      router.clearSourceTargets();
+      const auto& p1 = (*it1)->shapes();
+      const auto& p2 = (*it2)->shapes();
+      for (auto src : {true, false}) {
+        bool inserted{false};
+        for (auto& l : (src ? p1 : p2)) {
+          if (l.first > router.maxRoutingLayer()) continue;
+          for (auto& s : l.second) {
+            if (src) {
+              router.addSource(s.xcenter(), s.ycenter(), l.first);
+            } else {
+              router.addTarget(s.xcenter(), s.ycenter(), l.first);
+            }
+            inserted = true;
+            break;
+          }
+          if (inserted) break;
+        }
+      }
+      router.setName(_name + "__" + (*it1)->name() + "__" + (*it2)->name());
+      router.findSol();
+      router.printSol();
+      router.plot();
+      it1 = it2;
+      ++it2;
+    }
+    router.clearObstacles(true);
+  }
   for (auto& pin : _pins) {
     Geom::MergeLayerRects(_routeshapes, pin->shapes(), &_bbox);
   }
@@ -77,13 +106,15 @@ void Module::build()
   _tmpnetpins.clear();
 }
 
-void Module::route()
+void Module::route(Router::Router& router)
 {
   if (!_routed) {
+    router.clearObstacles();
+    router.clearObstacles(true);
     for (auto& inst : _instances) {
       auto m = inst->module();
       if (!m->routed()) {
-        const_cast<Module*>(m)->route();
+        const_cast<Module*>(m)->route(router);
       }
       for (const auto& l : m->obstacles()) {
         for (const auto& r : l.second) {
@@ -91,6 +122,7 @@ void Module::route()
         }
       }
     }
+    router.addObstacles(_obstacles);
     Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
     for (auto it = _nets.begin(); it != _nets.end(); ++it) {
       _netObstaclesUnrouted.clear();
@@ -99,9 +131,10 @@ void Module::route()
           Geom::MergeLayerRects(_netObstaclesUnrouted, p->shapes());
         }
       }
-      it->second.route(_obstacles, _netObstaclesRouted, _netObstaclesUnrouted);
+      it->second.route(router, _netObstaclesRouted, _netObstaclesUnrouted);
       Geom::MergeLayerRects(_netObstaclesRouted, it->second.routeShapes());
     }
+    router.clearObstacles();
     COUT << " routing : " << _name << '\n';
     for (auto& p : _pins) {
       auto itn = _nets.find(p.first);
@@ -202,7 +235,7 @@ void Instance::build()
 {
   if (_m) {
     for (auto& p : _m->pins()) {
-      auto ip = new Pin(_name + "/" + p.second->name());
+      auto ip = new Pin(_name + "+" + p.second->name());
       _pins[p.second->name()] = ip;
       for (const auto& ls : p.second->shapes()) {
         for (const auto& s : ls.second) {
@@ -235,242 +268,4 @@ void Instance::setModule(const Module* m)
   _m = m;
   _bbox = _tr.transform(m->bbox());
 }
-
-
-using json = nlohmann::json;
-using ordered_json = nlohmann::ordered_json;
-Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu) : _uu(uu)
-{
-  if (plfile.empty()) {
-    CERR<< "missing placement file" <<std::endl;
-    return;
-  }
-  std::ifstream ifs(plfile);
-  if (!ifs) {
-    CERR << "unable to open placement file " << plfile <<std::endl;
-    return;
-  }
-  ordered_json oj = json::parse(ifs);
-  ifs.close();
-  auto it = oj.find("leaves");
-  if (it != oj.end()) {
-    for (auto& l : *it) {
-      auto lname = l.find("concrete_name");
-      if (_modules.find(*lname) != _modules.end()) continue;
-      if (lname != l.end()) {
-        auto modu = new Module(*lname, 1);
-        COUT << "adding leaf : " << *lname << '\n';
-        auto terms = l.find("terminals");
-        if (terms != l.end()) {
-          for (auto& term : *terms) {
-            auto p = modu->addPin(term["name"]);
-            modu->addNet(term["name"]);
-            modu->net(term["name"])->addPin(p);
-          }
-        }
-        _modules[modu->name()] = modu;
-      }
-    }
-  }
-  it = oj.find("modules");
-  if (it != oj.end()) {
-    for (auto& m : *it) {
-      auto mname = m.find("concrete_name");
-      if (mname != m.end()) {
-        if (_modules.find(*mname) != _modules.end()) continue;
-        auto modu = new Module(*mname, 0);
-        auto params = m.find("parameters");
-        if (params != m.end()) {
-          for (auto& p : *params) {
-            modu->addPin(p);
-          }
-        }
-        auto bbox = m.find("bbox");
-        if (bbox != m.end()) {
-          const auto& b = (*bbox);
-          modu->setBBox(Geom::Rect(b[0], b[1], b[2], b[3]));
-        }
-        auto insts = m.find("instances");
-        if (insts != m.end()) {
-          for (auto& inst : *insts) {
-            auto iname = inst.find("instance_name");
-            auto mname = inst.find("concrete_template_name");
-            auto tritr = inst.find("transformation");
-            auto tr = (tritr == inst.end()) ? Geom::Transform() :
-              Geom::Transform((*tritr)["oX"], (*tritr)["oY"], (*tritr)["sX"], (*tritr)["sY"]) ;
-            Placement::Instance* instptr{nullptr};
-            if (iname != inst.end() && mname != inst.end()) {
-              instptr = modu->addInstance(*iname, *mname, tr);
-            }
-            if (instptr) {
-              auto famap = inst.find("fa_map");
-              if (famap != inst.end()) {
-                for (auto& pm : *famap) {
-                  const Net* n = &(modu->addNet(pm["actual"]));
-                  modu->addTmpPin(n, instptr, pm["formal"]);
-                }
-              }
-            } else {
-              COUT << "instptr nullptr\n";
-            }
-          }
-        }
-        _modules[modu->name()] = modu;
-      }
-    }
-  }
-  loadLEF(leffile, lf);
-  build();
 }
-
-
-Netlist::~Netlist()
-{
-  for (auto& m : _modules) delete m.second;
-  _modules.clear();
-}
-
-
-void Netlist::print() const
-{
-  for (const auto& m : _modules) {
-    COUT << "module : " << m.second->name() << '\n';
-    m.second->print();
-  }
-}
-
-
-void Netlist::build()
-{
-  for (auto& m : _modules) {
-    for (auto& inst : m.second->instances()) {
-      auto it = _modules.find(inst->moduleName());
-      if (it != _modules.end()) {
-        inst->setModule(it->second);
-      }
-    }
-  }
-  for (auto& m : _modules) m.second->build();
-}
-
-
-void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
-{
-  if (leffile.empty()) {
-    CERR<< "missing leffile" <<std::endl;
-    return;
-  }
-  std::ifstream ifs(leffile);
-  if (!ifs) {
-    CERR << "unable to open leffile " << leffile <<std::endl;
-    return;
-  }
-  std::string line;
-  bool inMacro{false}, inPin{false}, inObs{false}, inPort{false}, inUnits{false};
-  Module* curr_module{nullptr};
-  Pin* curr_pin{nullptr};
-  std::string macroName, pinName;
-  int layer{-1};
-  double macroUnits{1.};
-  int units = _uu;
-  while (std::getline(ifs, line)) {
-    std::string str;
-    std::stringstream ss(line);
-    if (line.find("MACRO") != npos) {
-      ss >> str >> macroName;
-      COUT << "macro " << macroName << '\n';
-      auto it = _modules.find(macroName);
-      if (it != _modules.end()) {
-        curr_module =  it->second;
-        COUT << "loading macro " << macroName << '\n';
-      }
-      inMacro = true;
-      continue;
-    }
-    if (line.find("END") != npos) {
-      if (inUnits) {
-        if (line.find("UNITS") != npos) {
-          inUnits = false;
-        }
-      }
-      if (inPort) {
-        inPort = false;
-      } else if (inPin) {
-        if (line.find(pinName) != npos) {
-          inPin = false;
-          curr_pin = nullptr;
-          pinName.clear();
-        }
-      } else if (inMacro) {
-        if (line.find(macroName) != npos) {
-          inMacro = false;
-          curr_module = nullptr;
-          macroName.clear();
-        }
-      } else if (inObs) {
-        inObs = false;
-        layer = -1;
-      }
-      continue;
-    }
-    if (inMacro && curr_module) {
-      if (line.find("SIZE") != npos) {
-        double w{0.}, h{0.};
-        ss >> str >> w >> str >> h;
-        curr_module->setBBox(Geom::Rect(0, 0, w * units, h * units));
-      }
-      if (line.find("PIN") != npos) {
-        ss >> str >> pinName;
-        curr_pin = curr_module->getPin(pinName);
-        inPin = true;
-        continue;
-      }
-    }
-    if (inUnits && line.find("DATABASE") != npos) {
-      ss >> str >> str >> str >> macroUnits;
-      units /= macroUnits;
-    }
-    if (inPin && curr_pin && line.find("PORT") != npos) {
-      inPort = true;
-      layer = -1;
-      continue;
-    }
-    if (line.find("OBS") != npos) {
-      inObs = true;
-      continue;
-    }
-    if (inPort && curr_pin) {
-      if (line.find("LAYER") != npos) {
-        ss >> str >> str;
-        layer = lf.getLayerIndex(str);
-        continue;
-      }
-      if (line.find("RECT") != npos) {
-        double llx{0}, lly{0}, urx{0}, ury{0};
-        ss >> str >> llx >> lly >> urx >> ury;
-        if (layer > 0) {
-          curr_pin->addRect(layer, Geom::Rect(llx * units, lly * units, urx * units, ury * units));
-        }
-        continue;
-      }
-    }
-    if (inObs && curr_module) {
-      if (line.find("LAYER") != npos) {
-        ss >> str >> str;
-        layer = lf.getLayerIndex(str);
-        continue;
-      }
-      if (line.find("RECT") != npos) {
-        double llx{0}, lly{0}, urx{0}, ury{0};
-        ss >> str >> llx >> lly >> urx >> ury;
-        if (layer > 0) {
-          curr_module->addObstacle(layer, Geom::Rect(llx * units, lly * units, urx * units, ury * units));
-        }
-        continue;
-      }
-    }
-  }
-  ifs.close();
-}
-
-};
