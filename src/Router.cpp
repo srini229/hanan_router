@@ -245,7 +245,6 @@ void Router::expand(const Node* n)
 {
   std::bitset<4> expanddir{0xF}; // 0:dn, 1:up, 2:left/down, 3:right/up
   n->print("expanding node :");
-  std::cout << std::endl;
   if (n->z() <= _minLayer || (n->parent() && n->parent()->z() < n->z())) {
     expanddir.set(0, false);
   }
@@ -549,10 +548,9 @@ void Router::plot() const
       }
     }
     ofs << "plot[:][:] '-' using 1:2 w filledcurves lt -1 lw 2 lc 'red', '-' using 1:2 w filledcurves lt -1 lw 2 lc 'blue', '-' using 1:2 w l lt -1 lw 3 lc 6\n";
-    auto dx{std::max(2, _bbox.width()/100)};
-    auto dy{std::max(2, _bbox.height()/100)};
+    int dx{std::max(2, _bbox.width()/100)};
+    int dy{std::max(2, _bbox.height()/100)};
     for (auto& s : _sources) {
-
       Geom::Rect b(s->x() - dx, s->y() - dy, s->x() + dx, s->y() + dy);
       ofs << b.xmin() << " " << b.ymin() << "\n";
       ofs << b.xmax() << " " << b.ymin() << "\n";
