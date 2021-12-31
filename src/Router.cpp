@@ -16,6 +16,7 @@ CostFn::CostFn(const DRC::LayerInfo& lf)
         _layerHCost.push_back(10000 * r);
         _layerVCost.push_back(r);
       }
+      _topLayer = static_cast<int>(i);
     }
   }
   _layerPairCost.resize(_layerHCost.size(), std::vector<CostType>(_layerHCost.size(), 100000));
