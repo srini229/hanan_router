@@ -128,6 +128,7 @@ class LayerInfo {
     std::map<const MetalLayer*, const ViaLayer*> _vldn, _vlup;
     std::map<std::string, MetalLayer*> _mlayerNameMap;
     MetalLayer *_sbottom, *_stop, *_cbottom, *_ctop, *_pbottom, *_ptop;
+    int _topMetal;
   public:
     LayerInfo(const std::string& lj);
     void print() const;
@@ -146,6 +147,8 @@ class LayerInfo {
       return std::make_pair(ll, ul);
     }
     const Layers& layers() const { return _layers; }
+    int signalBottomLayer() const { return (_sbottom ? getLayerIndex(_sbottom->name()) : 0); }
+    int signalTopLayer() const { return (_stop ? getLayerIndex(_stop->name()) : _topMetal); }
 };
 
 }

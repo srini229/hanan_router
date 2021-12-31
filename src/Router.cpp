@@ -98,9 +98,26 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100
       COUT << "layer : " << i << " width : " << _width.back() << '\n';
     }
   }
+  _minLayer = lf.signalBottomLayer();
+  _maxLayer = lf.signalTopLayer();
   _maxRoutingLayer = static_cast<int>(_width.size()) - 1;
 }
 
+Node* Router::createNode(const int x, const int y, const int z,
+    const Node* parent, const int fcost, const int tcost)
+{
+  auto tpl = std::make_tuple(x, y, z);
+  auto it = _nodes.find(tpl);
+  Node* n = nullptr;
+  if (it == _nodes.end()) {
+    n = new Node(x, y, z, fcost, tcost, parent);
+    _nodes[tpl] = n;
+    COUT << "creating new node : " << x << ',' << y << ',' << z << '\n';
+  } else {
+    n = it->second;
+  }
+  return n;
+}
 void Router::readDataFile(const std::string& ifile)
 {
   setName(ifile);
@@ -137,6 +154,9 @@ void Router::readDataFile(const std::string& ifile)
     };
   }
   //_cf = CostFn(zmax + 1, zmin + 1, zmin);
+  if (zmin == zmax) {
+    ++zmax;
+  }
   _minLayer = zmin;
   _maxLayer = zmax;
   COUT << "min layer : " << _minLayer << " max layer : " << _maxLayer << '\n';
@@ -366,6 +386,7 @@ void Router::generateHananGrid()
   for (auto tmp : {false, true}) {
     for (auto& l : (tmp ? _tobstacles : _obstacles)) {
       for (auto& o : l.second) {
+        if (!o.overlaps(_bbox)) continue;
         xcoords.insert(o.xmin());
         xcoords.insert(o.xmax());
         ycoords.insert(o.ymin());
@@ -379,12 +400,21 @@ void Router::generateHananGrid()
       xcoords.insert(s->y());
     }
   }
+  for (auto l = _minLayer; l <= _maxLayer; ++l) {
+    _tobstacles[l].push_back(Geom::Rect(_bbox.xmin() - 10, _bbox.ymin(), _bbox.xmin(), _bbox.ymax()));
+    _tobstacles[l].push_back(Geom::Rect(_bbox.xmin(), _bbox.ymin() - 10, _bbox.xmax(), _bbox.ymin()));
+    _tobstacles[l].push_back(Geom::Rect(_bbox.xmax(), _bbox.ymin(), _bbox.xmax() + 10, _bbox.ymax()));
+    _tobstacles[l].push_back(Geom::Rect(_bbox.xmin(), _bbox.ymax(), _bbox.xmax(), _bbox.ymax() + 10));
+  }
   for (auto tmp : {false, true}) {
     for (auto& l : (tmp ? _tobstacles : _obstacles)) {
       bool vert = isVert(l.first);
       std::map<int, IntRangeSet> tmpranges;
       for (auto& x : (vert ? xcoords : ycoords)) {
-        tmpranges[x].clear();
+        if ((vert && x >= _bbox.xmin() && x <= _bbox.xmax()) || 
+            (!vert && x >= _bbox.ymin() && x <= _bbox.ymax())) {
+          tmpranges[x].clear();
+        }
       }
 
       for (auto& v : tmpranges) {
@@ -426,13 +456,13 @@ void Router::findSol()
   for (auto& t : _targets) {
     _bbox.merge(t->x(), t->y(), t->x(), t->y());
   }
-  for (auto tmp : {false, true}) {
+  /*for (auto tmp : {false, true}) {
     for (auto& l : (tmp ? _tobstacles : _obstacles)) {
       for (auto& o : l.second) {
         _bbox.merge(o);
       }
     }
-  }
+  }*/
 
   for (auto& s : _sources) {
     insert(s);
@@ -489,6 +519,7 @@ void Router::printSol() const
   }
 }
 
+
 void Router::plot() const
 {
   std::ofstream ofs(_name + "_route.gplt");
@@ -509,8 +540,11 @@ void Router::plot() const
       }
     }
     ofs << "plot[:][:] '-' using 1:2 w filledcurves lt -1 lw 2 lc 'red', '-' using 1:2 w filledcurves lt -1 lw 2 lc 'blue', '-' using 1:2 w l lt -1 lw 3 lc 6\n";
+    auto dx{std::max(2, _bbox.width()/100)};
+    auto dy{std::max(2, _bbox.height()/100)};
     for (auto& s : _sources) {
-      Geom::Rect b(s->x() - 2, s->y() - 2, s->x() + 2, s->y() + 2);
+
+      Geom::Rect b(s->x() - dx, s->y() - dy, s->x() + dx, s->y() + dy);
       ofs << b.xmin() << " " << b.ymin() << "\n";
       ofs << b.xmax() << " " << b.ymin() << "\n";
       ofs << b.xmax() << " " << b.ymax() << "\n";
@@ -519,7 +553,7 @@ void Router::plot() const
     }
     ofs << "EOF\n";
     for (auto& t : _targets) {
-      Geom::Rect b(t->x() - 2, t->y() - 2, t->x() + 2, t->y() + 2);
+      Geom::Rect b(t->x() - dx, t->y() - dy, t->x() + dx, t->y() + dy);
       ofs << b.xmin() << " " << b.ymin() << "\n";
       ofs << b.xmax() << " " << b.ymin() << "\n";
       ofs << b.xmax() << " " << b.ymax() << "\n";
@@ -545,6 +579,29 @@ void Router::plot() const
   }
 }
 
+
+void Router::writeSTO() const
+{
+  std::ofstream ofs(_name + "_route.sto");
+  COUT << "writing sto to " << _name << "_route.sto\n";
+  if (ofs.is_open()) {
+    for (auto& s : _sources) {
+      ofs << "Source " << s->x() << ' ' << s->y() << ' ' << s->z() << '\n';
+    }
+    for (auto& t : _targets) {
+      ofs << "Target " << t->x() << ' ' << t->y() << ' ' << t->z() << '\n';
+    }
+    for (auto tmp : {true, false}) {
+      for (auto& l : (tmp ? _tobstacles : _obstacles)) {
+        for (auto& o : l.second) {
+          ofs << "Obstacle " << o.xmin() << ' ' << o.xmax() << ' ' << o.width() << ' ' << o.height() << ' ' << l.first << '\n';
+        }
+      }
+    }
+  }
+}
+
+
 void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 {
   auto& obs(temp ? _tobstacles : _obstacles);
@@ -553,6 +610,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
     for (auto& r : l.second) {
       int hw = (layer < static_cast<int>(_width.size())) ? 
         ((_width[layer] % 2 == 0) ? _width[layer]/2 : (_width[layer]/2 + 1)) : 0;
+      COUT << "layer : " << layer << " obs : " << hw << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
       obs[layer].push_back(r.bloatby(hw));
     }
   }

@@ -126,6 +126,14 @@ class Rect {
     long area() const { return ((long)width()) * height(); }
     string str() const { return "LL : {" + _ll.str() + "} UR : {" + _ur.str() + "}"; }
     //const json toJSON() const { return json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}; }
+
+    bool overlaps (const Geom::Rect& r) const 
+    {
+      if (xmin() <= r.xmax() && xmax() >= r.xmin()
+          && ymin() <= r.ymax() && ymax() >= r.ymin())
+        return true;
+      return false;
+    }
 };
 typedef vector<Rect> Rects;
 typedef map<int, Rects> LayerRects;

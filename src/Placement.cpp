@@ -15,9 +15,9 @@ inline void Net::print() const
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2)
 {
   if (_pins.size() > 1) {
+    COUT << "routing net : " << _name << '\n';
     router.addObstacles(l1, true);
     router.addObstacles(l2, true);
-    COUT << "routing net : " << _name << '\n';
     auto it1 = _pins.rbegin();
     auto it2 = std::next(it1);
     while (it2 != _pins.rend()) {
@@ -40,7 +40,9 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           if (inserted) break;
         }
       }
+      COUT << "routing pins : " << (*it1)->name() << ' ' << (*it2)->name() << '\n';
       router.setName(_name + "__" + (*it1)->name() + "__" + (*it2)->name());
+      router.writeSTO();
       router.findSol();
       router.printSol();
       router.plot();
@@ -122,7 +124,7 @@ void Module::route(Router::Router& router)
         }
       }
     }
-    router.addObstacles(_obstacles);
+    //router.addObstacles(_obstacles);
     Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
     for (auto it = _nets.begin(); it != _nets.end(); ++it) {
       _netObstaclesUnrouted.clear();

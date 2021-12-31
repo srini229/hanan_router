@@ -132,21 +132,7 @@ class Router {
     const size_t _maxExpansions{1000000};
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
-        const Node* parent = nullptr,
-        const int fcost = -1, const int tcost = -1)
-    {
-      auto tpl = std::make_tuple(x, y, z);
-      auto it = _nodes.find(tpl);
-      Node* n = nullptr;
-      if (it == _nodes.end()) {
-        n = new Node(x, y, z, fcost, tcost, parent);
-        _nodes[tpl] = n;
-        COUT << "creating new node : " << x << ',' << y << ',' << z << '\n';
-      } else {
-        n = it->second;
-      }
-      return n;
-    }
+        const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
 
     void evalFCost(Node* n)
     {
@@ -203,7 +189,7 @@ class Router {
     void findSol();
     void printSol() const;
     void plot() const;
-
+    void writeSTO() const;
     void clearObstacles(bool temp = false)
     {
       if(temp) _tobstacles.clear();

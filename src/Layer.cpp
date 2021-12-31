@@ -10,7 +10,7 @@ namespace DRC {
 using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
 LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullptr},
- _cbottom{nullptr}, _ctop{nullptr}, _pbottom{nullptr}, _ptop{nullptr}
+ _cbottom{nullptr}, _ctop{nullptr}, _pbottom{nullptr}, _ptop{nullptr}, _topMetal{0}
 {
   if (ljfile.empty()) {
     CERR<< "missing layers.json file" <<std::endl;
@@ -166,6 +166,7 @@ LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullp
     }
   }
   _layers.insert(_layers.end(), _mlayers.begin(), _mlayers.end());
+  _topMetal = (static_cast<int>(_layers.size()) - 1);
   _layers.insert(_layers.end(), _vlayers.begin(), _vlayers.end());
   for (unsigned i = 0; i < _layers.size(); ++i) {
     _layerIndex[_layers[i]->name()] = static_cast<int>(i);
