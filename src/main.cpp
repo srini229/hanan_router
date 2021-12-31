@@ -17,8 +17,12 @@ int main(int argc, char* argv[])
     uu = std::stoi(parseArgs(argc, argv, "-uu"));
   } catch (const std::invalid_argument& ia) {}
 
-  if (!plfile.empty() && !leffile.empty() && !layerJSONFile.empty()) {
-    DRC::LayerInfo linfo(layerJSONFile);
+  if (layerJSONFile.empty())  {
+    CERR << "missing layers.json file argument" << std::endl;
+    return 0;
+  }
+  DRC::LayerInfo linfo(layerJSONFile);
+  if (!plfile.empty() && !leffile.empty()) {
     Placement::Netlist netlist(plfile, leffile, linfo, uu);
     netlist.route();
     netlist.print();
@@ -26,7 +30,7 @@ int main(int argc, char* argv[])
   }
 
   std::string stfile = parseArgs(argc, argv, "-s");
-  Router::HananRouterDB hrdb;
+  Router::HananRouterDB hrdb{linfo};
   if (!stfile.empty()) hrdb.readDataFile(stfile);
   hrdb.findSol();
   hrdb.printSol();

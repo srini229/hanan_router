@@ -1,11 +1,13 @@
 #ifndef ROUTER_H_
 #define ROUTER_H_
-#include "Util.h"
 #include <set>
 #include <map>
 #include <queue>
-#include "Geom.h"
 #include <bitset>
+
+#include "Util.h"
+#include "Geom.h"
+#include "Layer.h"
 
 namespace Router {
 
@@ -19,7 +21,9 @@ class CostFn {
     std::vector<std::vector<CostType>> _layerPairCost;
   public:
     CostType deltaCost(const Node& n1, const Node& n2) const;
-    CostFn(const int numLayers = 0, const int minHLayer = 1, const int minVLayer = 0) : _topLayer(numLayers - 1), _layerHCost(numLayers, 10000), _layerVCost(numLayers, 10000),
+    CostFn(const DRC::LayerInfo& lf);
+
+    CostFn(const int numLayers = 0, const int minHLayer = 1, const int minVLayer = 0): _topLayer(numLayers - 1), _layerHCost(numLayers, 10000), _layerVCost(numLayers, 10000),
     _layerPairCost(numLayers, std::vector<CostType>(numLayers, 10000))
     {
       for (int i = minHLayer; i < numLayers; i += 2) {
@@ -174,7 +178,7 @@ class HananRouterDB {
     void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);
     
   public:
-    HananRouterDB() : _cf{}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}
+    HananRouterDB(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}
     {
     }
     ~HananRouterDB()

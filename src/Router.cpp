@@ -3,6 +3,47 @@
 namespace Router {
 
 
+CostFn::CostFn(const DRC::LayerInfo& lf)
+{
+  auto& layers = lf.layers();
+  for (int i = 0; i < layers.size(); ++i) {
+    if (layers[i]->type()) {
+      auto r = std::max(1, static_cast<int>(layers[i]->meanR()));
+      if (static_cast<DRC::MetalLayer*>(layers[i])->isHorizontal()) {
+        _layerHCost.push_back(r);
+        _layerVCost.push_back(10000 * r);
+      } else {
+        _layerHCost.push_back(10000 * r);
+        _layerVCost.push_back(r);
+      }
+    }
+  }
+  _layerPairCost.resize(_layerHCost.size(), std::vector<CostType>(_layerHCost.size(), 100000));
+  for (int i = 0; i < layers.size(); ++i) {
+    if (!layers[i]->type()) {
+      auto l = lf.getLayers(static_cast<DRC::ViaLayer*>(layers[i]));
+      auto r = std::max(1, static_cast<int>(layers[i]->meanR()));
+      if (l.first >= 0 && l.second >= 0) {
+        if (l.first >= _layerPairCost.size()) {
+        }
+        _layerPairCost[l.first][l.second] = r;
+        _layerPairCost[l.second][l.first] = r;
+      }
+    }
+  }
+  for (int i = 0; i < _layerHCost.size(); ++i) {
+    COUT << "layer : " << i << " cost : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
+  }
+  for (int i = 0; i < _layerHCost.size(); ++i) {
+    if (i > 0) {
+      COUT << "layerPairCost : " << i << ' ' << i - 1 << ' ' << _layerPairCost[i][i-1] << '\n';
+    }
+    if (i < _layerHCost.size() - 1) {
+      COUT << "layerPairCost : " << i << ' ' << i + 1 << ' ' << _layerPairCost[i][i+1] << '\n';
+    }
+  }
+}
+
 CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
 {
   CostType dc = 0;
@@ -82,7 +123,7 @@ void HananRouterDB::readDataFile(const std::string& ifile)
         break;
     };
   }
-  _cf = CostFn(zmax + 1, zmin + 1, zmin);
+  //_cf = CostFn(zmax + 1, zmin + 1, zmin);
   _minLayer = zmin;
   _maxLayer = zmax;
   COUT << "min layer : " << _minLayer << " max layer : " << _maxLayer << '\n';

@@ -60,6 +60,7 @@ class MetalLayer : public Layer {
     void setDirection(const bool horiz) { _dir = horiz ? Direction::HORIZONTAL : Direction::VERTICAL; }
     void setC(const float muc, const float lc, const float uc) { _c[0] = muc; _c[1] = lc; _c[2] = uc; }
     void setCC(const float muc, const float lc, const float uc) { _cc[0] = muc; _cc[1] = lc; _cc[2] = uc; }
+    bool isHorizontal() const { return _dir == Direction::HORIZONTAL; }
     ~MetalLayer()
     {
       //std::cout << _pitch << ' ' << _width << ' ' << _minL << ' ' << _maxL << ' ' << _e2e << ' ' << _offset << ' ';
@@ -111,6 +112,7 @@ class ViaLayer : public Layer {
       //std::cout << _coverl[0] << ' ' << _coverl[1] << " -- " << _coveru[0] << ' ' << _coveru[1] << ' ';
     }
     const std::vector<ViaArray>& viaArray() const { return _va; }
+    const std::pair<const MetalLayer*, const MetalLayer*>& layers() const { return _layerPair; }
 
 };
 typedef std::vector<ViaLayer*> ViaLayers;
@@ -133,6 +135,15 @@ class LayerInfo {
       auto it = _layerIndex.find(name);
       return ((it != _layerIndex.end()) ? it->second : -1);
     }
+    std::pair<int, int> getLayers(const ViaLayer* v) const
+    {
+      auto l = v->layers();
+      int ll{-1}, ul{-1};
+      if (l.first) ll =  getLayerIndex(l.first->name());
+      if (l.second) ul =  getLayerIndex(l.second->name());
+      return std::make_pair(ll, ul);
+    }
+    const Layers& layers() const { return _layers; }
 };
 
 }
