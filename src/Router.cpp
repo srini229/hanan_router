@@ -6,7 +6,7 @@ namespace Router {
 CostFn::CostFn(const DRC::LayerInfo& lf)
 {
   auto& layers = lf.layers();
-  for (int i = 0; i < layers.size(); ++i) {
+  for (unsigned i = 0; i < layers.size(); ++i) {
     if (layers[i]->type()) {
       auto r = std::max(1, static_cast<int>(layers[i]->meanR()));
       if (static_cast<DRC::MetalLayer*>(layers[i])->isHorizontal()) {
@@ -19,22 +19,20 @@ CostFn::CostFn(const DRC::LayerInfo& lf)
     }
   }
   _layerPairCost.resize(_layerHCost.size(), std::vector<CostType>(_layerHCost.size(), 100000));
-  for (int i = 0; i < layers.size(); ++i) {
+  for (unsigned i = 0; i < layers.size(); ++i) {
     if (!layers[i]->type()) {
       auto l = lf.getLayers(static_cast<DRC::ViaLayer*>(layers[i]));
       auto r = std::max(1, static_cast<int>(layers[i]->meanR()));
       if (l.first >= 0 && l.second >= 0) {
-        if (l.first >= _layerPairCost.size()) {
-        }
         _layerPairCost[l.first][l.second] = r;
         _layerPairCost[l.second][l.first] = r;
       }
     }
   }
-  for (int i = 0; i < _layerHCost.size(); ++i) {
+  for (unsigned i = 0; i < _layerHCost.size(); ++i) {
     COUT << "layer : " << i << " cost : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
   }
-  for (int i = 0; i < _layerHCost.size(); ++i) {
+  for (unsigned i = 0; i < _layerHCost.size(); ++i) {
     if (i > 0) {
       COUT << "layerPairCost : " << i << ' ' << i - 1 << ' ' << _layerPairCost[i][i-1] << '\n';
     }
