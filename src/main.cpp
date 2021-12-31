@@ -12,20 +12,23 @@ int main(int argc, char* argv[])
   std::string layerJSONFile = parseArgs(argc, argv, "-d");
   std::string plfile = parseArgs(argc, argv, "-p");
   std::string leffile = parseArgs(argc, argv, "-l");
+  const bool route = checkArg(argc, argv, "-r");
   int uu{1000};
   try {
     uu = std::stoi(parseArgs(argc, argv, "-uu"));
   } catch (const std::invalid_argument& ia) {}
 
-  if (layerJSONFile.empty())  {
-    CERR << "missing layers.json file argument" << std::endl;
+  DRC::LayerInfo linfo(layerJSONFile);
+  if (!linfo.populated())  {
+    CERR << "missing or unable to read layers.json file argument" << std::endl;
     return 0;
   }
-  DRC::LayerInfo linfo(layerJSONFile);
   Router::Router hrdb{linfo};
   if (!plfile.empty() && !leffile.empty()) {
     Placement::Netlist netlist(plfile, leffile, linfo, uu);
-    netlist.route(hrdb);
+    if (route) {
+      netlist.route(hrdb);
+    }
     netlist.print();
     netlist.plot();
   }

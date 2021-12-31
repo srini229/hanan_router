@@ -129,6 +129,7 @@ class LayerInfo {
     std::map<std::string, MetalLayer*> _mlayerNameMap;
     MetalLayer *_sbottom, *_stop, *_cbottom, *_ctop, *_pbottom, *_ptop;
     int _topMetal;
+    bool _populated;
   public:
     LayerInfo(const std::string& lj);
     void print() const;
@@ -149,6 +150,7 @@ class LayerInfo {
     const Layers& layers() const { return _layers; }
     int signalBottomLayer() const { return (_sbottom ? getLayerIndex(_sbottom->name()) : 0); }
     int signalTopLayer() const { return (_stop ? getLayerIndex(_stop->name()) : _topMetal); }
+    bool populated() const { return _populated; }
 };
 
 }

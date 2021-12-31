@@ -245,6 +245,7 @@ void Router::expand(const Node* n)
 {
   std::bitset<4> expanddir{0xF}; // 0:dn, 1:up, 2:left/down, 3:right/up
   n->print("expanding node :");
+  std::cout << std::endl;
   if (n->z() <= _minLayer || (n->parent() && n->parent()->z() < n->z())) {
     expanddir.set(0, false);
   }
@@ -382,6 +383,7 @@ void Router::invertRange(IntRangeSet& s, const bool vert)
 
 void Router::generateHananGrid()
 {
+  _hanangrid.clear();
   std::set<int> xcoords, ycoords;
   for (auto tmp : {false, true}) {
     for (auto& l : (tmp ? _tobstacles : _obstacles)) {
@@ -449,6 +451,7 @@ void Router::generateHananGrid()
 
 void Router::findSol()
 {
+  _bbox = Geom::Rect();
   for (auto& s : _sources) {
     evalTCost(s);
     _bbox.merge(s->x(), s->y(), s->x(), s->y());
@@ -493,6 +496,12 @@ void Router::findSol()
     ++_expansions;
     if (_expansions >= _maxExpansions) break;
   }
+  if (!_sol) {
+    COUT << "sol not found for " << _name << '\n';
+  }
+  _pq.clear();
+  _hanangrid.clear();
+  _expansions = 0;
 }
 
 void Router::printSol() const

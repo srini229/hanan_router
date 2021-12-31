@@ -10,7 +10,7 @@ namespace DRC {
 using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
 LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullptr},
- _cbottom{nullptr}, _ctop{nullptr}, _pbottom{nullptr}, _ptop{nullptr}, _topMetal{0}
+ _cbottom{nullptr}, _ctop{nullptr}, _pbottom{nullptr}, _ptop{nullptr}, _topMetal{0}, _populated{false}
 {
   if (ljfile.empty()) {
     CERR<< "missing layers.json file" <<std::endl;
@@ -181,7 +181,7 @@ LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullp
   COUT << "signal routing layers : " << (_sbottom? _sbottom->name() : "") << " : " << (_stop ? _stop->name() : "") << "\n";
   COUT << "power  routing layers : " << (_pbottom? _pbottom->name() : "") << " : " << (_ptop ? _ptop->name() : "") << "\n";
   COUT << "clock  routing layers : " << (_cbottom? _cbottom->name() : "") << " : " << (_ctop ? _ctop->name() : "") << "\n";
-
+  _populated = true;
 }
 
 LayerInfo::~LayerInfo()

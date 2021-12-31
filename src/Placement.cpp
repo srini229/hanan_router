@@ -124,7 +124,7 @@ void Module::route(Router::Router& router)
         }
       }
     }
-    //router.addObstacles(_obstacles);
+    router.addObstacles(_obstacles);
     Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
     for (auto it = _nets.begin(); it != _nets.end(); ++it) {
       _netObstaclesUnrouted.clear();

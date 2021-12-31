@@ -125,9 +125,7 @@ class Router {
     const Node *_sol;
     std::vector<int> _width;
     int _minLayer, _maxLayer, _maxRoutingLayer;
-
     std::string _name;
-
     size_t _expansions{0};
     const size_t _maxExpansions{1000000};
 
@@ -164,14 +162,21 @@ class Router {
     void checkAndInsert(Node* newn, const Node* n);
     int snap(const Node* n, const bool vert, const bool up) const;
     void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);
+    void flushNodes()
+    {
+      COUT << "flushing nodes\n";
+      _pq.clear();
+      for (auto& n : _nodes) delete n.second;
+      _nodes.clear();
+      _expansions = 0;
+      _bbox = Geom::Rect();
+    }
     
   public:
     Router(const DRC::LayerInfo& lf);
     ~Router()
     {
-      for (auto& n : _nodes) delete n.second;
-      _nodes.clear();
-      _pq.clear();
+      flushNodes();
       _sources.clear();
       _targets.clear();
     }
@@ -183,8 +188,7 @@ class Router {
       _sources.clear();
       _targets.clear();
       _sol = nullptr;
-      for (auto& n : _nodes) delete n.second;
-      _nodes.clear();
+      flushNodes();
     }
     void findSol();
     void printSol() const;
