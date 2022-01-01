@@ -20,12 +20,20 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   }
   if (_pins.size() > 1) {
     COUT << "routing net : " << _name << '\n';
+    /*for (int i : {0, 1}) {
+      for (auto& l : (i ? l1 : l2)) {
+        for (auto& o : l.second) {
+          COUT << "obs : " << l.first << ' ' << o.str() << '\n';
+        }
+      }
+    }*/
     router.addObstacles(l1, true);
     router.addObstacles(l2, true);
     auto it1 = _pins.rbegin();
     auto it2 = std::next(it1);
     while (it2 != _pins.rend()) {
       router.clearSourceTargets();
+      COUT << "routing pins : " << (*it1)->name() << ' ' << (*it2)->name() << '\n';
       const auto& p1 = (*it1)->shapes();
       const auto& p2 = (*it2)->shapes();
       for (auto src : {true, false}) {
@@ -40,7 +48,6 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
-      COUT << "routing pins : " << (*it1)->name() << ' ' << (*it2)->name() << '\n';
       router.setName(_name + "__" + (*it1)->name() + "__" + (*it2)->name());
       router.writeSTO();
       auto sol = router.findSol();
@@ -50,6 +57,8 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         _unroute = 1;
       }
       router.plot();
+      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>((*it1)->shapes()), sol, &_bbox);
+      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>((*it2)->shapes()), sol, &_bbox);
       it1 = it2;
       ++it2;
     }
@@ -125,6 +134,7 @@ void Module::route(Router::Router& router)
         }
       }
     }
+    COUT << " routing : " << _name << '\n';
     router.addObstacles(_obstacles);
     Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
     for (auto it = _nets.begin(); it != _nets.end(); ++it) {
@@ -138,7 +148,6 @@ void Module::route(Router::Router& router)
       Geom::MergeLayerRects(_netObstaclesRouted, it->second.routeShapes());
     }
     router.clearObstacles();
-    COUT << " routing : " << _name << '\n';
     for (auto& p : _pins) {
       auto itn = _nets.find(p.first);
       std::cout << "DEBUG pin name " << p.first << '\n';
@@ -230,7 +239,7 @@ void Module::plot() const
     }
     ofs << "EOF\n";
     for (auto& n : _nets) {
-      //if (!n.second.open()) continue;
+      if (!n.second.open()) continue;
       for (auto& p : n.second.pins()) {
         auto& b = p->bbox();
         if (b.valid()) {

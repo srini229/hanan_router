@@ -375,6 +375,7 @@ void Router::insertRange(IntRangeSet& s, const IntRange& r)
 {
   IntRange rc = r;
   std::vector<IntRangeSet::iterator> overlapit;
+  COUT << "insert range : " << rc.first << ' ' << rc.second << '\n';
   for (auto it = s.begin(); it != s.end(); ++it) {
     if (it->first > rc.second) {
       break;
@@ -397,7 +398,10 @@ void Router::invertRange(IntRangeSet& s, const bool vert)
     end = _bbox.ymax();
   }
   for (auto &r : s) {
-    sout.insert(std::make_pair(start, r.first));
+    COUT << "r : " << r.first << ' ' << r.second << '\n';
+    if (r.first >= start) {
+      sout.insert(std::make_pair(start, r.first));
+    }
     start = r.second;
   }
   sout.insert(std::make_pair(start, end));
@@ -408,15 +412,21 @@ void Router::generateHananGrid()
 {
   _hanangrid.clear();
   std::set<int> xcoords, ycoords;
-  for (auto tmp : {false, true}) {
-    for (auto& l : (tmp ? _tobstacles : _obstacles)) {
-      for (auto& o : l.second) {
-        if (!o.overlaps(_bbox)) continue;
-        xcoords.insert(o.xmin());
-        xcoords.insert(o.xmax());
-        ycoords.insert(o.ymin());
-        ycoords.insert(o.ymax());
-      }
+  for (auto l = _minLayer; l <= _maxLayer; ++l) {
+    auto box = _bbox;
+    //box.bloat(_bbox.width(), _bbox.height());
+    _tobstacles[l].push_back(Geom::Rect(box.xmin() - 10, box.ymin(), box.xmin(), box.ymax()));
+    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymin() - 10, box.xmax(), box.ymin()));
+    _tobstacles[l].push_back(Geom::Rect(box.xmax(), box.ymin(), box.xmax() + 10, box.ymax()));
+    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymax(), box.xmax(), box.ymax() + 10));
+  }
+  for (auto& l : _tobstacles) {
+    for (auto& o : l.second) {
+      if (!o.overlaps(_bbox)) continue;
+      xcoords.insert(o.xmin());
+      xcoords.insert(o.xmax());
+      ycoords.insert(o.ymin());
+      ycoords.insert(o.ymax());
     }
   }
   for (bool src : {true, false}) {
@@ -425,43 +435,37 @@ void Router::generateHananGrid()
       xcoords.insert(s->y());
     }
   }
-  for (auto l = _minLayer; l <= _maxLayer; ++l) {
-    auto box = _bbox;
-    box.bloat(_bbox.width(), _bbox.height());
-    _tobstacles[l].push_back(Geom::Rect(box.xmin() - 10, box.ymin(), box.xmin(), box.ymax()));
-    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymin() - 10, box.xmax(), box.ymin()));
-    _tobstacles[l].push_back(Geom::Rect(box.xmax(), box.ymin(), box.xmax() + 10, box.ymax()));
-    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymax(), box.xmax(), box.ymax() + 10));
-  }
-  for (auto tmp : {false, true}) {
-    for (auto& l : (tmp ? _tobstacles : _obstacles)) {
-      bool vert = isVert(l.first);
-      std::map<int, IntRangeSet> tmpranges;
-      for (auto& x : (vert ? xcoords : ycoords)) {
-        if ((vert && x >= _bbox.xmin() && x <= _bbox.xmax()) || 
-            (!vert && x >= _bbox.ymin() && x <= _bbox.ymax())) {
-          tmpranges[x].clear();
-        }
+  for (auto& l : _tobstacles) {
+    bool vert = isVert(l.first);
+    std::map<int, IntRangeSet> tmpranges;
+    for (auto& x : (vert ? xcoords : ycoords)) {
+      if ((vert && x >= _bbox.xmin() && x <= _bbox.xmax()) || 
+          (!vert && x >= _bbox.ymin() && x <= _bbox.ymax())) {
+        tmpranges[x].clear();
       }
+    }
 
-      for (auto& v : tmpranges) {
-        for (auto& o : l.second) {
-          if (vert) {
-            if (v.first > o.xmin() && v.first < o.xmax()) {
-              insertRange(tmpranges[v.first], std::make_pair(o.ymin(), o.ymax()));
-            }
-          } else {
-            if (v.first > o.ymin() && v.first < o.ymax()) {
-              insertRange(tmpranges[v.first], std::make_pair(o.xmin(), o.xmax()));
-            }
+    for (auto& v : tmpranges) {
+      for (auto& o : l.second) {
+        if (vert) {
+          if (v.first > o.xmin() && v.first < o.xmax()) {
+            auto minv{std::max(o.ymin(), _bbox.ymin() - 1)};
+            auto maxv{std::min(o.ymax(), _bbox.ymax())};
+            insertRange(tmpranges[v.first], std::make_pair(minv, maxv));
+          }
+        } else {
+          if (v.first > o.ymin() && v.first < o.ymax()) {
+            auto minv{std::max(o.xmin(), _bbox.xmin() - 1)};
+            auto maxv{std::min(o.xmax(), _bbox.xmax())};
+            insertRange(tmpranges[v.first], std::make_pair(minv, maxv));
           }
         }
       }
-      for (auto& r : tmpranges) {
-        invertRange(r.second, vert);
-      }
-      _hanangrid.emplace(l.first, tmpranges);
     }
+    for (auto& r : tmpranges) {
+      invertRange(r.second, vert);
+    }
+    _hanangrid.emplace(l.first, tmpranges);
   }
 }
 
@@ -469,73 +473,85 @@ Geom::LayerRects Router::findSol()
 {
   SaveRestoreStream src(_name + "_route.log");
   Geom::LayerRects sol;
-  if (_sources.empty() || _targets.empty()) {
-    COUT << "source or target empty!\n";
-    return sol;
-  }
-  _bbox = Geom::Rect();
-  for (auto& s : _sources) {
-    evalTCost(s);
-    _bbox.merge(s->x(), s->y(), s->x(), s->y());
-  }
-  for (auto& t : _targets) {
-    _bbox.merge(t->x(), t->y(), t->x(), t->y());
-  }
+  if (!_sources.empty() && !_targets.empty()) {
+    _bbox = Geom::Rect();
+    for (auto& s : _sources) {
+      evalTCost(s);
+      insert(s);
+      _bbox.merge(s->x(), s->y(), s->x(), s->y());
+      COUT << "src : " << s->x() << ' ' << s->y() << '\n';
+    }
+    for (auto& t : _targets) {
+      _bbox.merge(t->x(), t->y(), t->x(), t->y());
+      COUT << "tgt : " << t->x() << ' ' << t->y() << '\n';
+    }
 
-  for (auto& s : _sources) {
-    insert(s);
-  }
-
-  generateHananGrid();
-
-  for (auto& l : _hanangrid) {
-    COUT << "layer : " << l.first << '\n';
-    for (auto& pos : l.second) {
-      COUT << "pos : " << pos.first << " : ";
-      for (auto& r : pos.second) {
-        std::cout << "[" << r.first << ',' << r.second << "] ";
+    /*for (auto& l : _tobstacles) {
+      COUT << "layer before : " << l.first << '\n';
+      for (auto& o : l.second) {
+        COUT << "o : " << o.str() << '\n';
       }
-      std::cout << '\n';
-    }
-  }
+    }*/
+    Geom::MergeLayerRects(_tobstacles, _obstacles);
+    /*for (auto& l : _tobstacles) {
+      COUT << "layer after : " << l.first << '\n';
+      for (auto& o : l.second) {
+        COUT << "o : " << o.str() << '\n';
+      }
+    }*/
+    generateHananGrid();
 
-  while (!_pq.empty()) {
-    auto t = const_cast<Node*>(*_pq.begin());
-    if (_targets.find(t) != _targets.end()) {
-      _sol = t;
-      COUT << "sol found : " << _sol->x() << ',' << _sol->y() << ',' << _sol->z() << std::endl;
-      printSol();
-      break;
+    for (auto& l : _hanangrid) {
+      COUT << "layer : " << l.first << '\n';
+      for (auto& pos : l.second) {
+        COUT << "pos : " << pos.first << " : ";
+        for (auto& r : pos.second) {
+          std::cout << "[" << r.first << ',' << r.second << "] ";
+        }
+        std::cout << '\n';
+      }
     }
-    _pq.erase(_pq.begin());
-    expand(t);
-    ++_expansions;
-    if (_expansions >= _maxExpansions) break;
-  }
-  if (!_sol) {
-    COUT << "sol not found for " << _name << '\n';
-  }
-  _pq.clear();
-  _hanangrid.clear();
-  _expansions = 0;
-  if (_sol) {
-    const Node* n = _sol;
-    while (n) {
-      auto parent = n->parent();
-      if (parent) {
-        if (parent->z() == n->z()) {
-          sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(_widthx[n->z()], _widthy[n->z()]));
-          COUT << n->z() << ' ' << sol[n->z()].back().str() << '\n';
-        } else {
-          auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
-          if (adjLayer >= 0) {
-            sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer], _widthy[adjLayer]));
-            COUT << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
+
+    while (!_pq.empty()) {
+      auto t = const_cast<Node*>(*_pq.begin());
+      if (_targets.find(t) != _targets.end()) {
+        _sol = t;
+        COUT << "sol found " << std::endl;
+        printSol();
+        break;
+      }
+      _pq.erase(_pq.begin());
+      expand(t);
+      ++_expansions;
+      if (_expansions >= _maxExpansions) break;
+    }
+    if (!_sol) {
+      COUT << "sol not found for " << _name << '\n';
+    }
+    _pq.clear();
+    _hanangrid.clear();
+    _expansions = 0;
+    if (_sol) {
+      const Node* n = _sol;
+      while (n) {
+        auto parent = n->parent();
+        if (parent) {
+          if (parent->z() == n->z()) {
+            sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(_widthx[n->z()], _widthy[n->z()]));
+            COUT << n->z() << ' ' << sol[n->z()].back().str() << '\n';
+          } else {
+            auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
+            if (adjLayer >= 0) {
+              sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer], _widthy[adjLayer]));
+              COUT << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
+            }
           }
         }
+        n = parent;
       }
-      n = parent;
     }
+  } else {
+    COUT << "source or target empty!\n";
   }
   return sol;
 }
@@ -548,11 +564,9 @@ void Router::printSol() const
   for (auto& t : _targets) {
     t->print("targets : ");
   }
-  for (auto tmp : {false, true}) {
-    for (auto& l : (tmp ? _tobstacles : _obstacles)) {
-      for (auto& o : l.second) {
-        COUT << "obs : " << o.str() << ' ' << l.first << '\n';
-      }
+  for (auto& l : _tobstacles) {
+    for (auto& o : l.second) {
+      COUT << "obs : " << o.str() << ' ' << l.first << '\n';
     }
   }
   if (_sol) {
@@ -573,14 +587,12 @@ void Router::plot() const
     COUT << "plotting route to " << _name << "_route.gplt\n";
     ofs << "unset key\n";
     unsigned cnt{1};
-    for (auto tmp : {false, true}) {
-      for (auto& l : (tmp ? _tobstacles : _obstacles)) {
-        const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
-        for (auto& b : l.second) {
-          if (b.valid() && b.width() && b.height()) {
-            ofs << "set object " << cnt++ << " rect from ";
-            ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.5 fillcolor \"" << color << "\" behind\n";
-          }
+    for (auto& l : _tobstacles) {
+      const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
+      for (auto& b : l.second) {
+        if (b.valid() && b.width() && b.height()) {
+          ofs << "set object " << cnt++ << " rect from ";
+          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.5 fillcolor \"" << color << "\" behind\n";
         }
       }
     }
@@ -635,11 +647,9 @@ void Router::writeSTO() const
     for (auto& t : _targets) {
       ofs << "Target " << t->x() << ' ' << t->y() << ' ' << t->z() << '\n';
     }
-    for (auto tmp : {true, false}) {
-      for (auto& l : (tmp ? _tobstacles : _obstacles)) {
-        for (auto& o : l.second) {
-          ofs << "Obstacle " << o.xmin() << ' ' << o.xmax() << ' ' << o.width() << ' ' << o.height() << ' ' << l.first << '\n';
-        }
+    for (auto& l : _tobstacles) {
+      for (auto& o : l.second) {
+        ofs << "Obstacle " << o.xmin() << ' ' << o.xmax() << ' ' << o.width() << ' ' << o.height() << ' ' << l.first << '\n';
       }
     }
   }
@@ -648,7 +658,6 @@ void Router::writeSTO() const
 
 void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 {
-  auto& obs(temp ? _tobstacles : _obstacles);
   for (auto& l : lr) {
     const auto& layer = l.first;
     for (auto& r : l.second) {
@@ -658,7 +667,13 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         spacey = _spacey[layer] + ((_widthy[layer] % 2 == 0) ? _widthy[layer]/2 : (_widthy[layer]/2 + 1));
       }
       COUT << "layer : " << layer << " obs : " << spacex << ' ' << spacey << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
-      obs[layer].push_back(r.bloatby(spacex, spacey));
+      if (temp) {
+        _tobstacles[layer].push_back(r.bloatby(spacex, spacey));
+        //COUT << "tobs : " << _tobstacles[layer].back().str() << '\n';
+      } else {
+        _obstacles[layer].push_back(r.bloatby(spacex, spacey));
+        //COUT << "obs : " << _obstacles[layer].back().str() << '\n';
+      }
     }
   }
 }
@@ -669,13 +684,10 @@ bool Router::isViaValid(const Node* n, const bool up) const
     if (n->z() < _maxLayer) {
       auto aboveLayer = _aboveViaLayer[n->z()];
       if (aboveLayer >= 0) {
-        for (auto tmp : {true, false}) {
-          auto it = (tmp ? _tobstacles.find(aboveLayer) : _obstacles.find(aboveLayer));
-          auto itend = (tmp ? _tobstacles.end() : _obstacles.end());
-          if (it != itend) {
-            for (auto& o : it->second) {
-              if (o.contains(Geom::Point(n->x(), n->y()))) return false;
-            }
+        auto it = _tobstacles.find(aboveLayer);
+        if (it != _tobstacles.end()) {
+          for (auto& o : it->second) {
+            if (o.contains(Geom::Point(n->x(), n->y()))) return false;
           }
         }
       } else {
@@ -688,13 +700,10 @@ bool Router::isViaValid(const Node* n, const bool up) const
     if (n->z() > _minLayer) {
       auto belowLayer = _belowViaLayer[n->z()];
       if (belowLayer >= 0) {
-        for (auto tmp : {true, false}) {
-          auto it = (tmp ? _tobstacles.find(belowLayer) : _obstacles.find(belowLayer));
-          auto itend = (tmp ? _tobstacles.end() : _obstacles.end());
-          if (it != itend) {
-            for (auto& o : it->second) {
-              if (o.contains(Geom::Point(n->x(), n->y()))) return false;
-            }
+        auto it = _tobstacles.find(belowLayer);
+        if (it != _tobstacles.end()) {
+          for (auto& o : it->second) {
+            if (o.contains(Geom::Point(n->x(), n->y()))) return false;
           }
         }
       } else {
