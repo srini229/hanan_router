@@ -25,19 +25,15 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       const auto& p1 = (*it1)->shapes();
       const auto& p2 = (*it2)->shapes();
       for (auto src : {true, false}) {
-        bool inserted{false};
         for (auto& l : (src ? p1 : p2)) {
-          if (l.first > router.maxRoutingLayer()) continue;
+          if (l.first > router.maxLayer() || l.first < router.minLayer()) continue;
           for (auto& s : l.second) {
             if (src) {
               router.addSource(s.xcenter(), s.ycenter(), l.first);
             } else {
               router.addTarget(s.xcenter(), s.ycenter(), l.first);
             }
-            inserted = true;
-            break;
           }
-          if (inserted) break;
         }
       }
       COUT << "routing pins : " << (*it1)->name() << ' ' << (*it2)->name() << '\n';
@@ -50,9 +46,6 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       ++it2;
     }
     router.clearObstacles(true);
-  }
-  for (auto& pin : _pins) {
-    Geom::MergeLayerRects(_routeshapes, pin->shapes(), &_bbox);
   }
 }
 

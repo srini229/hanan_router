@@ -468,6 +468,11 @@ void Router::generateHananGrid()
 Geom::LayerRects Router::findSol()
 {
   SaveRestoreStream src(_name + "_route.log");
+  Geom::LayerRects sol;
+  if (_sources.empty() || _targets.empty()) {
+    COUT << "source or target empty!\n";
+    return sol;
+  }
   _bbox = Geom::Rect();
   for (auto& s : _sources) {
     evalTCost(s);
@@ -513,7 +518,6 @@ Geom::LayerRects Router::findSol()
   _pq.clear();
   _hanangrid.clear();
   _expansions = 0;
-  Geom::LayerRects sol;
   if (_sol) {
     const Node* n = _sol;
     while (n) {

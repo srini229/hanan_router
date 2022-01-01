@@ -184,6 +184,8 @@ class Router {
     }
     void readDataFile(const std::string& ifile);
     const int maxRoutingLayer() const { return _maxRoutingLayer; }
+    const int maxLayer() const { return _maxLayer; }
+    const int minLayer() const { return _minLayer; }
     void setName(const std::string& n) { _name = n; }
 
     void clearSourceTargets() {

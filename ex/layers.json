@@ -6,7 +6,7 @@
 "design_info":
 {
 "vt_type":["SLVT", "HVT","LVT","RVT"],
-"top_signal_routing_layer": "M5",
+"top_signal_routing_layer": "M9",
 "bottom_signal_routing_layer": "M1",
 "top_power_grid_layer": "M6",
 "bottom_power_grid_layer": "M5",
