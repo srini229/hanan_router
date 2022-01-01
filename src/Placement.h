@@ -162,6 +162,7 @@ class Module {
     void plot() const;
 
     const Geom::Rect& bbox() const { return _bbox; }
+    void checkShort() const;
 };
 
 
@@ -183,6 +184,10 @@ class Netlist {
     void plot() const
     {
       for (auto& m : _modules) m.second->plot();
+    }
+    void checkShort() const
+    {
+      for (auto& m : _modules) m.second->checkShort();
     }
 };
 

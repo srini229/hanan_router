@@ -521,15 +521,16 @@ Geom::LayerRects Router::findSol()
   if (_sol) {
     const Node* n = _sol;
     while (n) {
-      n->print("sol");
       auto parent = n->parent();
       if (parent) {
         if (parent->z() == n->z()) {
           sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(_widthx[n->z()], _widthy[n->z()]));
+          COUT << n->z() << ' ' << sol[n->z()].back().str() << '\n';
         } else {
           auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
           if (adjLayer >= 0) {
             sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer], _widthy[adjLayer]));
+            COUT << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
           }
         }
       }

@@ -31,6 +31,7 @@ int main(int argc, char* argv[])
     }
     netlist.print();
     netlist.plot();
+    netlist.checkShort();
   }
 
   std::string stfile = parseArgs(argc, argv, "-s");
