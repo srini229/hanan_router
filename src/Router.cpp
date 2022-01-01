@@ -91,16 +91,40 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
 Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}, _maxRoutingLayer{0}, _name{}
 {
   auto& layers = lf.layers();
-  _width.reserve(layers.size());
+  _widthx.reserve(layers.size());
+  _widthy.reserve(layers.size());
+  _spacex.reserve(layers.size());
+  _spacey.reserve(layers.size());
   for (unsigned i = 0; i < layers.size(); ++i) {
     if (layers[i]->type()) {
-      _width.push_back(static_cast<DRC::MetalLayer*>(layers[i])->width());
-      COUT << "layer : " << i << " width : " << _width.back() << '\n';
+      auto mlayer = static_cast<DRC::MetalLayer*>(layers[i]);
+      _widthx.push_back(mlayer->width());
+      _widthy.push_back(mlayer->width());
+      _spacex.push_back(mlayer->space());
+      _spacey.push_back(mlayer->space());
+      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << '\n';
     }
+  }
+  _aboveViaLayer.resize(_widthx.size(), -1);
+  _belowViaLayer.resize(_widthx.size(), -1);
+  for (unsigned i = 0; i < layers.size(); ++i) {
+    if (!layers[i]->type()) {
+      auto vlayer = static_cast<DRC::ViaLayer*>(layers[i]);
+      auto l = lf.getLayers(vlayer);
+      if (l.first >= 0) _aboveViaLayer[l.first]  = i;
+      if (l.second >= 0) _belowViaLayer[l.second] = i;
+      _widthx.push_back(vlayer->widthx());
+      _widthy.push_back(vlayer->widthy());
+      _spacex.push_back(vlayer->spacex());
+      _spacey.push_back(vlayer->spacey());
+    }
+  }
+  for (unsigned i = 0; i < _aboveViaLayer.size(); ++i) {
+      COUT << "layer : " << i << " above : " << _aboveViaLayer[i] << " below : " << _belowViaLayer[i] << '\n';
   }
   _minLayer = lf.signalBottomLayer();
   _maxLayer = lf.signalTopLayer();
-  _maxRoutingLayer = static_cast<int>(_width.size()) - 1;
+  _maxRoutingLayer = static_cast<int>(_widthx.size()) - 1;
 }
 
 Node* Router::createNode(const int x, const int y, const int z,
@@ -120,7 +144,7 @@ Node* Router::createNode(const int x, const int y, const int z,
 }
 void Router::readDataFile(const std::string& ifile)
 {
-  setName(ifile);
+  setName(ifile.substr(0, ifile.find(".sto")));
   COUT << "reading datafile : " << ifile << '\n';
   std::ifstream ifs(ifile);
   std::string tmps;
@@ -245,10 +269,10 @@ void Router::expand(const Node* n)
 {
   std::bitset<4> expanddir{0xF}; // 0:dn, 1:up, 2:left/down, 3:right/up
   n->print("expanding node :");
-  if (n->z() <= _minLayer || (n->parent() && n->parent()->z() < n->z())) {
+  if ((n->parent() && n->parent()->z() < n->z()) || !isViaValid(n, false)) {
     expanddir.set(0, false);
   }
-  if (n->z() >= _maxLayer || (n->parent() && n->parent()->z() > n->z())) {
+  if ((n->parent() && n->parent()->z() > n->z()) || !isViaValid(n, true)) {
     expanddir.set(1, false);
   }
   const bool vert = isVert(n->z());
@@ -402,10 +426,12 @@ void Router::generateHananGrid()
     }
   }
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
-    _tobstacles[l].push_back(Geom::Rect(_bbox.xmin() - 10, _bbox.ymin(), _bbox.xmin(), _bbox.ymax()));
-    _tobstacles[l].push_back(Geom::Rect(_bbox.xmin(), _bbox.ymin() - 10, _bbox.xmax(), _bbox.ymin()));
-    _tobstacles[l].push_back(Geom::Rect(_bbox.xmax(), _bbox.ymin(), _bbox.xmax() + 10, _bbox.ymax()));
-    _tobstacles[l].push_back(Geom::Rect(_bbox.xmin(), _bbox.ymax(), _bbox.xmax(), _bbox.ymax() + 10));
+    auto box = _bbox;
+    box.bloat(_bbox.width()/10, _bbox.height()/10);
+    _tobstacles[l].push_back(Geom::Rect(box.xmin() - 10, box.ymin(), box.xmin(), box.ymax()));
+    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymin() - 10, box.xmax(), box.ymin()));
+    _tobstacles[l].push_back(Geom::Rect(box.xmax(), box.ymin(), box.xmax() + 10, box.ymax()));
+    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymax(), box.xmax(), box.ymax() + 10));
   }
   for (auto tmp : {false, true}) {
     for (auto& l : (tmp ? _tobstacles : _obstacles)) {
@@ -615,12 +641,59 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
   for (auto& l : lr) {
     const auto& layer = l.first;
     for (auto& r : l.second) {
-      int hw = (layer < static_cast<int>(_width.size())) ? 
-        ((_width[layer] % 2 == 0) ? _width[layer]/2 : (_width[layer]/2 + 1)) : 0;
-      COUT << "layer : " << layer << " obs : " << hw << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
-      obs[layer].push_back(r.bloatby(hw));
+      int spacex{0}, spacey{0};
+      if (layer < static_cast<int>(_widthx.size())) {
+        spacex = _spacex[layer] + ((_widthx[layer] % 2 == 0) ? _widthx[layer]/2 : (_widthx[layer]/2 + 1));
+        spacey = _spacey[layer] + ((_widthy[layer] % 2 == 0) ? _widthy[layer]/2 : (_widthy[layer]/2 + 1));
+      }
+      COUT << "layer : " << layer << " obs : " << spacex << ' ' << spacey << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
+      obs[layer].push_back(r.bloatby(spacex, spacey));
     }
   }
+}
+
+bool Router::isViaValid(const Node* n, const bool up) const
+{
+  if (up) {
+    if (n->z() < _maxLayer) {
+      auto aboveLayer = _aboveViaLayer[n->z()];
+      if (aboveLayer >= 0) {
+        for (auto tmp : {true, false}) {
+          auto it = (tmp ? _tobstacles.find(aboveLayer) : _obstacles.find(aboveLayer));
+          auto itend = (tmp ? _tobstacles.end() : _obstacles.end());
+          if (it != itend) {
+            for (auto& o : it->second) {
+              if (o.contains(Geom::Point(n->x(), n->y()))) return false;
+            }
+          }
+        }
+      } else {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  } else {
+    if (n->z() > _minLayer) {
+      auto belowLayer = _belowViaLayer[n->z()];
+      if (belowLayer >= 0) {
+        for (auto tmp : {true, false}) {
+          auto it = (tmp ? _tobstacles.find(belowLayer) : _obstacles.find(belowLayer));
+          auto itend = (tmp ? _tobstacles.end() : _obstacles.end());
+          if (it != itend) {
+            for (auto& o : it->second) {
+              if (o.contains(Geom::Point(n->x(), n->y()))) return false;
+            }
+          }
+        }
+      } else {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+  return true;
 }
 
 }

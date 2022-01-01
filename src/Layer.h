@@ -53,6 +53,10 @@ class MetalLayer : public Layer {
     _c{0,0,0}, _cc{0, 0, 0}, _dir(Direction::ORTHOGONAL) {}
     int pitch() const { return _pitch;}
     int width() const { return _width;}
+    int space() const
+    {
+      return (_pitch > _width) ? (_pitch - _width) : _pitch;
+    }
     void setPitch(const int p) {_pitch = p;}
     void setWidth(const int w) {_width = w;}
     void setMinL(const int l) {_minL = l;}
@@ -115,6 +119,10 @@ class ViaLayer : public Layer {
     }
     const std::vector<ViaArray>& viaArray() const { return _va; }
     const std::pair<const MetalLayer*, const MetalLayer*>& layers() const { return _layerPair; }
+    int widthx() const { return _sw._width.first; }
+    int widthy() const { return _sw._width.second; }
+    int spacex() const { return _sw._space.first; }
+    int spacey() const { return _sw._space.second; }
 
 };
 typedef std::vector<ViaLayer*> ViaLayers;

@@ -113,7 +113,6 @@ LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullp
             x = y = 0;
             it = l.find("VencA_L");
             if (it != l.end() && it->is_number_integer()) x = static_cast<int>(*it);
-            it = l.find("VencP_L");
             if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it);
             vlayer->setCoverL(x, y);
             x = y = 0;

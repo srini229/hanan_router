@@ -103,7 +103,9 @@ class Rect {
     }
 
     void bloat(const int c) { _ll.translate(-c); _ur.translate(c); }
+    void bloat(const int x, const int y) { _ll.translate(-x, -y); _ur.translate(x, y); }
     Rect bloatby(const int c) const { return Rect(xmin() - c, ymin() - c, xmax() + c, ymax() + c); }
+    Rect bloatby(const int x, const int y) const { return Rect(xmin() - x, ymin() - y, xmax() + x, ymax() + y); }
     
     int width() const { return xmax() - xmin(); }
     int height() const { return ymax() - ymin(); }
@@ -133,6 +135,14 @@ class Rect {
           && ymin() <= r.ymax() && ymax() >= r.ymin())
         return true;
       return false;
+    }
+
+    bool contains (const Geom::Point& p, bool strict = true) const
+    {
+      if (strict) {
+        return p.x() > xmin() && p.x() < xmax() && p.y() > ymin() && p.y() < ymax();
+      }
+      return p.x() >= xmin() && p.x() <= xmax() && p.y() >= ymin() && p.y() <= ymax();
     }
 };
 typedef vector<Rect> Rects;

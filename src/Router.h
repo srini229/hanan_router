@@ -123,11 +123,13 @@ class Router {
     std::map<int, std::map<int, IntRangeSet>> _hanangrid;
     Geom::Rect _bbox;
     const Node *_sol;
-    std::vector<int> _width;
+    std::vector<int> _widthx, _spacex;
+    std::vector<int> _widthy, _spacey;
     int _minLayer, _maxLayer, _maxRoutingLayer;
     std::string _name;
     size_t _expansions{0};
     const size_t _maxExpansions{1000000};
+    std::vector<int> _aboveViaLayer, _belowViaLayer;
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -209,6 +211,7 @@ class Router {
     {
       _targets.insert(createNode(x, y, z, nullptr, -1, 0));
     }
+    bool isViaValid(const Node* n, const bool up) const;
 };
 
 }
