@@ -44,7 +44,7 @@ class Net {
     Geom::Rect _bbox;
     int _unroute : 1;
   public:
-    Net(const std::string& name) : _name{name}, _bbox{}, _unroute{0} {}
+    Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1} {}
     const std::set<const Pin*>& pins() const { return _pins; }
     void addPin(const Pin* p) { _pins.insert(p); }
     void print() const;

@@ -14,6 +14,7 @@ inline void Net::print() const
 
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2)
 {
+  _unroute = 0;
   for (auto& p : _pins) {
     Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
   }
