@@ -427,7 +427,7 @@ void Router::generateHananGrid()
   }
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
     auto box = _bbox;
-    box.bloat(_bbox.width()/10, _bbox.height()/10);
+    box.bloat(_bbox.width(), _bbox.height());
     _tobstacles[l].push_back(Geom::Rect(box.xmin() - 10, box.ymin(), box.xmin(), box.ymax()));
     _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymin() - 10, box.xmax(), box.ymin()));
     _tobstacles[l].push_back(Geom::Rect(box.xmax(), box.ymin(), box.xmax() + 10, box.ymax()));
@@ -457,15 +457,6 @@ void Router::generateHananGrid()
           }
         }
       }
-      /*for (auto& o : l.second) {
-        if (vert) {
-        insertRange(tmpranges[o.xmin()], std::make_pair(o.ymin(), o.ymax()));
-        insertRange(tmpranges[o.xmax()], std::make_pair(o.ymin(), o.ymax()));
-        } else {
-        insertRange(tmpranges[o.ymin()], std::make_pair(o.xmin(), o.xmax()));
-        insertRange(tmpranges[o.ymax()], std::make_pair(o.xmin(), o.xmax()));
-        }
-        }*/
       for (auto& r : tmpranges) {
         invertRange(r.second, vert);
       }
@@ -474,8 +465,9 @@ void Router::generateHananGrid()
   }
 }
 
-void Router::findSol()
+Geom::LayerRects Router::findSol()
 {
+  SaveRestoreStream src(_name + "_route.log");
   _bbox = Geom::Rect();
   for (auto& s : _sources) {
     evalTCost(s);
@@ -484,13 +476,6 @@ void Router::findSol()
   for (auto& t : _targets) {
     _bbox.merge(t->x(), t->y(), t->x(), t->y());
   }
-  /*for (auto tmp : {false, true}) {
-    for (auto& l : (tmp ? _tobstacles : _obstacles)) {
-      for (auto& o : l.second) {
-        _bbox.merge(o);
-      }
-    }
-  }*/
 
   for (auto& s : _sources) {
     insert(s);
@@ -514,6 +499,7 @@ void Router::findSol()
     if (_targets.find(t) != _targets.end()) {
       _sol = t;
       COUT << "sol found : " << _sol->x() << ',' << _sol->y() << ',' << _sol->z() << std::endl;
+      printSol();
       break;
     }
     _pq.erase(_pq.begin());
@@ -527,6 +513,26 @@ void Router::findSol()
   _pq.clear();
   _hanangrid.clear();
   _expansions = 0;
+  Geom::LayerRects sol;
+  if (_sol) {
+    const Node* n = _sol;
+    while (n) {
+      n->print("sol");
+      auto parent = n->parent();
+      if (parent) {
+        if (parent->z() == n->z()) {
+          sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(_widthx[n->z()], _widthy[n->z()]));
+        } else {
+          auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
+          if (adjLayer >= 0) {
+            sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer], _widthy[adjLayer]));
+          }
+        }
+      }
+      n = parent;
+    }
+  }
+  return sol;
 }
 
 void Router::printSol() const

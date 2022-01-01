@@ -43,8 +43,8 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       COUT << "routing pins : " << (*it1)->name() << ' ' << (*it2)->name() << '\n';
       router.setName(_name + "__" + (*it1)->name() + "__" + (*it2)->name());
       router.writeSTO();
-      router.findSol();
-      router.printSol();
+      auto sol = router.findSol();
+      Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
       router.plot();
       it1 = it2;
       ++it2;
@@ -164,7 +164,7 @@ void Module::plot() const
       for (auto& b : l.second) {
         if (b.valid() && b.width() && b.height()) {
           ofs << "set object " << cnt++ << " rect from ";
-          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.5 fillcolor \"" << color << "\" behind\n";
+          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.25 fillcolor \"" << color << "\" behind\n";
         }
       }
     }
@@ -174,6 +174,22 @@ void Module::plot() const
         ofs << "set object " << cnt++ << " rect from ";
         ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillcolor 'black' fillstyle pattern " << ((cnt % 2) + 5) << " transparent behind\n";
         ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
+      }
+    }
+    for (auto& n : _nets) {
+      for (auto& l : n.second.routeShapes()) {
+        for (auto& b : l.second) {
+          const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
+          if (b.valid()) {
+            //ofs << b.xmin() << " " << b.ymin() << "\n";
+            //ofs << b.xmax() << " " << b.ymin() << "\n";
+            //ofs << b.xmax() << " " << b.ymax() << "\n";
+            //ofs << b.xmin() << " " << b.ymax() << "\n";
+            //ofs << b.xmin() << " " << b.ymin() << "\n\n";
+            ofs << "set object " << cnt++ << " rect from ";
+            ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.25 fillcolor \"" << color << "\" behind\n";
+          }
+        }
       }
     }
     for (auto& i : _instances) {

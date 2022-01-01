@@ -192,7 +192,7 @@ class Router {
       _sol = nullptr;
       flushNodes();
     }
-    void findSol();
+    Geom::LayerRects findSol();
     void printSol() const;
     void plot() const;
     void writeSTO() const;
