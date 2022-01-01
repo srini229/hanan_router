@@ -14,6 +14,9 @@ inline void Net::print() const
 
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2)
 {
+  for (auto& p : _pins) {
+    Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
+  }
   if (_pins.size() > 1) {
     COUT << "routing net : " << _name << '\n';
     router.addObstacles(l1, true);
@@ -40,7 +43,11 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.setName(_name + "__" + (*it1)->name() + "__" + (*it2)->name());
       router.writeSTO();
       auto sol = router.findSol();
-      Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
+      if (!sol.empty()) {
+        Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
+      } else {
+        _unroute = 1;
+      }
       router.plot();
       it1 = it2;
       ++it2;
@@ -135,7 +142,7 @@ void Module::route(Router::Router& router)
       auto itn = _nets.find(p.first);
       std::cout << "DEBUG pin name " << p.first << '\n';
       if (itn != _nets.end()) {
-        std::cout << "DEBUG found net : " << itn->second.name() << '\n';
+        std::cout << "DEBUG found net : " << itn->second.name() << ' ' << itn->second.routeShapes().size() << '\n';
         p.second->copyRects(itn->second.routeShapes());
       }
     }
@@ -152,7 +159,7 @@ void Module::plot() const
     ofs << "unset key\n";
     ofs << "set title '" << _name << "' noenhanced\n";
     unsigned cnt{1};
-    for (auto& l : _obstacles) {
+    /*for (auto& l : _obstacles) {
       const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
       for (auto& b : l.second) {
         if (b.valid() && b.width() && b.height()) {
@@ -160,13 +167,15 @@ void Module::plot() const
           ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.25 fillcolor \"" << color << "\" behind\n";
         }
       }
-    }
+    }*/
     for (const auto& p : _pins) {
-      auto& b = p.second->bbox();
-      if (b.valid()) {
-        ofs << "set object " << cnt++ << " rect from ";
-        ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillcolor 'black' fillstyle pattern " << ((cnt % 2) + 5) << " transparent behind\n";
-        ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
+      if (p.second->shapes().empty()) {
+        auto& b = p.second->bbox();
+        if (b.valid()) {
+          ofs << "set object " << cnt++ << " rect from ";
+          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillcolor 'black' fillstyle pattern " << ((cnt % 2) + 5) << " transparent behind\n";
+          ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
+        }
       }
     }
     for (auto& n : _nets) {
@@ -220,6 +229,7 @@ void Module::plot() const
     }
     ofs << "EOF\n";
     for (auto& n : _nets) {
+      //if (!n.second.open()) continue;
       for (auto& p : n.second.pins()) {
         auto& b = p->bbox();
         if (b.valid()) {

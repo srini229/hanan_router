@@ -42,8 +42,9 @@ class Net {
     std::set<const Pin*> _pins;
     Geom::LayerRects _routeshapes;
     Geom::Rect _bbox;
+    int _unroute : 1;
   public:
-    Net(const std::string& name) : _name{name}, _bbox{} {}
+    Net(const std::string& name) : _name{name}, _bbox{}, _unroute{0} {}
     const std::set<const Pin*>& pins() const { return _pins; }
     void addPin(const Pin* p) { _pins.insert(p); }
     void print() const;
@@ -51,6 +52,7 @@ class Net {
     void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2);
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
     const Geom::Rect& bbox() const { return _bbox; }
+    const bool open() const { return _unroute ? true : false; }
 };
 typedef std::map<std::string, Net> Nets;
 
