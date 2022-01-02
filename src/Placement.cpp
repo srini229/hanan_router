@@ -128,6 +128,7 @@ void Module::route(Router::Router& router)
       if (!m->routed()) {
         const_cast<Module*>(m)->route(router);
       }
+      inst->build(true);
       for (const auto& l : m->obstacles()) {
         for (const auto& r : l.second) {
           _obstacles[l.first].push_back(inst->transform(r));
@@ -287,12 +288,22 @@ Instance::~Instance()
 }
 
 
-void Instance::build()
+void Instance::build(const bool rebuild)
 {
   if (_m) {
     for (auto& p : _m->pins()) {
-      auto ip = new Pin(_name + "+" + p.second->name());
-      _pins[p.second->name()] = ip;
+      Pin* ip{nullptr};
+      if (rebuild) {
+        auto it = _pins.find(p.second->name());
+        if (it != _pins.end()) {
+          ip = it->second;
+          const_cast<Geom::LayerRects&>(ip->shapes()).clear();
+        }
+      } else {
+        ip = new Pin(_name + "+" + p.second->name());
+        _pins[p.second->name()] = ip;
+      }
+      if (!ip) continue;
       for (const auto& ls : p.second->shapes()) {
         for (const auto& s : ls.second) {
           ip->addRect(ls.first, _tr.transform(s));

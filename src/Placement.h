@@ -65,7 +65,7 @@ class Instance {
     const Module* _m;
     Pins _pins;
     Geom::LayerRects _routeshapes;
-    void build();
+    void build(const bool rebuild = false);
     Geom::Rect _bbox;
   public:
     Instance(const std::string& iname = "", const std::string& mname = "", const Geom::Transform& tr = Geom::Transform()) :
