@@ -128,7 +128,7 @@ class Router {
     int _minLayer, _maxLayer, _maxRoutingLayer;
     std::string _name;
     size_t _expansions{0};
-    const size_t _maxExpansions{1000000};
+    const size_t _maxExpansions{10000};
     std::vector<int> _aboveViaLayer, _belowViaLayer;
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
