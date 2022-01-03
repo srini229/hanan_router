@@ -11,6 +11,11 @@ inline void Net::print() const
   }
 }
 
+PinCVec Net::reorderPins() const
+{
+  PinCVec pins(_pins.begin(), _pins.end());
+  return pins;
+}
 
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2)
 {
@@ -29,9 +34,10 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     }*/
     router.addObstacles(l1, true);
     router.addObstacles(l2, true);
-    auto it1 = _pins.rbegin();
+    auto pins = reorderPins();
+    auto it1 = pins.rbegin();
     auto it2 = std::next(it1);
-    while (it2 != _pins.rend()) {
+    while (it2 != pins.rend()) {
       router.clearSourceTargets();
       COUT << "routing pins : " << (*it1)->name() << ' ' << (*it2)->name() << '\n';
       const auto& p1 = (*it1)->shapes();

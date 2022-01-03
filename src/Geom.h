@@ -193,6 +193,7 @@ class Transform {
     const std::string str() const { return ("origin : {" + _o.str() + "} sX : " + std::to_string(_sX) + " sY : " + std::to_string(_sY)); }
 };
 
+double Dist(const Geom::Rect& r1, const Geom::Rect& r2, const bool manh = true);
 void MergeLayerRects(Geom::LayerRects& l1, const Geom::LayerRects& l2, Geom::Rect* b = nullptr);
 }
 #endif
