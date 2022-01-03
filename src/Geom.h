@@ -157,8 +157,17 @@ class Transform {
     Transform(const int x = 0, const int y = 0, const int sx = 1, const int sy = 1) :
       _o{x, y}, _sX{sx}, _sY{sy} {}
     const Point& origin() const { return _o; }
-    bool sX() const { return _sX; }
-    bool sY() const { return _sY; }
+    const int x() const { return _o.x(); }
+    const int y() const { return _o.y(); }
+    int sX() const { return _sX; }
+    int sY() const { return _sY; }
+    std::string orient() const
+    {
+      if (_sX == 1 && _sY == 1) return "N";
+      if (_sX == -1 && _sY == 1) return "FN";
+      if (_sX == 1 && _sY == -1) return "FS";
+      return "S";
+    }
     void apply(Point& pt) const 
     {
       pt.x() = _o.x() + _sX * pt.x();

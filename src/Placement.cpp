@@ -158,6 +158,10 @@ void Module::route(Router::Router& router)
       }
     }
   }
+  if (!_leaf) {
+    writeDEF();
+    writeLEF();
+  }
   _routed = 1;
 }
 
@@ -170,7 +174,7 @@ void Module::plot() const
     ofs << "unset key\n";
     ofs << "set title '" << _name << "' noenhanced\n";
     unsigned cnt{1};
-    /*for (auto& l : _obstacles) {
+    for (auto& l : _obstacles) {
       const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
       for (auto& b : l.second) {
         if (b.valid() && b.width() && b.height()) {
@@ -178,7 +182,7 @@ void Module::plot() const
           ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.25 fillcolor \"" << color << "\" behind\n";
         }
       }
-    }*/
+    }
     for (const auto& p : _pins) {
       if (p.second->shapes().empty()) {
         auto& b = p.second->bbox();
@@ -281,6 +285,99 @@ void Module::checkShort() const
   }
 }
 
+void Module::writeDEF() const
+{
+  std::ofstream ofs(_name + ".def");
+  if (ofs.is_open()) {
+    ofs << "VERSION 5.8 ;\nDIVIDERCHAR \"/\" ;\nBUSBITCHARS \"[]\" ;\nDESIGN " << _name << " ;\n";
+    ofs << "UNITS DISTANCE MICRONS " << _uu << " ;\n";
+    ofs << "DIEAREA ( " << _bbox.xmin() << ' ' << _bbox.ymin() << " ) ( " << _bbox.xmax() << ' ' << _bbox.ymax() << " ) ; \n\n";
+    if (!_instances.empty()) {
+      ofs << "COMPONENTS " << _instances.size() << " ;\n";
+      for (auto& inst : _instances) {
+        auto& tr = inst->transform();
+        ofs << "- " << inst->name() << ' ' << inst->moduleName();
+        ofs << " + PLACED ( ";
+        ofs << ((tr.sX() > 0 ) ? tr.x() : (tr.x() - inst->bbox().width()))  << ' ';
+        ofs << ((tr.sY() > 0 ) ? tr.y() : (tr.y() - inst->bbox().height())) << " ) " << tr.orient() << " ;\n";
+      }
+      ofs << "END COMPONENTS\n\n";
+    }
+    if (!_nets.empty()) {
+      ofs << "NETS " << _nets.size() << " ;\n ";
+      for (auto& n : _nets) {
+        ofs << "- " << n.first << "\n";
+        for (auto& p : n.second.pins()) {
+          std::string instname = p->name();
+          std::string pinname  = p->name();
+          auto ppos = p->name().rfind('+');
+          if (ppos != std::string::npos) {
+            instname = p->name().substr(0, ppos);
+            pinname  = p->name().substr(ppos + 1);
+          }
+          ofs << " ( " << instname << ' ' << pinname << " )";
+        }
+        auto& routeShapes = n.second.routeShapes();
+        if (!routeShapes.empty()) {
+          ofs << "\n";
+          bool first{true};
+          for (auto& l : routeShapes) {
+            for (auto& r : l.second) {
+              ofs << "  + RECT " << LAYER_NAMES[l.first];
+              ofs << " ( " << r.xmin() << ' ' << r.ymin() << " ) ( " << r.xmax() << ' ' << r.ymax() << " )\n";
+              first = false;
+            }
+          }
+        }
+        ofs << " ;\n";
+      }
+      ofs << "END NETS\n\n";
+    }
+    ofs << "END DESIGN\n";
+  }
+}
+
+void Module::writeLEF() const
+{
+  std::ofstream ofs(_name + ".lef");
+  if (ofs.is_open()) {
+    ofs << "MACRO " << _name << "\n";
+    ofs << "  UNITS\n    DISTANCE MICRONS " << _uu << ";\n  END UNITS\n";
+    ofs << "  ORIGIN "  << _bbox.xmin()  << ' ' << _bbox.ymin() << " ;\n";
+    ofs << "  FOREIGN " << _name << ' '  << _bbox.xmin() << ' ' << _bbox.ymin() << " ;\n";
+    ofs << "  SIZE "    << _bbox.width() << " BY " << _bbox.height() << " ;\n";
+    if (!_pins.empty()) {
+      for (auto& p : _pins) {
+        ofs << "  PIN " << p.first << "\n    DIRECTION INOUT ;\n    USE SIGNAL ;\n";
+        auto& shapes = p.second->shapes();
+        if (!shapes.empty()) {
+          ofs << "    PORT\n";
+          for (auto& l : shapes) {
+            ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+            for (auto& r : l.second) {
+              ofs << "        RECT " << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << " ;\n";
+            }
+          }
+          ofs << "    END\n";
+        }
+        ofs << "  END " << p.first << '\n';
+      }
+    }
+    if (!_obstacles.empty()) {
+      ofs << "    OBS\n";
+      for (auto& l : _obstacles) {
+        ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+        for (auto& r : l.second) {
+          ofs << "        RECT " << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << " ;\n";
+        }
+      }
+      ofs << "    END\n";
+    }
+    ofs << "END " << _name << "\nEND LIBRARY\n";
+  }
+}
+
+
 Instance::~Instance()
 {
   for (auto& p : _pins) delete p.second;
@@ -310,6 +407,7 @@ void Instance::build(const bool rebuild)
         }
       }
     }
+    _bbox = _tr.transform(_m->bbox());
   }
 }
 

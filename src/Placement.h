@@ -96,10 +96,11 @@ class Module {
     std::map<const Net*, std::vector<std::pair<Instance*, std::string>>> _tmpnetpins;
     Geom::LayerRects _obstacles;
     Geom::Rect _bbox;
+    const int _uu;
 
     void build();
   public:
-    Module(const std::string& name, const int leaf) : _name(name), _leaf(leaf), _routed{leaf}, _bbox{} {_instances.reserve(64);}
+    Module(const std::string& name, const int leaf, const int uu) : _name(name), _leaf(leaf), _routed{leaf}, _bbox{}, _uu{uu} {_instances.reserve(64);}
     ~Module();
     Instance* addInstance(const std::string& name, const std::string& mname, const Geom::Transform& tr)
     {
@@ -163,6 +164,9 @@ class Module {
 
     const Geom::Rect& bbox() const { return _bbox; }
     void checkShort() const;
+
+    void writeDEF() const;
+    void writeLEF() const;
 };
 
 

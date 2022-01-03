@@ -27,7 +27,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
       auto lname = l.find("concrete_name");
       if (_modules.find(*lname) != _modules.end()) continue;
       if (lname != l.end()) {
-        auto modu = new Module(*lname, 1);
+        auto modu = new Module(*lname, 1, _uu);
         COUT << "adding leaf : " << *lname << '\n';
         auto terms = l.find("terminals");
         if (terms != l.end()) {
@@ -47,7 +47,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
       auto mname = m.find("concrete_name");
       if (mname != m.end()) {
         if (_modules.find(*mname) != _modules.end()) continue;
-        auto modu = new Module(*mname, 0);
+        auto modu = new Module(*mname, 0, _uu);
         auto params = m.find("parameters");
         if (params != m.end()) {
           for (auto& p : *params) {

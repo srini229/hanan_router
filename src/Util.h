@@ -67,4 +67,6 @@ extern const std::vector<std::string> LAYER_COLORS;
 std::string parseArgs(const int argc, char* const argv[], const std::string& arg, std::string str = "");
 bool checkArg(const int argc, char* const argv[], const std::string& arg);
 
+extern std::vector<std::string> LAYER_NAMES;
+
 #endif

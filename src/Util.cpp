@@ -24,3 +24,4 @@ bool checkArg(const int argc, char* const argv[], const std::string& arg)
 
 const std::vector<std::string> LAYER_COLORS = {"red", "green", "blue", "cyan", "magenta", "black", "grey", "violet", "yellow", "orange", "black"};
 
+std::vector<std::string> LAYER_NAMES;

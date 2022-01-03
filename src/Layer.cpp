@@ -168,6 +168,7 @@ LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullp
   _topMetal = (static_cast<int>(_layers.size()) - 1);
   _layers.insert(_layers.end(), _vlayers.begin(), _vlayers.end());
   for (unsigned i = 0; i < _layers.size(); ++i) {
+    LAYER_NAMES.push_back(_layers[i]->name());
     _layerIndex[_layers[i]->name()] = static_cast<int>(i);
     COUT << "layer : " << _layers[i]->name() << " index : " << i << '\n';
     if (_layers[i]->type() == 0) {
