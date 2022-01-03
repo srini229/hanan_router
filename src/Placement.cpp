@@ -320,12 +320,10 @@ void Module::writeDEF() const
         auto& routeShapes = n.second.routeShapes();
         if (!routeShapes.empty()) {
           ofs << "\n";
-          bool first{true};
           for (auto& l : routeShapes) {
             for (auto& r : l.second) {
               ofs << "  + RECT " << LAYER_NAMES[l.first];
               ofs << " ( " << r.xmin() << ' ' << r.ymin() << " ) ( " << r.xmax() << ' ' << r.ymax() << " )\n";
-              first = false;
             }
           }
         }
