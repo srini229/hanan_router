@@ -32,8 +32,14 @@ class Point {
     Point transform(const Transform& tr, const int width, const int height) const;
     //const json toJSON() const { return json{{"x", _x}, {"y", _y}}; }
     const std::string str() const { return "x : " + std::to_string(_x) + " y : " + std::to_string(_y); }
+    bool operator < (const Point& p) const
+    {
+      if (_x == p._x) return _y < p._y;
+      return _x < p._x;
+    }
 
 };
+typedef std::set<Geom::Point> PointSet;
 
 
 class Rect {

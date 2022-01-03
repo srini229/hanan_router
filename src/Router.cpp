@@ -142,6 +142,62 @@ Node* Router::createNode(const int x, const int y, const int z,
   }
   return n;
 }
+
+Geom::PointSet Router::findValidPoints(const Geom::Rect& r, const int z) const
+{
+  auto vert = isVert(z);
+  auto prev = z, next = z;
+  if (z < _maxLayer) {
+    prev = z - 1;
+  }
+  if (z > _minLayer) {
+    next = z + 1;
+  }
+
+  auto x = r.xcenter(), y = r.ycenter(); 
+  Geom::PointSet points;
+  points.insert(Geom::Point(x, y));
+
+  if ((vert && r.isVert()) || (!vert && r.isHor())) {
+    for (auto pr : {true, false}) {
+      if ((pr && prev == z) || (!pr && next == z)) continue;
+      auto layer = (pr ? prev : next);
+      if (vert) {
+        int space = _spacey[layer] + ((_widthy[layer] % 2 == 0) ? _widthy[layer]/2 : (_widthy[layer]/2 + 1));
+        int yn = r.ymax() - ((r.ymax() - y) % space);
+        while (yn > r.ymin()) {
+          points.insert(Geom::Point(x,yn));
+          yn -= space;
+        }
+      } else {
+        int space = _spacex[layer] + ((_widthx[layer] % 2 == 0) ? _widthx[layer]/2 : (_widthx[layer]/2 + 1));
+        int xn = r.xmax() - ((r.xmax() - x) % space);
+        while (xn > r.xmin()) {
+          points.insert(Geom::Point(xn,y));
+          xn -= space;
+        }
+      }
+    }
+  }
+  return points;
+}
+
+void Router::addSource(const Geom::Rect& r, const int z)
+{
+  auto points = findValidPoints(r, z);
+  for (auto& p : points) {
+    _sources.insert(createNode(p.x(), p.y(), z, nullptr, 0));
+  }
+}
+
+void Router::addTarget(const Geom::Rect& r, const int z)
+{
+  auto points = findValidPoints(r, z);
+  for (auto& p : points) {
+    _targets.insert(createNode(p.x(), p.y(), z, nullptr, -1, 0));
+  }
+}
+
 void Router::readDataFile(const std::string& ifile)
 {
   setName(ifile.substr(0, ifile.find(".sto")));
@@ -432,7 +488,7 @@ void Router::generateHananGrid()
   for (bool src : {true, false}) {
     for (auto& s : (src ? _sources : _targets)) {
       xcoords.insert(s->x());
-      xcoords.insert(s->y());
+      ycoords.insert(s->y());
     }
   }
   for (auto& l : _tobstacles) {

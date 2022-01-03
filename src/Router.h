@@ -128,7 +128,7 @@ class Router {
     int _minLayer, _maxLayer, _maxRoutingLayer;
     std::string _name;
     size_t _expansions{0};
-    const size_t _maxExpansions{10000};
+    const size_t _maxExpansions{100000};
     std::vector<int> _aboveViaLayer, _belowViaLayer;
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
@@ -173,6 +173,7 @@ class Router {
       _expansions = 0;
       _bbox = Geom::Rect();
     }
+    Geom::PointSet findValidPoints(const Geom::Rect& r, const int z) const;
     
   public:
     Router(const DRC::LayerInfo& lf);
@@ -205,14 +206,8 @@ class Router {
     }
     void addObstacles(const Geom::LayerRects& lr, const bool temp = false);
 
-    void addSource(const int x, const int y, const int z)
-    {
-      _sources.insert(createNode(x, y, z, nullptr, 0));
-    }
-    void addTarget(const int x, const int y, const int z)
-    {
-      _targets.insert(createNode(x, y, z, nullptr, -1, 0));
-    }
+    void addSource(const Geom::Rect& r, const int z);
+    void addTarget(const Geom::Rect& r, const int z);
     bool isViaValid(const Node* n, const bool up) const;
 };
 

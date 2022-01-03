@@ -47,9 +47,9 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           if (l.first > router.maxLayer() || l.first < router.minLayer()) continue;
           for (auto& s : l.second) {
             if (src) {
-              router.addSource(s.xcenter(), s.ycenter(), l.first);
+              router.addSource(s, l.first);
             } else {
-              router.addTarget(s.xcenter(), s.ycenter(), l.first);
+              router.addTarget(s, l.first);
             }
           }
         }
@@ -250,7 +250,7 @@ void Module::plot() const
     }
     ofs << "EOF\n";
     for (auto& n : _nets) {
-      if (!n.second.open()) continue;
+      //if (!n.second.open()) continue;
       for (auto& p : n.second.pins()) {
         auto& b = p->bbox();
         if (b.valid()) {
