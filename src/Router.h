@@ -38,9 +38,9 @@ class CostFn {
         if (i > 0) _layerPairCost[i][i-1] = 2;
         if (i < numLayers-1) _layerPairCost[i][i+1] = 2;
       }
-      for (int i = 0; i < numLayers; ++i) {
-        COUT << "layer : " << i << " cost : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
-      }
+      //for (int i = 0; i < numLayers; ++i) {
+      //  COUT << "layer : " << i << " cost : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
+      //}
     }
 };
 

@@ -136,7 +136,9 @@ Node* Router::createNode(const int x, const int y, const int z,
   if (it == _nodes.end()) {
     n = new Node(x, y, z, fcost, tcost, parent);
     _nodes[tpl] = n;
+#if DEBUG
     COUT << "creating new node : " << x << ',' << y << ',' << z << '\n';
+#endif
   } else {
     n = it->second;
   }
@@ -244,17 +246,21 @@ void Router::readDataFile(const std::string& ifile)
 
 void Router::insert(const Node* n)
 {
+#if DEBUG
   n->print("adding to pq :");
   if (n->parent()) n->parent()->print("\tparent:");
+#endif
   _pq.insert(n);
 }
 
 void Router::checkAndInsert(Node* newn, const Node* n)
 {
+#if DEBUG
   newn->print("newn bef :");
   if (newn->parent()) {
     newn->parent()->print("newn parent bef :");
   }
+#endif
   if (newn->cost() < 0) {
     if (newn->parent() != n) newn->setParent(n);
     evalCost(newn);
@@ -273,10 +279,12 @@ void Router::checkAndInsert(Node* newn, const Node* n)
       insert(newn);
     }
   }
+#if DEBUG
   newn->print("newn aft :");
   if (newn->parent()) {
     newn->parent()->print("newn parent aft :");
   }
+#endif
 }
 
 int Router::snap(const Node* n, const bool vert, const bool up) const
@@ -324,7 +332,9 @@ void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, 
 void Router::expand(const Node* n)
 {
   std::bitset<4> expanddir{0xF}; // 0:dn, 1:up, 2:left/down, 3:right/up
+#if DEBUG
   n->print("expanding node :");
+#endif
   if ((n->parent() && n->parent()->z() < n->z()) || !isViaValid(n, false)) {
     expanddir.set(0, false);
   }
@@ -351,20 +361,28 @@ void Router::expand(const Node* n)
 
   Node* newn{nullptr};
   if (expanddir.test(0)) {
+#if DEBUG
     COUT << "expanding via down\n";
+#endif
     newn = createNode(n->x(), n->y(), n->z() - 1, n);
     checkAndInsert(newn, n);
   }
   if (expanddir.test(1)) {
+#if DEBUG
     COUT << "expanding via up\n";
+#endif
     newn = createNode(n->x(), n->y(), n->z() + 1, n);
     checkAndInsert(newn, n);
   }
   std::set<int> gridpos;
   if (expanddir.test(2)) {
+#if DEBUG
     COUT << "expanding left/down\n";
+#endif
     int snapc = snap(n, vert, false);
+#if DEBUG
     COUT << "snapcd : " << snapc << '\n';
+#endif
     newn = nullptr;
     if (vert) {
       if (snapc < n->y()) {
@@ -379,7 +397,9 @@ void Router::expand(const Node* n)
     getAdjacentGrid(gridpos, n, true, false, snapc);
     getAdjacentGrid(gridpos, n, false, false, snapc);
     for (auto &pos : gridpos) {
+#if DEBUG
       COUT << "grid pos : " << pos << '\n';
+#endif
       if (vert) {
         if (pos < n->y()) {
           newn = createNode(n->x(), pos, n->z(), n);
@@ -394,10 +414,14 @@ void Router::expand(const Node* n)
     gridpos.clear();
   }
   if (expanddir.test(3)) {
+#if DEBUG
     COUT << "expanding top/right\n";
+#endif
     Node* newn{nullptr};
     int snapc = snap(n, vert, true);
+#if DEBUG
     COUT << "snapcu : " << snapc << '\n';
+#endif
     newn = nullptr;
     if (vert) {
       if (snapc > n->y()) {
@@ -412,7 +436,9 @@ void Router::expand(const Node* n)
     getAdjacentGrid(gridpos, n, true, true, snapc);
     getAdjacentGrid(gridpos, n, false, true, snapc);
     for (auto &pos : gridpos) {
+#if DEBUG
       COUT << "grid pos : " << pos << '\n';
+#endif
       if (vert) {
         if (pos > n->y()) {
           newn = createNode(n->x(), pos, n->z(), n);
@@ -431,7 +457,9 @@ void Router::insertRange(IntRangeSet& s, const IntRange& r)
 {
   IntRange rc = r;
   std::vector<IntRangeSet::iterator> overlapit;
+#if DEBUG
   COUT << "insert range : " << rc.first << ' ' << rc.second << '\n';
+#endif
   for (auto it = s.begin(); it != s.end(); ++it) {
     if (it->first > rc.second) {
       break;
@@ -454,7 +482,9 @@ void Router::invertRange(IntRangeSet& s, const bool vert)
     end = _bbox.ymax();
   }
   for (auto &r : s) {
+#if DEBUG
     COUT << "r : " << r.first << ' ' << r.second << '\n';
+#endif
     if (r.first >= start) {
       sout.insert(std::make_pair(start, r.first));
     }
@@ -527,7 +557,11 @@ void Router::generateHananGrid()
 
 Geom::LayerRects Router::findSol()
 {
+#if DEBUG
   SaveRestoreStream src(_name + "_route.log");
+#endif
+  static std::string debugplot{getenv("HANAN_DEBUG_WIRE") ? getenv("HANAN_DEBUG_WIRE") : ""};
+  if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) writeSTO();
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
     _bbox = Geom::Rect();
@@ -535,11 +569,15 @@ Geom::LayerRects Router::findSol()
       evalTCost(s);
       insert(s);
       _bbox.merge(s->x(), s->y(), s->x(), s->y());
+#if DEBUG
       COUT << "src : " << s->x() << ' ' << s->y() << '\n';
+#endif
     }
     for (auto& t : _targets) {
       _bbox.merge(t->x(), t->y(), t->x(), t->y());
+#if DEBUG
       COUT << "tgt : " << t->x() << ' ' << t->y() << '\n';
+#endif
     }
 
     /*for (auto& l : _tobstacles) {
@@ -557,6 +595,7 @@ Geom::LayerRects Router::findSol()
     }*/
     generateHananGrid();
 
+#if DEBUG
     for (auto& l : _hanangrid) {
       COUT << "layer : " << l.first << '\n';
       for (auto& pos : l.second) {
@@ -567,13 +606,16 @@ Geom::LayerRects Router::findSol()
         std::cout << '\n';
       }
     }
+#endif
 
     while (!_pq.empty()) {
       auto t = const_cast<Node*>(*_pq.begin());
       if (_targets.find(t) != _targets.end()) {
         _sol = t;
         COUT << "sol found " << std::endl;
+#if DEBUG
         printSol();
+#endif
         break;
       }
       _pq.erase(_pq.begin());
@@ -594,12 +636,16 @@ Geom::LayerRects Router::findSol()
         if (parent) {
           if (parent->z() == n->z()) {
             sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(_widthx[n->z()], _widthy[n->z()]));
+#if DEBUG
             COUT << n->z() << ' ' << sol[n->z()].back().str() << '\n';
+#endif
           } else {
             auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
             if (adjLayer >= 0) {
               sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer], _widthy[adjLayer]));
+#if DEBUG
               COUT << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
+#endif
             }
           }
         }
@@ -609,11 +655,13 @@ Geom::LayerRects Router::findSol()
   } else {
     COUT << "source or target empty!\n";
   }
+  if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) plot();
   return sol;
 }
 
 void Router::printSol() const
 {
+#if DEBUG
   for (auto& s : _sources) {
     s->print("source : ");
   }
@@ -632,6 +680,7 @@ void Router::printSol() const
       n = n->parent();
     }
   }
+#endif
 }
 
 

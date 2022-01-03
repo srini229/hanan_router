@@ -8,6 +8,7 @@ endif
 CCFLAGS = -Wall -Ofast -g -std=c++11 -D_GLIBCXX_PARALLEL $(MARCH) -funroll-loops
 INCLUDES = ./include
 LFLAGS = 
+DEBUG = 0
 LIBS = -lm
 BIN = bin
 SRC = src
@@ -25,7 +26,7 @@ $(MAIN): $(OBJS)
 
 $(BIN)/%.o: $(SRC)/%.cpp 
 	@mkdir -p $(BIN)
-	$(CPP) $(CCFLAGS) -I$(INCLUDES) $(DEPFLAGS) -c $< -o $@
+	$(CPP) $(CCFLAGS) -I$(INCLUDES) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(MAIN) $(BIN)/*.o $(BIN)/*.d

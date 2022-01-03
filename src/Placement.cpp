@@ -55,14 +55,12 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
       router.setName(_name + "__" + (*it1)->name() + "__" + (*it2)->name());
-      router.writeSTO();
       auto sol = router.findSol();
       if (!sol.empty()) {
         Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
       } else {
         _unroute = 1;
       }
-      router.plot();
       Geom::MergeLayerRects(const_cast<Geom::LayerRects&>((*it1)->shapes()), sol, &_bbox);
       Geom::MergeLayerRects(const_cast<Geom::LayerRects&>((*it2)->shapes()), sol, &_bbox);
       it1 = it2;
@@ -343,7 +341,7 @@ void Module::writeDEF() const
 
 void Module::writeLEF() const
 {
-  std::ofstream ofs(_name + ".lef");
+  std::ofstream ofs(_name + "_interim_hier.lef");
   if (ofs.is_open()) {
     ofs << "MACRO " << _name << "\n";
     ofs << "  UNITS\n    DISTANCE MICRONS " << _uu << ";\n  END UNITS\n";
