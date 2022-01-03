@@ -19,6 +19,7 @@ PinCVec Net::reorderPins() const
 
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2)
 {
+  TIME_M();
   _unroute = 0;
   for (auto& p : _pins) {
     Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
@@ -125,6 +126,7 @@ void Module::build()
 void Module::route(Router::Router& router)
 {
   if (!_routed) {
+    writeDEF("_before");
     router.clearObstacles();
     router.clearObstacles(true);
     for (auto& inst : _instances) {
@@ -289,9 +291,9 @@ void Module::checkShort() const
   }
 }
 
-void Module::writeDEF() const
+void Module::writeDEF(const std::string& nstr) const
 {
-  std::ofstream ofs(_name + ".def");
+  std::ofstream ofs(_name + nstr + ".def");
   if (ofs.is_open()) {
     ofs << "VERSION 5.8 ;\nDIVIDERCHAR \"/\" ;\nBUSBITCHARS \"[]\" ;\nDESIGN " << _name << " ;\n";
     ofs << "UNITS DISTANCE MICRONS " << _uu << " ;\n";
@@ -346,8 +348,8 @@ void Module::writeLEF() const
     ofs << "MACRO " << _name << "\n";
     ofs << "  UNITS\n    DISTANCE MICRONS " << _uu << ";\n  END UNITS\n";
     ofs << "  ORIGIN "  << _bbox.xmin()  << ' ' << _bbox.ymin() << " ;\n";
-    ofs << "  FOREIGN " << _name << ' '  << _bbox.xmin() << ' ' << _bbox.ymin() << " ;\n";
-    ofs << "  SIZE "    << _bbox.width() << " BY " << _bbox.height() << " ;\n";
+    ofs << "  FOREIGN " << _name << ' '  << (1.*_bbox.xmin()/_uu) << ' ' << (1.*_bbox.ymin()/_uu) << " ;\n";
+    ofs << "  SIZE "    << (1.*_bbox.width()/_uu) << " BY " << (1.* _bbox.height()/_uu) << " ;\n";
     if (!_pins.empty()) {
       for (auto& p : _pins) {
         ofs << "  PIN " << p.first << "\n    DIRECTION INOUT ;\n    USE SIGNAL ;\n";
@@ -357,7 +359,7 @@ void Module::writeLEF() const
           for (auto& l : shapes) {
             ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
             for (auto& r : l.second) {
-              ofs << "        RECT " << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << " ;\n";
+              ofs << "        RECT " << (r.xmin()*1.0/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
             }
           }
           ofs << "    END\n";
@@ -370,7 +372,7 @@ void Module::writeLEF() const
       for (auto& l : _obstacles) {
         ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
         for (auto& r : l.second) {
-          ofs << "        RECT " << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << " ;\n";
+          ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
         }
       }
       ofs << "    END\n";

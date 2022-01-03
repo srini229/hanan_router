@@ -1,9 +1,0 @@
-Source 0 0 2
-Target 100 80 3
-Obstacle -10 10 20 20 2
-Obstacle 10 20 30 20 2
-Obstacle 35 50 105 20 2
-Obstacle 55 50 80 20 2
-Obstacle 75 20 30 20 2
-Obstacle 20 20 30 20 3
-Obstacle 75 20 30 20 3

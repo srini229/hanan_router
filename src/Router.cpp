@@ -557,6 +557,7 @@ void Router::generateHananGrid()
 
 Geom::LayerRects Router::findSol()
 {
+  TIME_M();
 #if DEBUG
   SaveRestoreStream src(_name + "_route.log");
 #endif
@@ -771,7 +772,9 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         spacex = _spacex[layer] + ((_widthx[layer] % 2 == 0) ? _widthx[layer]/2 : (_widthx[layer]/2 + 1));
         spacey = _spacey[layer] + ((_widthy[layer] % 2 == 0) ? _widthy[layer]/2 : (_widthy[layer]/2 + 1));
       }
+#if DEBUG
       COUT << "layer : " << layer << " obs : " << spacex << ' ' << spacey << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
+#endif
       if (temp) {
         _tobstacles[layer].push_back(r.bloatby(spacex, spacey));
         //COUT << "tobs : " << _tobstacles[layer].back().str() << '\n';
