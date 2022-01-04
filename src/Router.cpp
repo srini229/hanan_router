@@ -296,7 +296,7 @@ int Router::snap(const Node* n, const bool vert, const bool up) const
 {
   int snapc = (vert ? (up ? _bbox.ymin() : _bbox.ymax())
       : (up ? _bbox.xmin() : _bbox.xmax()));
-  const auto& grid = _hanangrid[n->z()];
+  const auto& grid = (vert ? _hanangridv[n->z()] : _hanangridh[n->z()]);
   if (!grid.empty()) {
     int pos = n->y(), lkp = n->x();
     if (vert) {
@@ -322,9 +322,10 @@ void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, 
 {
   int adjLayer = (above ? (n->z() < _maxLayer ? n->z() + 1 : -1) : (n->z() > _minLayer ? n->z() - 1 : -1));
   if (adjLayer >= 0) {
-    const auto& grid = _hanangrid[adjLayer];
+    auto vert = isVert(n->z());
+    const auto& grid = (vert ? _hanangridh[adjLayer] : _hanangridv[adjLayer]);
     if (!grid.empty()) {
-      auto coord = (isVert(n->z()) ? n->y() : n->x());
+      auto coord = (vert ? n->y() : n->x());
       for (auto& pos : grid) {
         if ((up && pos.first > coord && pos.first < snapc) || (!up && pos.first < coord && pos.first > snapc)) {
           s.insert(pos.first);
@@ -504,8 +505,10 @@ void Router::invertRange(IntRangeSet& s, const bool vert)
 
 void Router::generateHananGrid()
 {
-  _hanangrid.clear();
-  _hanangrid.resize(_maxLayer + 1);
+  _hanangridh.clear();
+  _hanangridh.resize(_maxLayer + 1);
+  _hanangridv.clear();
+  _hanangridv.resize(_maxLayer + 1);
   std::set<int> xcoords, ycoords;
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
     auto box = _bbox;
@@ -562,7 +565,8 @@ void Router::generateHananGrid()
     for (auto& r : tmpranges) {
       invertRange(r.second, vert);
     }
-    _hanangrid[l.first] = tmpranges;
+    if (vert) _hanangridv[l.first] = tmpranges;
+    else _hanangridh[l.first] = tmpranges;
   }
 }
 
@@ -608,9 +612,19 @@ Geom::LayerRects Router::findSol()
     generateHananGrid();
 
 #if DEBUG
-    for (unsigned l = 0; l < _hanangrid.size(); ++l) {
-      COUT << "layer : " << l << '\n';
-      for (auto& pos : _hanangrid[l]) {
+    for (unsigned l = 0; l < _hanangridh.size(); ++l) {
+      COUT << "layerh : " << l << '\n';
+      for (auto& pos : _hanangridh[l]) {
+        COUT << "pos : " << pos.first << " : ";
+        for (auto& r : pos.second) {
+          std::cout << "[" << r.first << ',' << r.second << "] ";
+        }
+        std::cout << '\n';
+      }
+    }
+    for (unsigned l = 0; l < _hanangridv.size(); ++l) {
+      COUT << "layerv : " << l << '\n';
+      for (auto& pos : _hanangridv[l]) {
         COUT << "pos : " << pos.first << " : ";
         for (auto& r : pos.second) {
           std::cout << "[" << r.first << ',' << r.second << "] ";
@@ -639,7 +653,8 @@ Geom::LayerRects Router::findSol()
       COUT << "sol not found for " << _name << '\n';
     }
     _pq.clear();
-    _hanangrid.clear();
+    _hanangridv.clear();
+    _hanangridh.clear();
     _expansions = 0;
     if (_sol) {
       const Node* n = _sol;

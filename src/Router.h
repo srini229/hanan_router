@@ -120,7 +120,7 @@ class Router {
     NodeMap _nodes;
     Geom::LayerRects _obstacles, _tobstacles;
     CostFn _cf;
-    std::vector<std::map<int, IntRangeSet>> _hanangrid;
+    std::vector<std::map<int, IntRangeSet>> _hanangridh, _hanangridv;
     Geom::Rect _bbox;
     const Node *_sol;
     std::vector<int> _widthx, _spacex;
