@@ -130,6 +130,7 @@ class Router {
     size_t _expansions{0};
     const size_t _maxExpansions{100000};
     std::vector<int> _aboveViaLayer, _belowViaLayer;
+    const DRC::LayerInfo& _lf;
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -160,7 +161,8 @@ class Router {
     void insertRange(IntRangeSet& s, const IntRange& r);
     void expand(const Node* n);
     void generateHananGrid();
-    bool isVert(const int l) const { return (l % 2) == 0; }
+    bool isVert(const int l) const { return _lf.isVertical(l); }
+    bool isHor(const int l) const { return _lf.isHorizontal(l); }
     void checkAndInsert(Node* newn, const Node* n);
     int snap(const Node* n, const bool vert, const bool up) const;
     void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);

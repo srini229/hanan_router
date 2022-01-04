@@ -57,7 +57,7 @@ LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullp
             it = l.find("Offset");
             if (it != l.end() && it->is_number_integer()) mlayer->setOffset(static_cast<int>(*it));
             it = l.find("Direction");
-            if (it != l.end() && it->is_string()) mlayer->setDirection(*it == "H");
+            if (it != l.end() && it->is_string()) mlayer->setDirection(*it == "H" ? 0 : (*it == "V" ? 1 : 2));
             _mlayers.push_back(mlayer);
             _mlayerNameMap[name] = mlayer;
           }
@@ -171,7 +171,7 @@ LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullp
     LAYER_NAMES.push_back(_layers[i]->name());
     _layerIndex[_layers[i]->name()] = static_cast<int>(i);
     COUT << "layer : " << _layers[i]->name() << " index : " << i << '\n';
-    if (_layers[i]->type() == 0) {
+    if (_layers[i]->isVia()) {
       auto vl = static_cast<ViaLayer*>(_layers[i]);
       for (auto& it : vl->viaArray()) {
         COUT << "\t va : " << it._sw._space.first << ' ' << it._sw._space.second << ' ' << it._nx << ' ' << it._ny << '\n';

@@ -6,22 +6,23 @@ namespace Router {
 CostFn::CostFn(const DRC::LayerInfo& lf)
 {
   auto& layers = lf.layers();
+  _layerHCost.resize(layers.size(), 100000);
+  _layerVCost.resize(layers.size(), 100000);
   for (unsigned i = 0; i < layers.size(); ++i) {
-    if (layers[i]->type()) {
+    if (layers[i]->isMetal()) {
       auto r = std::max(1, static_cast<int>(layers[i]->meanR()));
       if (static_cast<DRC::MetalLayer*>(layers[i])->isHorizontal()) {
-        _layerHCost.push_back(r);
-        _layerVCost.push_back(10000 * r);
-      } else {
-        _layerHCost.push_back(10000 * r);
-        _layerVCost.push_back(r);
+        _layerHCost[i] = r;
+      }
+      if (static_cast<DRC::MetalLayer*>(layers[i])->isVertical()) {
+        _layerVCost[i] = r;
       }
       _topRoutingLayer = static_cast<int>(i);
     }
   }
   _layerPairCost.resize(_layerHCost.size(), std::vector<CostType>(_layerHCost.size(), 100000));
   for (unsigned i = 0; i < layers.size(); ++i) {
-    if (!layers[i]->type()) {
+    if (layers[i]->isVia()) {
       auto l = lf.getLayers(static_cast<DRC::ViaLayer*>(layers[i]));
       auto r = std::max(1, static_cast<int>(layers[i]->meanR()));
       if (l.first >= 0 && l.second >= 0) {
@@ -48,10 +49,10 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   CostType dc = 0;
 
   if (n1.z() == n2.z()) {
-    if (n1.x() == n2.x() && _layerVCost[n1.z()] < 10) {
+    if (n1.x() == n2.x() && _layerVCost[n1.z()] < 1000) {
       return (_layerVCost[n1.z()] * std::abs(n1.y() - n2.y()));
     }
-    if (n1.y() == n2.y() && _layerHCost[n1.z()] < 10) {
+    if (n1.y() == n2.y() && _layerHCost[n1.z()] < 1000) {
       return (_layerHCost[n1.z()] * std::abs(n1.x() - n2.x()));
     }
   }
@@ -88,7 +89,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
 }
 
 
-Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}, _maxRoutingLayer{0}, _name{}
+Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}, _maxRoutingLayer{0}, _name{}, _lf{lf}
 {
   auto& layers = lf.layers();
   _widthx.reserve(layers.size());
@@ -96,19 +97,19 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100
   _spacex.reserve(layers.size());
   _spacey.reserve(layers.size());
   for (unsigned i = 0; i < layers.size(); ++i) {
-    if (layers[i]->type()) {
+    if (layers[i]->isMetal()) {
       auto mlayer = static_cast<DRC::MetalLayer*>(layers[i]);
       _widthx.push_back(mlayer->width());
       _widthy.push_back(mlayer->width());
       _spacex.push_back(mlayer->space());
       _spacey.push_back(mlayer->space());
-      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << '\n';
+      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << "v : " << isVert(i) << " h : " << isHor(i) << '\n';
     }
   }
   _aboveViaLayer.resize(_widthx.size(), -1);
   _belowViaLayer.resize(_widthx.size(), -1);
   for (unsigned i = 0; i < layers.size(); ++i) {
-    if (!layers[i]->type()) {
+    if (layers[i]->isVia()) {
       auto vlayer = static_cast<DRC::ViaLayer*>(layers[i]);
       auto l = lf.getLayers(vlayer);
       if (l.first >= 0) _aboveViaLayer[l.first]  = i;
@@ -151,6 +152,7 @@ Node* Router::createNode(const int x, const int y, const int z,
 Geom::PointSet Router::findValidPoints(const Geom::Rect& r, const int z) const
 {
   auto vert = isVert(z);
+  auto hor = isHor(z);
   auto prev = z, next = z;
   if (z < _maxLayer) {
     prev = z - 1;
@@ -163,7 +165,7 @@ Geom::PointSet Router::findValidPoints(const Geom::Rect& r, const int z) const
   Geom::PointSet points;
   points.insert(Geom::Point(x, y));
 
-  if ((vert && r.isVert()) || (!vert && r.isHor())) {
+  if ((vert && r.isVert()) || (hor && r.isHor())) {
     for (auto pr : {true, false}) {
       if ((pr && prev == z) || (!pr && next == z)) continue;
       auto layer = (pr ? prev : next);
@@ -344,6 +346,23 @@ void Router::expand(const Node* n)
   if ((n->parent() && n->parent()->z() > n->z()) || !isViaValid(n, true)) {
     expanddir.set(1, false);
   }
+
+  Node* newn{nullptr};
+  if (expanddir.test(0)) {
+#if DEBUG
+    COUT << "expanding via down\n";
+#endif
+    newn = createNode(n->x(), n->y(), n->z() - 1, n);
+    checkAndInsert(newn, n);
+  }
+  if (expanddir.test(1)) {
+#if DEBUG
+    COUT << "expanding via up\n";
+#endif
+    newn = createNode(n->x(), n->y(), n->z() + 1, n);
+    checkAndInsert(newn, n);
+  }
+
   const bool vert = isVert(n->z());
   if (vert) {
     if (n->y() < _bbox.ymin() || (n->parent() && n->parent()->z() == n->z() && n->parent()->y() <= n->y())) {
@@ -361,26 +380,11 @@ void Router::expand(const Node* n)
     }
   }
 
-
-  Node* newn{nullptr};
-  if (expanddir.test(0)) {
-#if DEBUG
-    COUT << "expanding via down\n";
-#endif
-    newn = createNode(n->x(), n->y(), n->z() - 1, n);
-    checkAndInsert(newn, n);
-  }
-  if (expanddir.test(1)) {
-#if DEBUG
-    COUT << "expanding via up\n";
-#endif
-    newn = createNode(n->x(), n->y(), n->z() + 1, n);
-    checkAndInsert(newn, n);
-  }
   std::set<int> gridpos;
   if (expanddir.test(2)) {
 #if DEBUG
-    COUT << "expanding left/down\n";
+    if (vert) COUT << "expanding down\n";
+    else COUT << "expanding left\n";
 #endif
     int snapc = snap(n, vert, false);
 #if DEBUG
@@ -418,7 +422,8 @@ void Router::expand(const Node* n)
   }
   if (expanddir.test(3)) {
 #if DEBUG
-    COUT << "expanding top/right\n";
+    if (vert) COUT << "expanding up\n";
+    else COUT << "expanding right\n";
 #endif
     Node* newn{nullptr};
     int snapc = snap(n, vert, true);
@@ -603,9 +608,9 @@ Geom::LayerRects Router::findSol()
     generateHananGrid();
 
 #if DEBUG
-    for (auto& l : _hanangrid) {
-      COUT << "layer : " << l.first << '\n';
-      for (auto& pos : l.second) {
+    for (unsigned l = 0; l < _hanangrid.size(); ++l) {
+      COUT << "layer : " << l << '\n';
+      for (auto& pos : _hanangrid[l]) {
         COUT << "pos : " << pos.first << " : ";
         for (auto& r : pos.second) {
           std::cout << "[" << r.first << ',' << r.second << "] ";
@@ -642,6 +647,14 @@ Geom::LayerRects Router::findSol()
         auto parent = n->parent();
         if (parent) {
           if (parent->z() == n->z()) {
+            while (true) {
+              auto p = parent->parent();
+              if (p && p->z() == parent->z()) {
+                parent = p;
+              } else {
+                break;
+              }
+            }
             sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(_widthx[n->z()], _widthy[n->z()]));
 #if DEBUG
             COUT << n->z() << ' ' << sol[n->z()].back().str() << '\n';

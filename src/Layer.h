@@ -16,19 +16,25 @@ enum class Direction {
   ORTHOGONAL
 };
 
+enum class LayerType {
+  METAL,
+  VIA
+};
+
 class Layer {
   private:
     const int _gdsNo;
     const std::string _name;
     const float _r[3]; // mean, -3\sigma, 3\sigma
-    const int _type : 1; //0 : Metal, 1 : Via
+    const LayerType _type;
   public:
-    Layer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur, const int type)
+    Layer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur, const LayerType type)
       : _gdsNo(gdsNo), _name(name), _r{mur, lr, ur}, _type{type} {}
     int gdsNo() const { return _gdsNo; }
     const std::string& name() const { return _name; }
     float meanR() const { return _r[0]; }
-    int type() const { return _type ? 1 : 0; }
+    bool isMetal() const { return _type == LayerType::METAL; }
+    bool isVia() const { return _type == LayerType::VIA; }
     ~Layer()
     {
       //std::cout << "layer : " << _name << ' ' << _gdsNo << " {" << _r[0] << ',' << _r[1] << ',' << _r[2] << "}\n";
@@ -49,7 +55,7 @@ class MetalLayer : public Layer {
     Direction _dir;
   public:
     MetalLayer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur)
-      : Layer(gdsNo, name, mur, lr, ur, 1), _pitch(0), _width(0), _minL(0), _maxL(0), _e2e(0), _offset(0),
+      : Layer(gdsNo, name, mur, lr, ur, LayerType::METAL), _pitch(0), _width(0), _minL(0), _maxL(0), _e2e(0), _offset(0),
     _c{0,0,0}, _cc{0, 0, 0}, _dir(Direction::ORTHOGONAL) {}
     int pitch() const { return _pitch;}
     int width() const { return _width;}
@@ -63,10 +69,11 @@ class MetalLayer : public Layer {
     void setMaxL(const int l) {_maxL = l;}
     void setE2E(const int e) {_e2e = e;}
     void setOffset(const int o) {_offset = o;}
-    void setDirection(const bool horiz) { _dir = horiz ? Direction::HORIZONTAL : Direction::VERTICAL; }
+    void setDirection(const int dir) { _dir = (dir == 0 ? Direction::HORIZONTAL : (dir == 1 ? Direction::VERTICAL : Direction::ORTHOGONAL)); }
     void setC(const float muc, const float lc, const float uc) { _c[0] = muc; _c[1] = lc; _c[2] = uc; }
     void setCC(const float muc, const float lc, const float uc) { _cc[0] = muc; _cc[1] = lc; _cc[2] = uc; }
-    bool isHorizontal() const { return _dir == Direction::HORIZONTAL; }
+    bool isHorizontal() const { return _dir == Direction::HORIZONTAL || _dir == Direction::ORTHOGONAL; }
+    bool isVertical() const { return _dir == Direction::VERTICAL || _dir == Direction::ORTHOGONAL; }
     ~MetalLayer()
     {
       //std::cout << _pitch << ' ' << _width << ' ' << _minL << ' ' << _maxL << ' ' << _e2e << ' ' << _offset << ' ';
@@ -99,7 +106,7 @@ class ViaLayer : public Layer {
     std::vector<ViaArray> _va;
   public:
     ViaLayer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur)
-      : Layer(gdsNo, name, mur, lr, ur, 0), _sw{}, _layerPair(nullptr, nullptr),
+      : Layer(gdsNo, name, mur, lr, ur, LayerType::VIA), _sw{}, _layerPair(nullptr, nullptr),
       _coverl{0, 0}, _coveru{0, 0} {}
     void setSpace(const int x, const int y) {_sw._space.first = x; _sw._space.second = y;}
     void setWidth(const int x, const int y) {_sw._width.first = x; _sw._width.second = y;}
@@ -159,6 +166,20 @@ class LayerInfo {
     int signalBottomLayer() const { return (_sbottom ? getLayerIndex(_sbottom->name()) : 0); }
     int signalTopLayer() const { return (_stop ? getLayerIndex(_stop->name()) : _topMetal); }
     bool populated() const { return _populated; }
+    bool isVertical(const int z) const
+    {
+      if (z < static_cast<int>(_layers.size()) && _layers[z]->isMetal()) {
+        return static_cast<MetalLayer*>(_layers[z])->isVertical();
+      }
+      return true;
+    }
+    bool isHorizontal(const int z) const
+    {
+      if (z < static_cast<int>(_layers.size()) && _layers[z]->isMetal()) {
+        return static_cast<MetalLayer*>(_layers[z])->isHorizontal();
+      }
+      return true;
+    }
 };
 
 }

@@ -5,7 +5,7 @@ ifeq (,$(findstring darwin,$(GCC_TARGET)))
     MARCH += -march=native -fopenmp
 endif
 #CCFLAGS = -Wall -g -std=c++11 -D_GLIBCXX_PARALLEL -march=native -funroll-loops -fopenmp
-CCFLAGS = -Wall -Ofast -g -std=c++11 -D_GLIBCXX_PARALLEL $(MARCH) -funroll-loops
+CCFLAGS = -Wall -g -std=c++11 -D_GLIBCXX_PARALLEL $(MARCH) -funroll-loops
 INCLUDES = ./include
 LFLAGS = 
 DEBUG = 0
@@ -19,14 +19,19 @@ DEPFLAGS = -MMD -MP
 
 MAIN = hanan_router
 
+ifeq ($(DEBUG), 1)
+OPTFLAGS = 
+else
+OPTFLAGS = -Ofast
+endif
 .PHONY: depend clean
 
 $(MAIN): $(OBJS) 
-	$(CPP) $(CCFLAGS) -I$(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
+	$(CPP) $(CCFLAGS) $(OPTFLAGS) -I$(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
 
 $(BIN)/%.o: $(SRC)/%.cpp 
 	@mkdir -p $(BIN)
-	$(CPP) $(CCFLAGS) -I$(INCLUDES) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
+	$(CPP) $(CCFLAGS) $(OPTFLAGS) -I$(INCLUDES) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(MAIN) $(BIN)/*.o $(BIN)/*.d
