@@ -125,17 +125,20 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100
   _minLayer = lf.signalBottomLayer();
   _maxLayer = lf.signalTopLayer();
   _maxRoutingLayer = static_cast<int>(_widthx.size()) - 1;
+  _nodes.clear();
+  _nodes.resize(_maxLayer + 1);
 }
 
 Node* Router::createNode(const int x, const int y, const int z,
     const Node* parent, const int fcost, const int tcost)
 {
-  auto tpl = std::make_tuple(x, y, z);
-  auto it = _nodes.find(tpl);
+  auto& nz = _nodes[z];
+  auto coord = std::make_pair(x,y);
+  auto it = nz.find(coord);
   Node* n = nullptr;
-  if (it == _nodes.end()) {
+  if (it == nz.end()) {
     n = new Node(x, y, z, fcost, tcost, parent);
-    _nodes[tpl] = n;
+    nz[coord] = n;
 #if DEBUG
     COUT << "creating new node : " << x << ',' << y << ',' << z << '\n';
 #endif
@@ -291,14 +294,14 @@ int Router::snap(const Node* n, const bool vert, const bool up) const
 {
   int snapc = (vert ? (up ? _bbox.ymin() : _bbox.ymax())
       : (up ? _bbox.xmin() : _bbox.xmax()));
-  auto it = _hanangrid.find(n->z());
-  if (it != _hanangrid.end()) {
+  const auto& grid = _hanangrid[n->z()];
+  if (!grid.empty()) {
     int pos = n->y(), lkp = n->x();
     if (vert) {
       std::swap(pos, lkp);
     }
-    auto itp = it->second.find(pos);
-    if (itp != it->second.end()) {
+    auto itp = grid.find(pos);
+    if (itp != grid.end()) {
       for (const auto& r : itp->second) {
         if (lkp >= r.first && lkp <= r.second) {
           snapc = (up ? r.second : r.first);
@@ -317,10 +320,10 @@ void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, 
 {
   int adjLayer = (above ? (n->z() < _maxLayer ? n->z() + 1 : -1) : (n->z() > _minLayer ? n->z() - 1 : -1));
   if (adjLayer >= 0) {
-    auto ith = _hanangrid.find(adjLayer);
-    if (ith != _hanangrid.end()) {
+    const auto& grid = _hanangrid[adjLayer];
+    if (!grid.empty()) {
       auto coord = (isVert(n->z()) ? n->y() : n->x());
-      for (auto& pos : ith->second) {
+      for (auto& pos : grid) {
         if ((up && pos.first > coord && pos.first < snapc) || (!up && pos.first < coord && pos.first > snapc)) {
           s.insert(pos.first);
         }
@@ -497,6 +500,7 @@ void Router::invertRange(IntRangeSet& s, const bool vert)
 void Router::generateHananGrid()
 {
   _hanangrid.clear();
+  _hanangrid.resize(_maxLayer + 1);
   std::set<int> xcoords, ycoords;
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
     auto box = _bbox;
@@ -507,6 +511,7 @@ void Router::generateHananGrid()
     _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymax(), box.xmax(), box.ymax() + 10));
   }
   for (auto& l : _tobstacles) {
+    if (l.first > _maxLayer) continue;
     for (auto& o : l.second) {
       if (!o.overlaps(_bbox)) continue;
       xcoords.insert(o.xmin());
@@ -522,6 +527,7 @@ void Router::generateHananGrid()
     }
   }
   for (auto& l : _tobstacles) {
+    if (l.first > _maxLayer) continue;
     bool vert = isVert(l.first);
     std::map<int, IntRangeSet> tmpranges;
     for (auto& x : (vert ? xcoords : ycoords)) {
@@ -551,7 +557,7 @@ void Router::generateHananGrid()
     for (auto& r : tmpranges) {
       invertRange(r.second, vert);
     }
-    _hanangrid.emplace(l.first, tmpranges);
+    _hanangrid[l.first] = tmpranges;
   }
 }
 

@@ -112,7 +112,7 @@ struct RangeComp {
 typedef std::set<IntRange, RangeComp> IntRangeSet;
 typedef std::set<Node*, NodeComp> NodeSet;
 typedef std::multiset<const Node*, NodeCostComp> PriorityQueue;
-typedef std::map<std::tuple<int, int, int>, Node*> NodeMap;
+typedef std::vector<std::map<std::pair<int, int>, Node*>> NodeMap;
 class Router {
   private:
     PriorityQueue _pq;
@@ -120,7 +120,7 @@ class Router {
     NodeMap _nodes;
     Geom::LayerRects _obstacles, _tobstacles;
     CostFn _cf;
-    std::map<int, std::map<int, IntRangeSet>> _hanangrid;
+    std::vector<std::map<int, IntRangeSet>> _hanangrid;
     Geom::Rect _bbox;
     const Node *_sol;
     std::vector<int> _widthx, _spacex;
@@ -168,7 +168,9 @@ class Router {
     {
       COUT << "flushing nodes\n";
       _pq.clear();
-      for (auto& n : _nodes) delete n.second;
+      for (auto& l : _nodes) {
+        for (auto& n : l) delete n.second;
+      }
       _nodes.clear();
       _expansions = 0;
       _bbox = Geom::Rect();
