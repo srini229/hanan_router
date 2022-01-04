@@ -39,6 +39,7 @@ int main(int argc, char* argv[])
     hrdb.readDataFile(stfile);
     hrdb.findSol();
     hrdb.plot();
+    hrdb.printSol();
   }
 
   return 0;

@@ -66,7 +66,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   auto minz = std::min(n1.z(), n2.z());
   auto maxz = std::max(n1.z(), n2.z());
   CostType minHCost(20000), minVCost(20000);
-  if (minz == maxz) {
+  if (_layerHCost[minz] != _layerVCost[minz]) {
     if (minz < _topRoutingLayer) maxz = minz + 1;
     else minz -= 1;
   }
@@ -337,7 +337,7 @@ void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, 
 
 void Router::expand(const Node* n)
 {
-  std::bitset<4> expanddir{0xF}; // 0:dn, 1:up, 2:left/down, 3:right/up
+  std::bitset<6> expanddir{0x3F}; // 0:dn, 1:up, 2:left, 3:right, 4:down, 5:right
 #if DEBUG
   n->print("expanding node :");
 #endif
@@ -351,71 +351,66 @@ void Router::expand(const Node* n)
   Node* newn{nullptr};
   if (expanddir.test(0)) {
 #if DEBUG
-    COUT << "expanding via down\n";
+    COUT << "\texpanding via down\n";
 #endif
     newn = createNode(n->x(), n->y(), n->z() - 1, n);
     checkAndInsert(newn, n);
   }
   if (expanddir.test(1)) {
 #if DEBUG
-    COUT << "expanding via up\n";
+    COUT << "\texpanding via up\n";
 #endif
     newn = createNode(n->x(), n->y(), n->z() + 1, n);
     checkAndInsert(newn, n);
   }
 
+  const bool horiz = isHor(n->z());
   const bool vert = isVert(n->z());
-  if (vert) {
-    if (n->y() < _bbox.ymin() || (n->parent() && n->parent()->z() == n->z() && n->parent()->y() <= n->y())) {
+  if (horiz) {
+    if (n->x() < _bbox.xmin() || (n->parent() && n->parent()->z() == n->z() && n->parent()->y() == n->y() && n->parent()->x() <= n->x())) {
       expanddir.set(2, false);
     }
-    if (n->y() > _bbox.ymax() || (n->parent() && n->parent()->z() == n->z() && n->parent()->y() >= n->y())) {
+    if (n->x() > _bbox.xmax() || (n->parent() && n->parent()->z() == n->z() && n->parent()->y() == n->y() && n->parent()->x() <= n->x())) {
       expanddir.set(3, false);
     }
   } else {
-    if (n->x() < _bbox.xmin()|| (n->parent() && n->parent()->z() == n->z() && n->parent()->x() <= n->x())) {
-      expanddir.set(2, false);
+    expanddir.set(2, false);
+    expanddir.set(3, false);
+  }
+  if (vert) {
+    if (n->y() < _bbox.ymin() || (n->parent() && n->parent()->z() == n->z() && n->parent()->x() == n->x() && n->parent()->y() <= n->y())) {
+      expanddir.set(4, false);
     }
-    if (n->x() > _bbox.xmax()|| (n->parent() && n->parent()->z() == n->z() && n->parent()->x() <= n->x())) {
-      expanddir.set(3, false);
+    if (n->y() > _bbox.ymax() || (n->parent() && n->parent()->z() == n->z() && n->parent()->x() == n->x() && n->parent()->y() >= n->y())) {
+      expanddir.set(5, false);
     }
+  } else {
+    expanddir.set(4, false);
+    expanddir.set(5, false);
   }
 
   std::set<int> gridpos;
   if (expanddir.test(2)) {
 #if DEBUG
-    if (vert) COUT << "expanding down\n";
-    else COUT << "expanding left\n";
+    COUT << "\texpanding left\n";
 #endif
-    int snapc = snap(n, vert, false);
+    int snapc = snap(n, false, false);
 #if DEBUG
-    COUT << "snapcd : " << snapc << '\n';
+    COUT << "\t\tsnapcd : " << snapc << '\n';
 #endif
     newn = nullptr;
-    if (vert) {
-      if (snapc < n->y()) {
-        newn = createNode(n->x(), snapc, n->z(), n);
-      }
-    } else {
-      if (snapc < n->x()) {
-        newn = createNode(snapc, n->y(), n->z(), n);
-      }
+    if (snapc < n->x()) {
+      newn = createNode(snapc, n->y(), n->z(), n);
     }
     if (newn) checkAndInsert(newn, n);
     getAdjacentGrid(gridpos, n, true, false, snapc);
     getAdjacentGrid(gridpos, n, false, false, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
-      COUT << "grid pos : " << pos << '\n';
+      COUT << "\t\tgrid pos : " << pos << '\n';
 #endif
-      if (vert) {
-        if (pos < n->y()) {
-          newn = createNode(n->x(), pos, n->z(), n);
-        }
-      } else {
-        if (pos < n->x()) {
-          newn = createNode(pos, n->y(), n->z(), n);
-        }
+      if (pos < n->x()) {
+        newn = createNode(pos, n->y(), n->z(), n);
       }
       if (newn) checkAndInsert(newn, n);
     }
@@ -423,39 +418,78 @@ void Router::expand(const Node* n)
   }
   if (expanddir.test(3)) {
 #if DEBUG
-    if (vert) COUT << "expanding up\n";
-    else COUT << "expanding right\n";
+    COUT << "\texpanding right\n";
 #endif
     Node* newn{nullptr};
-    int snapc = snap(n, vert, true);
+    int snapc = snap(n, false, true);
 #if DEBUG
-    COUT << "snapcu : " << snapc << '\n';
+    COUT << "\t\tsnapcu : " << snapc << '\n';
 #endif
     newn = nullptr;
-    if (vert) {
-      if (snapc > n->y()) {
-        newn = createNode(n->x(), snapc, n->z(), n);
-      }
-    } else {
-      if (snapc > n->x()) {
-        newn = createNode(snapc, n->y(), n->z(), n);
-      }
+    if (snapc > n->x()) {
+      newn = createNode(snapc, n->y(), n->z(), n);
     }
     if (newn) checkAndInsert(newn, n);
     getAdjacentGrid(gridpos, n, true, true, snapc);
     getAdjacentGrid(gridpos, n, false, true, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
-      COUT << "grid pos : " << pos << '\n';
+      COUT << "\t\tgrid pos : " << pos << '\n';
 #endif
-      if (vert) {
-        if (pos > n->y()) {
-          newn = createNode(n->x(), pos, n->z(), n);
-        }
-      } else {
-        if (pos > n->x()) {
-          newn = createNode(pos, n->y(), n->z(), n);
-        }
+      if (pos > n->x()) {
+        newn = createNode(pos, n->y(), n->z(), n);
+      }
+      if (newn) checkAndInsert(newn, n);
+    }
+  }
+  if (expanddir.test(4)) {
+#if DEBUG
+    COUT << "\texpanding down\n";
+#endif
+    int snapc = snap(n, true, false);
+#if DEBUG
+    COUT << "\t\tsnapcd : " << snapc << '\n';
+#endif
+    newn = nullptr;
+    if (snapc < n->y()) {
+      newn = createNode(n->x(), snapc, n->z(), n);
+    }
+    if (newn) checkAndInsert(newn, n);
+    getAdjacentGrid(gridpos, n, true, false, snapc);
+    getAdjacentGrid(gridpos, n, false, false, snapc);
+    for (auto &pos : gridpos) {
+#if DEBUG
+      COUT << "\t\tgrid pos : " << pos << '\n';
+#endif
+      if (pos < n->y()) {
+        newn = createNode(n->x(), pos, n->z(), n);
+      }
+      if (newn) checkAndInsert(newn, n);
+    }
+    gridpos.clear();
+  }
+  if (expanddir.test(5)) {
+#if DEBUG
+    COUT << "\texpanding up\n";
+#endif
+    Node* newn{nullptr};
+    int snapc = snap(n, true, true);
+#if DEBUG
+    COUT << "\t\tsnapcu : " << snapc << '\n';
+#endif
+    newn = nullptr;
+    if (snapc > n->y()) {
+      newn = createNode(n->x(), snapc, n->z(), n);
+    }
+    if (newn) checkAndInsert(newn, n);
+    getAdjacentGrid(gridpos, n, true, true, snapc);
+    getAdjacentGrid(gridpos, n, false, true, snapc);
+    for (auto &pos : gridpos) {
+#if DEBUG
+      COUT << "\t\tgrid pos : " << pos << '\n';
+#endif
+      if (pos > n->y()) {
+        newn = createNode(n->x(), pos, n->z(), n);
       }
       if (newn) checkAndInsert(newn, n);
     }
@@ -536,37 +570,39 @@ void Router::generateHananGrid()
   }
   for (auto& l : _tobstacles) {
     if (l.first > _maxLayer) continue;
-    bool vert = isVert(l.first);
-    std::map<int, IntRangeSet> tmpranges;
-    for (auto& x : (vert ? xcoords : ycoords)) {
-      if ((vert && x >= _bbox.xmin() && x <= _bbox.xmax()) || 
-          (!vert && x >= _bbox.ymin() && x <= _bbox.ymax())) {
-        tmpranges[x].clear();
+    for (auto i : {0, 1}) {
+      if ((i == 0 && !isVert(l.first)) || (i == 1 && !isHor(l.first))) continue;
+      std::map<int, IntRangeSet> tmpranges;
+      for (auto& x : ((i == 0) ? xcoords : ycoords)) {
+        if ((i == 0 && x >= _bbox.xmin() && x <= _bbox.xmax()) || 
+            (i == 1 && x >= _bbox.ymin() && x <= _bbox.ymax())) {
+          tmpranges[x].clear();
+        }
       }
-    }
 
-    for (auto& v : tmpranges) {
-      for (auto& o : l.second) {
-        if (vert) {
-          if (v.first > o.xmin() && v.first < o.xmax()) {
-            auto minv{std::max(o.ymin(), _bbox.ymin() - 1)};
-            auto maxv{std::min(o.ymax(), _bbox.ymax())};
-            insertRange(tmpranges[v.first], std::make_pair(minv, maxv));
-          }
-        } else {
-          if (v.first > o.ymin() && v.first < o.ymax()) {
-            auto minv{std::max(o.xmin(), _bbox.xmin() - 1)};
-            auto maxv{std::min(o.xmax(), _bbox.xmax())};
-            insertRange(tmpranges[v.first], std::make_pair(minv, maxv));
+      for (auto& v : tmpranges) {
+        for (auto& o : l.second) {
+          if (i == 0) {
+            if (v.first > o.xmin() && v.first < o.xmax()) {
+              auto minv{std::max(o.ymin(), _bbox.ymin() - 1)};
+              auto maxv{std::min(o.ymax(), _bbox.ymax())};
+              insertRange(tmpranges[v.first], std::make_pair(minv, maxv));
+            }
+          } else {
+            if (v.first > o.ymin() && v.first < o.ymax()) {
+              auto minv{std::max(o.xmin(), _bbox.xmin() - 1)};
+              auto maxv{std::min(o.xmax(), _bbox.xmax())};
+              insertRange(tmpranges[v.first], std::make_pair(minv, maxv));
+            }
           }
         }
       }
+      for (auto& r : tmpranges) {
+        invertRange(r.second, i == 0);
+      }
+      if (i == 0) _hanangridv[l.first] = tmpranges;
+      else _hanangridh[l.first] = tmpranges;
     }
-    for (auto& r : tmpranges) {
-      invertRange(r.second, vert);
-    }
-    if (vert) _hanangridv[l.first] = tmpranges;
-    else _hanangridh[l.first] = tmpranges;
   }
 }
 
@@ -577,7 +613,6 @@ Geom::LayerRects Router::findSol()
   SaveRestoreStream src(_name + "_route.log");
 #endif
   static std::string debugplot{getenv("HANAN_DEBUG_WIRE") ? getenv("HANAN_DEBUG_WIRE") : ""};
-  if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) writeSTO();
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
     _bbox = Geom::Rect();
@@ -603,6 +638,7 @@ Geom::LayerRects Router::findSol()
       }
     }*/
     Geom::MergeLayerRects(_tobstacles, _obstacles);
+    if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) writeSTO();
     /*for (auto& l : _tobstacles) {
       COUT << "layer after : " << l.first << '\n';
       for (auto& o : l.second) {
@@ -639,9 +675,6 @@ Geom::LayerRects Router::findSol()
       if (_targets.find(t) != _targets.end()) {
         _sol = t;
         COUT << "sol found " << std::endl;
-#if DEBUG
-        printSol();
-#endif
         break;
       }
       _pq.erase(_pq.begin());
@@ -662,9 +695,11 @@ Geom::LayerRects Router::findSol()
         auto parent = n->parent();
         if (parent) {
           if (parent->z() == n->z()) {
+            const bool vert = (n->x() == parent->x());
             while (true) {
               auto p = parent->parent();
-              if (p && p->z() == parent->z()) {
+              const bool pv = (p ? p->x() == parent->x() : !vert);
+              if (p && p->z() == parent->z() && pv == vert) {
                 parent = p;
               } else {
                 break;
@@ -690,13 +725,15 @@ Geom::LayerRects Router::findSol()
   } else {
     COUT << "source or target empty!\n";
   }
-  if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) plot();
+  if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) {
+    plot();
+    printSol();
+  }
   return sol;
 }
 
 void Router::printSol() const
 {
-#if DEBUG
   for (auto& s : _sources) {
     s->print("source : ");
   }
@@ -715,14 +752,12 @@ void Router::printSol() const
       n = n->parent();
     }
   }
-#endif
 }
 
 
 void Router::plot() const
 {
   std::ofstream ofs(_name + "_route.gplt");
-  COUT << "plotting route to " << _name << "_route.gplt\n";
   if (ofs.is_open()) {
     COUT << "plotting route to " << _name << "_route.gplt\n";
     ofs << "unset key\n";
@@ -789,7 +824,7 @@ void Router::writeSTO() const
     }
     for (auto& l : _tobstacles) {
       for (auto& o : l.second) {
-        ofs << "Obstacle " << o.xmin() << ' ' << o.xmax() << ' ' << o.width() << ' ' << o.height() << ' ' << l.first << '\n';
+        ofs << "Obstacle " << o.xmin() << ' ' << o.ymin() << ' ' << o.width() << ' ' << o.height() << ' ' << l.first << '\n';
       }
     }
   }
