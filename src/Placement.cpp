@@ -268,26 +268,39 @@ void Module::plot() const
 
 void Module::checkShort() const
 {
-  auto it1 = _nets.begin();
-  auto it2 = std::next(it1);
-  while (it2 != _nets.end()) {
+  for (auto it1 = _nets.begin(); it1 != _nets.end(); ++it1) {
+    for (auto it2 = std::next(it1); it2 != _nets.end(); ++it2) {
+      auto& s1 = it1->second.routeShapes();
+      auto& s2 = it2->second.routeShapes();
+      for (auto& l : s1) {
+        auto its2 = s2.find(l.first);
+        if (its2 == s2.end()) continue;
+        for (auto& o1 : l.second) {
+          for (auto& o2 : its2->second) {
+            if (o1.overlaps(o2)) {
+              COUT << "SHORT between " << it1->second.name() << " & " << it2->second.name() << " @ layer : " << l.first << '\n';
+              COUT << o1.str() << ' ' << o2.str() << '\n';
+            }
+          }
+        }
+      }
+    }
+  }
+  for (auto it1 = _nets.begin(); it1 != _nets.end(); ++it1) {
     auto& s1 = it1->second.routeShapes();
-    auto& s2 = it2->second.routeShapes();
+    auto& s2 = _obstacles;
     for (auto& l : s1) {
       auto its2 = s2.find(l.first);
       if (its2 == s2.end()) continue;
       for (auto& o1 : l.second) {
         for (auto& o2 : its2->second) {
           if (o1.overlaps(o2)) {
-            COUT << "SHORT between " << it1->second.name() << " & " << it2->second.name() << " @ layer : " << l.first << '\n';
+            COUT << "SHORT between " << it1->second.name() << " & obstacle @ layer : " << l.first << '\n';
             COUT << o1.str() << ' ' << o2.str() << '\n';
           }
         }
       }
     }
-
-    it1 = it2;
-    ++it2;
   }
 }
 

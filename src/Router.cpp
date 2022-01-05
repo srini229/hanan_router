@@ -771,9 +771,23 @@ void Router::plot() const
         }
       }
     }
-    ofs << "plot[:][:] '-' using 1:2 w filledcurves lt -1 lw 2 lc 'red', '-' using 1:2 w filledcurves lt -1 lw 2 lc 'blue', '-' using 1:2 w l lt -1 lw 3 lc 6\n";
     int dx{std::max(2, _bbox.width()/100)};
     int dy{std::max(2, _bbox.height()/100)};
+    if (_sol) {
+      const Node* n = _sol;
+      const Node* prev = _sol->parent();
+      while (prev) {
+        if (prev->z() != n->z()) {
+          Geom::Rect b(n->x() - dx, n->y() - dy, n->x() + dx, n->y() + dy);
+          const auto& color = LAYER_COLORS[n->z() % LAYER_COLORS.size()];
+          ofs << "set object " << cnt++ << " circle at ";
+          ofs << n->x() << "," << n->y() << " size " << dx << " fillstyle transparent solid 0.5 fillcolor \"" << color << "\" behind\n";
+        }
+        n = prev;
+        prev = prev->parent();
+      }
+    }
+    ofs << "plot[:][:] '-' using 1:2 w filledcurves lt -1 lw 2 lc 'red', '-' using 1:2 w filledcurves lt -1 lw 2 lc 'blue', '-' using 1:2 w l lt -1 lw 3 lc 6\n";
     for (auto& s : _sources) {
       Geom::Rect b(s->x() - dx, s->y() - dy, s->x() + dx, s->y() + dy);
       ofs << b.xmin() << " " << b.ymin() << "\n";

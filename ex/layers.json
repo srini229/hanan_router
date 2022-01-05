@@ -38,7 +38,7 @@
 {
 "Layer": "M1",
 "GdsLayerNo": 31,
-"Direction": "V",
+"Direction": "O",
 "GdsDatatype": {"Draw":0, "Pin":32, "Label":20, "Blockage":5},
 "Color": [],
 "Pitch": 280,
@@ -72,7 +72,7 @@
 "Layer": "M2",
 "GdsLayerNo": 32,
 "GdsDatatype": {"Draw":0, "Pin":32, "Label":20, "Blockage":5},
-"Direction": "H",
+"Direction": "O",
 "Color": [],
 "Pitch": 320,
 "Width": 180,

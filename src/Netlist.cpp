@@ -8,15 +8,17 @@ using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
 const auto& npos = std::string::npos;
 
-Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu) : _uu(uu)
+Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu) : _uu(uu), _valid{1}
 {
   if (plfile.empty()) {
     CERR<< "missing placement file" <<std::endl;
+    _valid = 0;
     return;
   }
   std::ifstream ifs(plfile);
   if (!ifs) {
     CERR << "unable to open placement file " << plfile <<std::endl;
+    _valid = 0;
     return;
   }
   ordered_json oj = json::parse(ifs);
@@ -127,11 +129,13 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
 {
   if (leffile.empty()) {
     CERR<< "missing leffile" <<std::endl;
+    _valid = 0;
     return;
   }
   std::ifstream ifs(leffile);
   if (!ifs) {
     CERR << "unable to open leffile " << leffile <<std::endl;
+    _valid = 0;
     return;
   }
   std::string line;

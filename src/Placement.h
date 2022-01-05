@@ -175,6 +175,7 @@ class Module {
 class Netlist {
   private:
     const int _uu;
+    int _valid;
     Modules _modules;
     void build();
     void loadLEF(const std::string& leffile, const DRC::LayerInfo& lf);
@@ -185,6 +186,7 @@ class Netlist {
     void print() const;
     void route(Router::Router& r)
     {
+      if (!_valid) return;
       for (auto& m : _modules) m.second->route(r);
     }
     void plot() const
@@ -193,6 +195,7 @@ class Netlist {
     }
     void checkShort() const
     {
+      if (!_valid) return;
       for (auto& m : _modules) m.second->checkShort();
     }
 };
