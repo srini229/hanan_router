@@ -113,8 +113,9 @@ class Rect {
     Rect bloatby(const int c) const { return Rect(xmin() - c, ymin() - c, xmax() + c, ymax() + c); }
     Rect bloatby(const int x, const int y) const { return Rect(xmin() - x, ymin() - y, xmax() + x, ymax() + y); }
     
-    int width() const { return xmax() - xmin(); }
-    int height() const { return ymax() - ymin(); }
+    int width()  const { return xmax()  - xmin(); }
+    int height() const { return ymax()  - ymin(); }
+    int halfpm() const { return width() + height(); }
 
     bool isVert() const { return width() <= height(); }
     bool isHor() const { return height() <= width(); }

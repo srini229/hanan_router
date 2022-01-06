@@ -55,8 +55,20 @@ class Net {
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
     const Geom::Rect& bbox() const { return _bbox; }
     const bool open() const { return _unroute ? true : false; }
+    void update()
+    {
+      for (auto& p : _pins) {
+        for (auto& l : p->shapes()) {
+          for (auto& s : l.second) {
+            _bbox.merge(Geom::Rect(s.xcenter(), s.ycenter(), s.xcenter(), s.ycenter()));
+          }
+        }
+      }
+    }
+    int halfpm() const { return _bbox.halfpm(); }
 };
 typedef std::map<std::string, Net> Nets;
+typedef std::vector<Net*> NetsVec;
 
 
 class Instance {
@@ -159,6 +171,12 @@ class Module {
     {
       _obstacles[layer].push_back(r);
     }
+    void updateNets()
+    {
+      for (auto& n : _nets) {
+        n.second.update();
+      }
+    }
 
     void print() const;
     void route(Router::Router& r);
@@ -169,6 +187,7 @@ class Module {
 
     void writeDEF(const std::string& nstr = "") const;
     void writeLEF() const;
+
 };
 
 
