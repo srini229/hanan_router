@@ -189,6 +189,11 @@ Geom::PointSet Router::findValidPoints(const Geom::Rect& r, const int z) const
 
   COUT << z << ' ' << r.str() << ' ' << _widthx[z] << ' ' << _widthy[z] << ' ' << r.width() << ' ' << r.height() << '\n';
 
+#if DEBUG
+  for (auto & p : points) {
+    COUT << "p : " << p.str() << '\n';
+  }
+#endif
   if (vert && hor) {
     if (_widthy[z] <= r.width()) {
       int x = (r.xmin() + _widthy[z] / 2), y = r.ycenter();
@@ -209,11 +214,17 @@ Geom::PointSet Router::findValidPoints(const Geom::Rect& r, const int z) const
       }
     }
   }
+#if DEBUG
+  for (auto & p : points) {
+    COUT << "pp : " << p.str() << '\n';
+  }
+#endif
   return points;
 }
 
 void Router::addSource(const Geom::Rect& r, const int z)
 {
+  _sourceshapes[z].push_back(r);
   auto points = findValidPoints(r, z);
   for (auto& p : points) {
     _sources.insert(createNode(p.x(), p.y(), z, nullptr, 0));
@@ -222,6 +233,7 @@ void Router::addSource(const Geom::Rect& r, const int z)
 
 void Router::addTarget(const Geom::Rect& r, const int z)
 {
+  _targetshapes[z].push_back(r);
   auto points = findValidPoints(r, z);
   for (auto& p : points) {
     _targets.insert(createNode(p.x(), p.y(), z, nullptr, -1, 0));
@@ -728,7 +740,57 @@ Geom::LayerRects Router::findSol()
                 break;
               }
             }
-            sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(_widthx[n->z()]/2, _widthy[n->z()]/2));
+            auto extnx1 = _widthx[n->z()]/2;
+            auto extnx2 = _widthx[n->z()]/2;
+            auto extny1 = _widthy[n->z()]/2;
+            auto extny2 = _widthy[n->z()]/2;
+            if (n->y() > parent->y()) {
+              if (isTarget(n)) extny2 = 0;
+              if (isSource(parent)) extny1 = 0;
+              auto it = _endextnymax.find(n);
+              if (it != _endextnymax.end()) {
+                extny2 = it->second;
+              }
+              it = _endextnymin.find(parent);
+              if (it != _endextnymin.end()) {
+                extny1 = it->second;
+              }
+            } else if (n->y() < parent->y()) {
+              if (isTarget(n)) extny1 = 0;
+              if (isSource(parent)) extny2 = 0;
+              auto it = _endextnymax.find(n);
+              if (it != _endextnymax.end()) {
+                extny2 = it->second;
+              }
+              it = _endextnymin.find(parent);
+              if (it != _endextnymin.end()) {
+                extny1 = it->second;
+              }
+            }
+            if (n->x() > parent->x()) {
+              if (isTarget(n)) extnx2 = 0;
+              if (isSource(parent)) extnx1 = 0;
+              auto it = _endextnxmax.find(n);
+              if (it != _endextnxmax.end()) {
+                extnx2 = it->second;
+              }
+              it = _endextnxmin.find(parent);
+              if (it != _endextnxmin.end()) {
+                extnx1 = it->second;
+              }
+            } else if (n->x() < parent->x()) {
+              if (isTarget(n)) extny1 = 0;
+              if (isSource(parent)) extnx2 = 0;
+              auto it = _endextnxmax.find(parent);
+              if (it != _endextnxmax.end()) {
+                extnx2 = it->second;
+              }
+              it = _endextnxmin.find(n);
+              if (it!= _endextnxmin.end()) {
+                extnx1 = it->second;
+              }
+            }
+            sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
 #if DEBUG
             COUT << n->z() << ' ' << sol[n->z()].back().str() << '\n';
 #endif
@@ -790,7 +852,7 @@ void Router::plot() const
       for (auto& b : l.second) {
         if (b.valid() && b.width() && b.height()) {
           ofs << "set object " << cnt++ << " rect from ";
-          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.5 fillcolor \"" << color << "\" behind\n";
+          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.5 fillcolor \"" << color << "\" behind # " << l.first << '\n';
         }
       }
     }
@@ -881,11 +943,71 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 #if DEBUG
       COUT << "layer : " << layer << " obs : " << spacex << ' ' << spacey << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
 #endif
+      auto obs = r.bloatby(spacex, spacey);
+      int x1 = spacex, x2 = spacex, y1 = spacey, y2 = spacey;
+      for (auto src : {true, false}) {
+        const auto it = src ? _sourceshapes.find(l.first) : _targetshapes.find(l.first);
+        const auto itend = src ? _sourceshapes.end() : _targetshapes.end();
+        const auto& nodes = src ? _sources : _targets;
+        if (it != itend) {
+          for (const auto& s : it->second) {
+            if (isVert(l.first)) {
+#if DEBUG
+              COUT << "source/target shape : " << s.str() << '\n';
+              COUT << "obs : " << obs.str() << '\n';
+              COUT << "r : " << r.str() << '\n';
+#endif
+              if (obs.ymin() <= s.ymin() && obs.ymax() >= s.ymax() && 
+                  obs.xmin() <= s.xmax() && obs.xmax() >= s.xmin()) {
+#if DEBUG
+                COUT << "overlapping : \n";
+#endif
+                if (r.ymin() >= s.ymax()) {
+                  for (auto& n : nodes) {
+                    if (n->z() == l.first && obs.contains(n->x(), n->y())) {
+                      _endextnymax[n] = 0;
+                    }
+                  }
+                  y1 = 0;
+                } else {
+                  for (auto& n : nodes) {
+                    if (n->z() == l.first && obs.contains(n->x(), n->y())) {
+                      _endextnymin[n] = 0;
+                    }
+                  }
+                  y2 = 0;
+                }
+              }
+            }
+            if (isHor(l.first)) {
+              if (obs.xmin() <= s.xmin() && obs.xmax() >= s.xmax() &&
+                  obs.ymin() <= s.ymax() && obs.ymax() >= s.ymin() ) {
+                if (r.xmin() >= s.xmax()) {
+                  for (auto& n : nodes) {
+                    if (n->z() == l.first && obs.contains(n->x(), n->y())) {
+                      _endextnxmax[n] = 0;
+                    }
+                  }
+                  x1 = 0;
+                } else {
+                  for (auto& n : nodes) {
+                    if (n->z() == l.first && obs.contains(n->x(), n->y())) {
+                      _endextnxmin[n] = 0;
+                    }
+                  }
+                  x2 = 0;
+                }
+              }
+            }
+          }
+        }
+      }
+      obs = r.bloatby(x1, y1, x2, y2);
       if (temp) {
-        _tobstacles[layer].push_back(r.bloatby(spacex, spacey));
+        _tobstacles[layer].push_back(obs);
         //COUT << "tobs : " << _tobstacles[layer].back().str() << '\n';
       } else {
-        _obstacles[layer].push_back(r.bloatby(spacex, spacey));
+        _obstacles[layer].push_back(obs);
         //COUT << "obs : " << _obstacles[layer].back().str() << '\n';
       }
     }

@@ -19,7 +19,7 @@ PinCVec Net::reorderPins() const
   return pins;
 }
 
-void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2)
+void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3)
 {
   TIME_M();
   _unroute = 0;
@@ -35,8 +35,6 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
     }*/
-    router.addObstacles(l1, true);
-    router.addObstacles(l2, true);
     auto pins = reorderPins();
     auto it1 = pins.rbegin();
     auto it2 = std::next(it1);
@@ -80,6 +78,9 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
+      router.addObstacles(l1, true);
+      router.addObstacles(l2, true);
+      router.addObstacles(l3, true);
       auto sol = router.findSol();
       if (!sol.empty()) {
         Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
@@ -90,6 +91,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       Geom::MergeLayerRects(const_cast<Geom::LayerRects&>((*it2)->shapes()), sol, &_bbox);
       it1 = it2;
       ++it2;
+      router.clearObstacles(true);
     }
     router.clearObstacles(true);
   }
@@ -171,7 +173,7 @@ void Module::route(Router::Router& router)
     std::sort(nets.begin(), nets.end(), [](const Net* a, const Net* b) -> bool
         { return a->halfpm() < b->halfpm(); });
     COUT << " routing : " << _name << '\n';
-    router.addObstacles(_obstacles);
+    //router.addObstacles(_obstacles);
     Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
     for (auto it = nets.begin(); it != nets.end(); ++it) {
       _netObstaclesUnrouted.clear();
@@ -180,7 +182,7 @@ void Module::route(Router::Router& router)
           Geom::MergeLayerRects(_netObstaclesUnrouted, p->shapes());
         }
       }
-      (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted);
+      (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles);
       Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());
     }
     router.clearObstacles();

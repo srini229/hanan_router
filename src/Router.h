@@ -131,6 +131,8 @@ class Router {
     const size_t _maxExpansions{100000};
     std::vector<int> _aboveViaLayer, _belowViaLayer;
     const DRC::LayerInfo& _lf;
+    std::map<const Node*, int> _endextnxmin, _endextnymin, _endextnxmax, _endextnymax;
+    Geom::LayerRects _sourceshapes, _targetshapes;
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -178,6 +180,9 @@ class Router {
       _bbox = Geom::Rect();
     }
     Geom::PointSet findValidPoints(const Geom::Rect& r, const int z) const;
+
+    bool isTarget(const Node* n) const { return _targets.find(const_cast<Node*>(n)) != _targets.end(); }
+    bool isSource(const Node* n) const { return _sources.find(const_cast<Node*>(n)) != _sources.end(); }
     
   public:
     Router(const DRC::LayerInfo& lf);
@@ -199,6 +204,12 @@ class Router {
     void clearSourceTargets() {
       _sources.clear();
       _targets.clear();
+      _sourceshapes.clear();
+      _targetshapes.clear();
+      _endextnxmin.clear();
+      _endextnymin.clear();
+      _endextnxmax.clear();
+      _endextnymax.clear();
       _sol = nullptr;
       flushNodes();
     }
