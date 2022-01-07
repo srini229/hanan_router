@@ -46,20 +46,36 @@ class CostFn {
 
 class Router;
 
+enum Direction
+{
+  DOWN = 0, UP, EAST, WEST, NORTH, SOUTH, MAXDIR
+};
+
 class Node {
   private:
     friend class Router;
     int _x, _y, _z;
     CostType _fcost, _tcost;
     Node const* _parent;
+    std::bitset<MAXDIR> _expanddir;
     Node(const int x = 0, const int y = 0, const int z = -1,
         const CostType fcost = -1, const CostType tcost = -1, Node const* parent = nullptr)
-      : _x(x), _y(y), _z(z), _fcost(fcost), _tcost(tcost), _parent(parent) {}
+      : _x(x), _y(y), _z(z), _fcost(fcost), _tcost(tcost), _parent(parent) {_expanddir.set();}
   public:
     int x() const { return _x; }
     int y() const { return _y; }
     int z() const { return _z; }
     Node const* parent() const { return _parent; }
+
+    bool viadown()     const { return _expanddir.test(DOWN); }
+    bool viaup()       const { return _expanddir.test(UP); }
+    bool expandeast()  const { return _expanddir.test(EAST); }
+    bool expandwest()  const { return _expanddir.test(WEST); }
+    bool expandnorth() const { return _expanddir.test(NORTH); }
+    bool expandsouth() const { return _expanddir.test(SOUTH); }
+
+    void setexpand(const int dir, const bool val) { if (dir < MAXDIR) _expanddir.set(dir, val); }
+    void clearexpand() { _expanddir.set(); }
 
     CostType fcost() const { return _fcost; }
     CostType tcost() const { return _tcost; }
@@ -69,7 +85,7 @@ class Node {
     void setParent(const Node* n) { _parent = n; }
     void print(const std::string& s) const
     {
-      COUT << s << ' ' << _x << ' ' << _y << ' ' << _z << ' ' << _fcost << ' ' << _tcost <<  ' ' << cost() << '\n';
+      COUT << s << ' ' << _x << ' ' << _y << ' ' << _z << ' ' << _fcost << ' ' << _tcost <<  ' ' << cost() << ' ' << _expanddir.to_string() << '\n';
     }
 };
 typedef std::vector<Node*> NodePtrVec;
@@ -183,6 +199,7 @@ class Router {
 
     bool isTarget(const Node* n) const { return _targets.find(const_cast<Node*>(n)) != _targets.end(); }
     bool isSource(const Node* n) const { return _sources.find(const_cast<Node*>(n)) != _sources.end(); }
+    void setexpand(Node* newn, const Node* parent = nullptr) const;
 
     
   public:

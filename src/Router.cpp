@@ -244,6 +244,10 @@ void Router::addSource(const Geom::Rect& r, const int z)
   for (auto& p : points) {
     _sources.insert(createNode(p.x(), p.y(), z, nullptr, 0));
   }
+  for (auto& s: _sources) {
+    setexpand(s);
+    s->print("src : ");
+  }
 }
 
 void Router::addTarget(const Geom::Rect& r, const int z)
@@ -318,7 +322,41 @@ void Router::insert(const Node* n)
   n->print("adding to pq :");
   if (n->parent()) n->parent()->print("\tparent:");
 #endif
+  setexpand(const_cast<Node*>(n), n->parent());
   _pq.insert(n);
+}
+
+void Router::setexpand(Node* newn, const Node* parent) const
+{
+  newn->clearexpand();
+  if (!parent) {
+    if (newn->z() >= _maxLayer || !isViaValid(newn, true)) {
+      newn->setexpand(UP, false);
+    }
+    if (newn->z() <= _minLayer || !isViaValid(newn, false)) {
+      newn->setexpand(DOWN, false);
+    }
+  } else {
+    if (newn->z() == parent->z()) {
+      if (newn->x() == parent->x()) {
+        if (newn->y() < parent->y()) {
+          newn->setexpand(NORTH, false);
+        } else if (newn->y() > parent->y()) {
+          newn->setexpand(SOUTH, false);
+        }
+      } else if (newn->y() == parent->y()) {
+        if (newn->x() < parent->x()) {
+          newn->setexpand(EAST, false);
+        } else if (newn->x() > parent->x()) {
+          newn->setexpand(WEST, false);
+        }
+      }
+    } else if (newn->z() < parent->z() || newn->z() >= _maxLayer || !isViaValid(newn, true)) {
+      newn->setexpand(UP, false);
+    } else if (newn->z() > parent->z() || newn->z() <= _minLayer || !isViaValid(newn, false)) {
+      newn->setexpand(DOWN, false);
+    }
+  }
 }
 
 void Router::checkAndInsert(Node* newn, const Node* n)
@@ -398,28 +436,22 @@ void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, 
   }
 }
 
-void Router::expand(const Node* n)
+void Router::expand(const Node* n1)
 {
-  std::bitset<6> expanddir{0x3F}; // 0:dn, 1:up, 2:left, 3:right, 4:down, 5:right
+  auto n = const_cast<Node*>(n1);
 #if DEBUG
   n->print("expanding node :");
 #endif
-  if ((n->parent() && n->parent()->z() < n->z()) || !isViaValid(n, false)) {
-    expanddir.set(0, false);
-  }
-  if ((n->parent() && n->parent()->z() > n->z()) || !isViaValid(n, true)) {
-    expanddir.set(1, false);
-  }
 
   Node* newn{nullptr};
-  if (expanddir.test(0)) {
+  if (n->viadown()) {
 #if DEBUG
     COUT << "\texpanding via down\n";
 #endif
     newn = createNode(n->x(), n->y(), n->z() - 1, n);
     checkAndInsert(newn, n);
   }
-  if (expanddir.test(1)) {
+  if (n->viaup()) {
 #if DEBUG
     COUT << "\texpanding via up\n";
 #endif
@@ -430,30 +462,30 @@ void Router::expand(const Node* n)
   const bool horiz = isHor(n->z());
   const bool vert = isVert(n->z());
   if (horiz) {
-    if (n->x() < _bbox.xmin() || (n->parent() && n->parent()->z() == n->z() && n->parent()->y() == n->y() && n->parent()->x() <= n->x())) {
-      expanddir.set(2, false);
+    if (n->x() < _bbox.xmin()) {
+      n->setexpand(2, false);
     }
-    if (n->x() > _bbox.xmax() || (n->parent() && n->parent()->z() == n->z() && n->parent()->y() == n->y() && n->parent()->x() <= n->x())) {
-      expanddir.set(3, false);
+    if (n->x() > _bbox.xmax()) {
+      n->setexpand(3, false);
     }
   } else {
-    expanddir.set(2, false);
-    expanddir.set(3, false);
+    n->setexpand(2, false);
+    n->setexpand(3, false);
   }
   if (vert) {
-    if (n->y() < _bbox.ymin() || (n->parent() && n->parent()->z() == n->z() && n->parent()->x() == n->x() && n->parent()->y() <= n->y())) {
-      expanddir.set(4, false);
+    if (n->y() < _bbox.ymin()) {
+      n->setexpand(4, false);
     }
-    if (n->y() > _bbox.ymax() || (n->parent() && n->parent()->z() == n->z() && n->parent()->x() == n->x() && n->parent()->y() >= n->y())) {
-      expanddir.set(5, false);
+    if (n->y() > _bbox.ymax()) {
+      n->setexpand(5, false);
     }
   } else {
-    expanddir.set(4, false);
-    expanddir.set(5, false);
+    n->setexpand(4, false);
+    n->setexpand(5, false);
   }
 
   std::set<int> gridpos;
-  if (expanddir.test(2)) {
+  if (n->expandwest()) {
 #if DEBUG
     COUT << "\texpanding left\n";
 #endif
@@ -479,7 +511,7 @@ void Router::expand(const Node* n)
     }
     gridpos.clear();
   }
-  if (expanddir.test(3)) {
+  if (n->expandeast()) {
 #if DEBUG
     COUT << "\texpanding right\n";
 #endif
@@ -505,7 +537,7 @@ void Router::expand(const Node* n)
       if (newn) checkAndInsert(newn, n);
     }
   }
-  if (expanddir.test(4)) {
+  if (n->expandnorth()) {
 #if DEBUG
     COUT << "\texpanding down\n";
 #endif
@@ -531,7 +563,7 @@ void Router::expand(const Node* n)
     }
     gridpos.clear();
   }
-  if (expanddir.test(5)) {
+  if (n->expandsouth()) {
 #if DEBUG
     COUT << "\texpanding up\n";
 #endif
