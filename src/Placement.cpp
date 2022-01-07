@@ -43,6 +43,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     while (it2 != pins.rend()) {
       router.clearSourceTargets();
       COUT << "routing pins : " << (*it1)->name() << ' ' << (*it2)->name() << '\n';
+      router.setName(_name + "__" + (*it1)->name() + "__" + (*it2)->name());
       const auto& p1 = (*it1)->shapes();
       const auto& p2 = (*it2)->shapes();
       for (auto src : {true, false}) {
@@ -57,7 +58,28 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
-      router.setName(_name + "__" + (*it1)->name() + "__" + (*it2)->name());
+      for (auto& l : p1) {
+        auto it = p2.find(l.first);
+        if (it != p2.end()) {
+          for (auto& s1 : l.second) {
+            for (auto& s2 : it->second) {
+              if (s1.xmin() < s2.xmax() && s1.xmax() > s2.xmin()) {
+                int xmin(std::max(s1.xmin(), s2.xmin())), xmax(std::min(s1.xmax(), s2.xmax()));
+                if (xmax - xmin >= router.widthy(l.first)) {
+                  router.addSource(Geom::Rect(xmin, s1.ymin(), xmax, s1.ymax()), l.first);
+                  router.addTarget(Geom::Rect(xmin, s2.ymin(), xmax, s2.ymax()), l.first);
+                }
+              } else if (s1.ymin() < s2.ymax() && s1.ymax() > s2.ymin()) {
+                int ymin(std::max(s1.ymin(), s2.ymin())), ymax(std::min(s1.ymax(), s2.ymax()));
+                if (ymax - ymin >= router.widthx(l.first)) {
+                  router.addSource(Geom::Rect(s1.xmin(), ymin, s1.xmax(), ymax), l.first);
+                  router.addTarget(Geom::Rect(s2.xmin(), ymin, s2.xmax(), ymax), l.first);
+                }
+              }
+            }
+          }
+        }
+      }
       auto sol = router.findSol();
       if (!sol.empty()) {
         Geom::MergeLayerRects(_routeshapes, sol, &_bbox);

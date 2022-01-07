@@ -193,6 +193,9 @@ class Router {
     const int minLayer() const { return _minLayer; }
     void setName(const std::string& n) { _name = n; }
 
+    int widthx(const int z) const { return _widthx[z]; }
+    int widthy(const int z) const { return _widthy[z]; }
+
     void clearSourceTargets() {
       _sources.clear();
       _targets.clear();

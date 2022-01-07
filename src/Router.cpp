@@ -155,10 +155,10 @@ Geom::PointSet Router::findValidPoints(const Geom::Rect& r, const int z) const
   auto hor = isHor(z);
   auto prev = z, next = z;
   if (z < _maxLayer) {
-    prev = z - 1;
+    next = z + 1;
   }
   if (z > _minLayer) {
-    next = z + 1;
+    prev = z - 1;
   }
 
   auto x = r.xcenter(), y = r.ycenter(); 
@@ -183,6 +183,29 @@ Geom::PointSet Router::findValidPoints(const Geom::Rect& r, const int z) const
           points.insert(Geom::Point(xn,y));
           xn -= space;
         }
+      }
+    }
+  }
+
+  COUT << z << ' ' << r.str() << ' ' << _widthx[z] << ' ' << _widthy[z] << ' ' << r.width() << ' ' << r.height() << '\n';
+
+  if (vert && hor) {
+    if (_widthy[z] <= r.width()) {
+      int x = (r.xmin() + _widthy[z] / 2), y = r.ycenter();
+      int space = _spacey[z] + ((_widthy[z] % 2 == 0) ? _widthy[z]/2 : (_widthy[z]/2 + 1));
+      int xn = x;
+      while (xn < r.xmax()) {
+        points.insert(Geom::Point(xn,y));
+        xn += space;
+      }
+    }
+    if (_widthx[z] <= r.height()) {
+      int y = (r.ymin() + _widthx[z] / 2), x = r.xcenter();
+      int space = _spacex[z] + ((_widthx[z] % 2 == 0) ? _widthx[z]/2 : (_widthx[z]/2 + 1));
+      int yn = y;
+      while (yn < r.ymax()) {
+        points.insert(Geom::Point(x,yn));
+        yn += space;
       }
     }
   }
@@ -705,14 +728,14 @@ Geom::LayerRects Router::findSol()
                 break;
               }
             }
-            sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(_widthx[n->z()], _widthy[n->z()]));
+            sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(_widthx[n->z()]/2, _widthy[n->z()]/2));
 #if DEBUG
             COUT << n->z() << ' ' << sol[n->z()].back().str() << '\n';
 #endif
           } else {
             auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
             if (adjLayer >= 0) {
-              sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer], _widthy[adjLayer]));
+              sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer]/2, _widthy[adjLayer]/2));
 #if DEBUG
               COUT << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
 #endif
