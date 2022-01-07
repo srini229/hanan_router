@@ -20,7 +20,7 @@ double Dist(const Geom::Rect& r1, const Geom::Rect& r2, const bool manh)
       if (r1.xmin() <= r2.xmax() && r2.xmin() <= r1.xmax()) xdist = 0;
       auto ydist{std::min(abs(r1.ymin() - r2.ymax()), abs(r1.ymax() - r2.ymin()))};
       if (r1.ymin() <= r2.ymax() && r2.ymin() <= r1.ymax()) ydist = 0;
-      dist = sqrt(xdist * xdist * 1. + ydist * ydist * 1.);
+      dist = sqrt(1.* xdist * xdist + 1. * ydist * ydist);
     }
   }
   return dist;

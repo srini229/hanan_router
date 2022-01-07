@@ -96,6 +96,8 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100
   _widthy.reserve(layers.size());
   _spacex.reserve(layers.size());
   _spacey.reserve(layers.size());
+  _ndrwidthx.reserve(layers.size());
+  _ndrwidthy.reserve(layers.size());
   for (unsigned i = 0; i < layers.size(); ++i) {
     if (layers[i]->isMetal()) {
       auto mlayer = static_cast<DRC::MetalLayer*>(layers[i]);
@@ -224,7 +226,20 @@ Geom::PointSet Router::findValidPoints(const Geom::Rect& r, const int z) const
 
 void Router::addSource(const Geom::Rect& r, const int z)
 {
-  _sourceshapes[z].push_back(r);
+  bool inserted{false};
+  for (auto it = _sourceshapes[z].begin(); it != _sourceshapes[z].end(); ++it) {
+    auto s = *it;
+    if (s.contains(r)) {
+      inserted = true;
+      break;
+    } else if (r.contains(s)) {
+      _sourceshapes[z].erase(it);
+      _sourceshapes[z].insert(r);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) _sourceshapes[z].insert(r);
   auto points = findValidPoints(r, z);
   for (auto& p : points) {
     _sources.insert(createNode(p.x(), p.y(), z, nullptr, 0));
@@ -233,7 +248,20 @@ void Router::addSource(const Geom::Rect& r, const int z)
 
 void Router::addTarget(const Geom::Rect& r, const int z)
 {
-  _targetshapes[z].push_back(r);
+  bool inserted{false};
+  for (auto it = _targetshapes[z].begin(); it != _targetshapes[z].end(); ++it) {
+    auto s = *it;
+    if (s.contains(r)) {
+      inserted = true;
+      break;
+    } else if (r.contains(s)) {
+      _targetshapes[z].erase(it);
+      _targetshapes[z].insert(r);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) _targetshapes[z].insert(r);
   auto points = findValidPoints(r, z);
   for (auto& p : points) {
     _targets.insert(createNode(p.x(), p.y(), z, nullptr, -1, 0));
@@ -740,11 +768,13 @@ Geom::LayerRects Router::findSol()
                 break;
               }
             }
-            auto extnx1 = _widthx[n->z()]/2;
-            auto extnx2 = _widthx[n->z()]/2;
-            auto extny1 = _widthy[n->z()]/2;
-            auto extny2 = _widthy[n->z()]/2;
+            auto extnx1 = widthx(n->z())/2;
+            auto extnx2 = widthx(n->z())/2;
+            auto extny1 = widthy(n->z())/2;
+            auto extny2 = widthy(n->z())/2;
             if (n->y() > parent->y()) {
+              extnx1 = widthy(n->z())/2;
+              extnx2 = widthy(n->z())/2;
               if (isTarget(n)) extny2 = 0;
               if (isSource(parent)) extny1 = 0;
               auto it = _endextnymax.find(n);
@@ -756,6 +786,8 @@ Geom::LayerRects Router::findSol()
                 extny1 = it->second;
               }
             } else if (n->y() < parent->y()) {
+              extnx1 = widthy(n->z())/2;
+              extnx2 = widthy(n->z())/2;
               if (isTarget(n)) extny1 = 0;
               if (isSource(parent)) extny2 = 0;
               auto it = _endextnymax.find(n);
@@ -768,6 +800,8 @@ Geom::LayerRects Router::findSol()
               }
             }
             if (n->x() > parent->x()) {
+              extny1 = widthx(n->z())/2;
+              extny2 = widthx(n->z())/2;
               if (isTarget(n)) extnx2 = 0;
               if (isSource(parent)) extnx1 = 0;
               auto it = _endextnxmax.find(n);
@@ -779,6 +813,8 @@ Geom::LayerRects Router::findSol()
                 extnx1 = it->second;
               }
             } else if (n->x() < parent->x()) {
+              extny1 = widthx(n->z())/2;
+              extny2 = widthx(n->z())/2;
               if (isTarget(n)) extny1 = 0;
               if (isSource(parent)) extnx2 = 0;
               auto it = _endextnxmax.find(parent);
@@ -937,8 +973,8 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
     for (auto& r : l.second) {
       int spacex{0}, spacey{0};
       if (layer < static_cast<int>(_widthx.size())) {
-        spacex = _spacex[layer] + ((_widthx[layer] % 2 == 0) ? _widthx[layer]/2 : (_widthx[layer]/2 + 1));
-        spacey = _spacey[layer] + ((_widthy[layer] % 2 == 0) ? _widthy[layer]/2 : (_widthy[layer]/2 + 1));
+        spacex = _spacex[layer] + ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1));
+        spacey = _spacey[layer] + ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1));
       }
 #if DEBUG
       COUT << "layer : " << layer << " obs : " << spacex << ' ' << spacey << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
@@ -1009,6 +1045,37 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
       } else {
         _obstacles[layer].push_back(obs);
         //COUT << "obs : " << _obstacles[layer].back().str() << '\n';
+      }
+    }
+  }
+}
+
+void Router::updatendr()
+{
+  _ndrwidthx.clear(); _ndrwidthy.clear();
+  _ndrwidthx.resize(_widthx.size(), INT_MAX);
+  _ndrwidthy.resize(_widthy.size(), INT_MAX);
+  if (_sourceshapes.size() == 1) {
+    auto it = _sourceshapes.begin();
+    if (it->second.size() == 1) {
+      auto z = it->first;
+      if (isVert(z)) {
+        _ndrwidthy[z] = std::min(_ndrwidthy[z], it->second.begin()->width());
+      }
+      if (isHor(z)) {
+        _ndrwidthx[z] = std::min(_ndrwidthx[z], it->second.begin()->height());
+      }
+    }
+  }
+  if (_targetshapes.size() == 1) {
+    auto it = _targetshapes.begin();
+    if (it->second.size() == 1) {
+      auto z = it->first;
+      if (isVert(z)) {
+        _ndrwidthy[z] = std::min(_ndrwidthy[z], it->second.begin()->width());
+      }
+      if (isHor(z)) {
+        _ndrwidthx[z] = std::min(_ndrwidthx[z], it->second.begin()->height());
       }
     }
   }

@@ -123,8 +123,8 @@ class Router {
     std::vector<std::map<int, IntRangeSet>> _hanangridh, _hanangridv;
     Geom::Rect _bbox;
     const Node *_sol;
-    std::vector<int> _widthx, _spacex;
-    std::vector<int> _widthy, _spacey;
+    std::vector<int> _widthx, _ndrwidthx, _spacex;
+    std::vector<int> _widthy, _ndrwidthy, _spacey;
     int _minLayer, _maxLayer, _maxRoutingLayer;
     std::string _name;
     size_t _expansions{0};
@@ -132,7 +132,7 @@ class Router {
     std::vector<int> _aboveViaLayer, _belowViaLayer;
     const DRC::LayerInfo& _lf;
     std::map<const Node*, int> _endextnxmin, _endextnymin, _endextnxmax, _endextnymax;
-    Geom::LayerRects _sourceshapes, _targetshapes;
+    std::map<int, std::set<Geom::Rect>> _sourceshapes, _targetshapes;
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -183,6 +183,7 @@ class Router {
 
     bool isTarget(const Node* n) const { return _targets.find(const_cast<Node*>(n)) != _targets.end(); }
     bool isSource(const Node* n) const { return _sources.find(const_cast<Node*>(n)) != _sources.end(); }
+
     
   public:
     Router(const DRC::LayerInfo& lf);
@@ -198,8 +199,8 @@ class Router {
     const int minLayer() const { return _minLayer; }
     void setName(const std::string& n) { _name = n; }
 
-    int widthx(const int z) const { return _widthx[z]; }
-    int widthy(const int z) const { return _widthy[z]; }
+    int widthx(const int z) const { return (_ndrwidthx[z] != INT_MAX ? std::max(_ndrwidthx[z], _widthx[z]) : _widthx[z]); }
+    int widthy(const int z) const { return (_ndrwidthy[z] != INT_MAX ? std::max(_ndrwidthy[z], _widthy[z]) : _widthy[z]); }
 
     void clearSourceTargets() {
       _sources.clear();
@@ -227,6 +228,7 @@ class Router {
     void addSource(const Geom::Rect& r, const int z);
     void addTarget(const Geom::Rect& r, const int z);
     bool isViaValid(const Node* n, const bool up) const;
+    void updatendr();
 };
 
 }

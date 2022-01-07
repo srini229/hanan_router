@@ -37,6 +37,10 @@ class Point {
       if (_x == p._x) return _y < p._y;
       return _x < p._x;
     }
+    bool operator == (const Point& p) const
+    {
+      return _x == p._x && _y == p._y;
+    }
 
 };
 typedef std::set<Geom::Point> PointSet;
@@ -162,6 +166,17 @@ class Rect {
         return p.x() > xmin() && p.x() < xmax() && p.y() > ymin() && p.y() < ymax();
       }
       return p.x() >= xmin() && p.x() <= xmax() && p.y() >= ymin() && p.y() <= ymax();
+    }
+
+    bool contains (const Geom::Rect& r) const
+    {
+      return contains(r._ll) && contains(r._ur);
+    }
+
+    bool operator < (const Rect& r) const
+    {
+      if (_ur == r._ur) return _ll < r._ll;
+      return _ur < r._ur;
     }
 };
 typedef vector<Rect> Rects;

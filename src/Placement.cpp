@@ -5,6 +5,8 @@
 
 namespace Placement {
 
+
+auto DBLMAX = std::numeric_limits<double>::max();
 inline void Net::print() const
 {
   COUT << "pins :";
@@ -16,7 +18,52 @@ inline void Net::print() const
 PinCVec Net::reorderPins() const
 {
   PinCVec pins(_pins.begin(), _pins.end());
-  return pins;
+  double pinpairdist[pins.size()][pins.size()] = {0};
+  for (unsigned i = 0; i < pins.size(); ++i) {
+    auto& p1 = pins[i];
+    auto& s1 = p1->shapes();
+    for (unsigned j = i + 1; j < pins.size(); ++j) {
+      auto& p2 = pins[j];
+      double dist = Geom::Dist(p1->bbox(), p2->bbox());
+      auto& s2 = p2->shapes();
+      for (auto& l : s1) {
+        auto its2 = s2.find(l.first);
+        if (its2 != s2.end()) {
+          for (auto& r1 : l.second) {
+            for (auto& r2 : its2->second) {
+              dist = std::min(Geom::Dist(r1, r2), dist);
+            }
+          }
+        }
+      }
+      pinpairdist[i][j] = dist;
+      pinpairdist[j][i] = dist;
+    }
+  }
+  PinCVec primsorder;
+  std::vector<int> selected(pins.size(), 0);
+  primsorder.reserve(pins.size());
+  int idx{0};
+  primsorder.push_back(pins[0]);
+  selected[idx] = 1;
+  while (primsorder.size() < pins.size()) {
+    double mindist{DBLMAX};
+    int minidx = -1;
+    for (int i = 0; i < static_cast<int>(pins.size()); ++i) {
+      if (i == idx) continue;
+      if (!selected[i] && pinpairdist[idx][i] < mindist) {
+        mindist = pinpairdist[idx][i];
+        minidx = i;
+      }
+    }
+    if (minidx >= 0) {
+      primsorder.push_back(pins[minidx]);
+      idx = minidx;
+      selected[idx] = 1;
+    }
+  }
+
+  return primsorder;
 }
 
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3)
@@ -36,9 +83,9 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       }
     }*/
     auto pins = reorderPins();
-    auto it1 = pins.rbegin();
+    auto it1 = pins.begin();
     auto it2 = std::next(it1);
-    while (it2 != pins.rend()) {
+    while (it2 != pins.end()) {
       router.clearSourceTargets();
       COUT << "routing pins : " << (*it1)->name() << ' ' << (*it2)->name() << '\n';
       router.setName(_name + "__" + (*it1)->name() + "__" + (*it2)->name());
@@ -78,6 +125,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
+      router.updatendr();
       router.addObstacles(l1, true);
       router.addObstacles(l2, true);
       router.addObstacles(l3, true);
