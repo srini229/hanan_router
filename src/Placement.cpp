@@ -18,7 +18,8 @@ inline void Net::print() const
 PinCVec Net::reorderPins() const
 {
   PinCVec pins(_pins.begin(), _pins.end());
-  double pinpairdist[pins.size()][pins.size()] = {0};
+  double pinpairdist[pins.size()][pins.size()];
+  std::fill_n(*pinpairdist, pins.size() * pins.size(), 0);
   for (unsigned i = 0; i < pins.size(); ++i) {
     auto& p1 = pins[i];
     auto& s1 = p1->shapes();
