@@ -35,8 +35,7 @@ class Pin {
 };
 typedef std::map<std::string, Pin*> Pins;
 typedef std::vector<const Pin*> PinCVec;
-
-
+typedef std::vector<std::pair<const Pin*, const Pin*>> PinPairs;
 class Net {
   private:
     std::string _name;
@@ -44,7 +43,7 @@ class Net {
     Geom::LayerRects _routeshapes;
     Geom::Rect _bbox;
     int _unroute : 1;
-    PinCVec reorderPins() const;
+    PinPairs reorderPins() const;
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1} {}
     const std::set<const Pin*>& pins() const { return _pins; }

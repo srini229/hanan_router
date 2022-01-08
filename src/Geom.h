@@ -170,7 +170,7 @@ class Rect {
 
     bool contains (const Geom::Rect& r) const
     {
-      return contains(r._ll) && contains(r._ur);
+      return contains(r._ll, false) && contains(r._ur, false);
     }
 
     bool operator < (const Rect& r) const

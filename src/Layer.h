@@ -163,7 +163,14 @@ class LayerInfo {
       return std::make_pair(ll, ul);
     }
     const Layers& layers() const { return _layers; }
-    int signalBottomLayer() const { return (_sbottom ? getLayerIndex(_sbottom->name()) : 0); }
+    int signalBottomLayer() const 
+    {
+      if (_sbottom) getLayerIndex(_sbottom->name());
+      for (int i = 0; i < static_cast<int>(_layers.size()); ++i) {
+        if (_layers[i]->name() == "M1") return i;
+      }
+      return 0;
+    }
     int signalTopLayer() const { return (_stop ? getLayerIndex(_stop->name()) : _topMetal); }
     bool populated() const { return _populated; }
     bool isVertical(const int z) const

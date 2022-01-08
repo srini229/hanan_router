@@ -246,7 +246,6 @@ void Router::addSource(const Geom::Rect& r, const int z)
   }
   for (auto& s: _sources) {
     setexpand(s);
-    s->print("src : ");
   }
 }
 
@@ -329,14 +328,13 @@ void Router::insert(const Node* n)
 void Router::setexpand(Node* newn, const Node* parent) const
 {
   newn->clearexpand();
-  if (!parent) {
-    if (newn->z() >= _maxLayer || !isViaValid(newn, true)) {
-      newn->setexpand(UP, false);
-    }
-    if (newn->z() <= _minLayer || !isViaValid(newn, false)) {
-      newn->setexpand(DOWN, false);
-    }
-  } else {
+  if (newn->z() >= _maxLayer || !isViaValid(newn, true)) {
+    newn->setexpand(UP, false);
+  }
+  if (newn->z() <= _minLayer || !isViaValid(newn, false)) {
+    newn->setexpand(DOWN, false);
+  }
+  if (parent) {
     if (newn->z() == parent->z()) {
       if (newn->x() == parent->x()) {
         if (newn->y() < parent->y()) {
@@ -351,9 +349,9 @@ void Router::setexpand(Node* newn, const Node* parent) const
           newn->setexpand(WEST, false);
         }
       }
-    } else if (newn->z() < parent->z() || newn->z() >= _maxLayer || !isViaValid(newn, true)) {
+    } else if (newn->z() < parent->z()) {
       newn->setexpand(UP, false);
-    } else if (newn->z() > parent->z() || newn->z() <= _minLayer || !isViaValid(newn, false)) {
+    } else if (newn->z() > parent->z()) {
       newn->setexpand(DOWN, false);
     }
   }
@@ -506,8 +504,8 @@ void Router::expand(const Node* n1)
 #endif
       if (pos < n->x()) {
         newn = createNode(pos, n->y(), n->z(), n);
+        if (newn) checkAndInsert(newn, n);
       }
-      if (newn) checkAndInsert(newn, n);
     }
     gridpos.clear();
   }
@@ -523,8 +521,8 @@ void Router::expand(const Node* n1)
     newn = nullptr;
     if (snapc > n->x()) {
       newn = createNode(snapc, n->y(), n->z(), n);
+      if (newn) checkAndInsert(newn, n);
     }
-    if (newn) checkAndInsert(newn, n);
     getAdjacentGrid(gridpos, n, true, true, snapc);
     getAdjacentGrid(gridpos, n, false, true, snapc);
     for (auto &pos : gridpos) {
@@ -533,9 +531,10 @@ void Router::expand(const Node* n1)
 #endif
       if (pos > n->x()) {
         newn = createNode(pos, n->y(), n->z(), n);
+        if (newn) checkAndInsert(newn, n);
       }
-      if (newn) checkAndInsert(newn, n);
     }
+    gridpos.clear();
   }
   if (n->expandnorth()) {
 #if DEBUG
@@ -558,8 +557,8 @@ void Router::expand(const Node* n1)
 #endif
       if (pos < n->y()) {
         newn = createNode(n->x(), pos, n->z(), n);
+        if (newn) checkAndInsert(newn, n);
       }
-      if (newn) checkAndInsert(newn, n);
     }
     gridpos.clear();
   }
@@ -585,10 +584,12 @@ void Router::expand(const Node* n1)
 #endif
       if (pos > n->y()) {
         newn = createNode(n->x(), pos, n->z(), n);
+        if (newn) checkAndInsert(newn, n);
       }
-      if (newn) checkAndInsert(newn, n);
     }
+    gridpos.clear();
   }
+  n->clearexpand(true);
 }
 
 void Router::insertRange(IntRangeSet& s, const IntRange& r)
@@ -1088,18 +1089,41 @@ void Router::updatendr()
   _ndrwidthx.resize(_widthx.size(), INT_MAX);
   _ndrwidthy.resize(_widthy.size(), INT_MAX);
   if (_sourceshapes.size() == 1) {
-    auto it = _sourceshapes.begin();
-    if (it->second.size() == 1) {
-      auto z = it->first;
+    auto itsrc = _sourceshapes.begin();
+    auto ittgt = _targetshapes.find(itsrc->first);
+
+    if (ittgt != _targetshapes.end() 
+        && ittgt->second.size() == 1
+        && itsrc->second.size() == 1) {
+      auto z = itsrc->first;
       if (isVert(z)) {
-        _ndrwidthy[z] = std::min(_ndrwidthy[z], it->second.begin()->width());
+        _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
+        _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
       }
       if (isHor(z)) {
-        _ndrwidthx[z] = std::min(_ndrwidthx[z], it->second.begin()->height());
+        _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
+        _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
       }
     }
   }
   if (_targetshapes.size() == 1) {
+    auto ittgt = _targetshapes.begin();
+    auto itsrc = _sourceshapes.find(ittgt->first);
+    if (itsrc != _sourceshapes.end() 
+        && ittgt->second.size() == 1
+        && itsrc->second.size() == 1) {
+      auto z = ittgt->first;
+      if (isVert(z)) {
+        _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
+        _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
+      }
+      if (isHor(z)) {
+        _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
+        _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+      }
+    }
+  }
+  /*if (_targetshapes.size() == 1) {
     auto it = _targetshapes.begin();
     if (it->second.size() == 1) {
       auto z = it->first;
@@ -1110,7 +1134,7 @@ void Router::updatendr()
         _ndrwidthx[z] = std::min(_ndrwidthx[z], it->second.begin()->height());
       }
     }
-  }
+  }*/
 }
 
 bool Router::isViaValid(const Node* n, const bool up) const

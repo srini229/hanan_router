@@ -75,7 +75,11 @@ class Node {
     bool expandsouth() const { return _expanddir.test(SOUTH); }
 
     void setexpand(const int dir, const bool val) { if (dir < MAXDIR) _expanddir.set(dir, val); }
-    void clearexpand() { _expanddir.set(); }
+    void clearexpand(const bool clear = false)
+    {
+      if(clear) _expanddir.reset();
+      else _expanddir.set();
+    }
 
     CostType fcost() const { return _fcost; }
     CostType tcost() const { return _tcost; }

@@ -15,56 +15,67 @@ inline void Net::print() const
   }
 }
 
-PinCVec Net::reorderPins() const
+PinPairs Net::reorderPins() const
 {
   PinCVec pins(_pins.begin(), _pins.end());
+  std::sort(pins.begin(), pins.end(),
+      [](const Pin* p1, const Pin* p2) -> bool { return p1->bbox().halfpm() > p2->bbox().halfpm(); });
   double pinpairdist[pins.size()][pins.size()];
   std::fill_n(*pinpairdist, pins.size() * pins.size(), 0);
+  double mindist{DBLMAX};
+  int idx1{-1}, idx2{-1};
   for (unsigned i = 0; i < pins.size(); ++i) {
     auto& p1 = pins[i];
     auto& s1 = p1->shapes();
     for (unsigned j = i + 1; j < pins.size(); ++j) {
       auto& p2 = pins[j];
-      double dist = Geom::Dist(p1->bbox(), p2->bbox());
+      double dist = Geom::Dist(p1->bbox(), p2->bbox()) / (1. * p1->bbox().halfpm() * p2->bbox().halfpm());
       auto& s2 = p2->shapes();
       for (auto& l : s1) {
         auto its2 = s2.find(l.first);
         if (its2 != s2.end()) {
           for (auto& r1 : l.second) {
             for (auto& r2 : its2->second) {
-              dist = std::min(Geom::Dist(r1, r2), dist);
+              dist = std::min(Geom::Dist(r1, r2) / (1. * p1->bbox().halfpm() * p2->bbox().halfpm()), dist);
             }
           }
         }
       }
       pinpairdist[i][j] = dist;
       pinpairdist[j][i] = dist;
-    }
-  }
-  PinCVec primsorder;
-  std::vector<int> selected(pins.size(), 0);
-  primsorder.reserve(pins.size());
-  int idx{0};
-  primsorder.push_back(pins[0]);
-  selected[idx] = 1;
-  while (primsorder.size() < pins.size()) {
-    double mindist{DBLMAX};
-    int minidx = -1;
-    for (int i = 0; i < static_cast<int>(pins.size()); ++i) {
-      if (i == idx) continue;
-      if (!selected[i] && pinpairdist[idx][i] < mindist) {
-        mindist = pinpairdist[idx][i];
-        minidx = i;
+      if (mindist > dist) {
+        mindist = dist;
+        idx1 = static_cast<int>(i);
+        idx2 = static_cast<int>(j);
       }
     }
-    if (minidx >= 0) {
-      primsorder.push_back(pins[minidx]);
-      idx = minidx;
-      selected[idx] = 1;
+  }
+  std::vector<std::pair<const Pin*, const Pin*>> primorder;
+  primorder.reserve(pins.size() - 1);
+  primorder.push_back(std::make_pair(pins[idx1], pins[idx2]));
+  std::vector<int> selected(pins.size(), 0);
+  selected[idx1] = 1;
+  selected[idx2] = 1;
+  while (primorder.size() < pins.size() - 1) {
+    double mindist{DBLMAX};
+    int minidx2 = -1, minidx1 = -1;
+    for (int i = 0; i < static_cast<int>(pins.size()); ++i) {
+      if (!selected[i]) continue;
+      for (int j = 0; j < static_cast<int>(pins.size()); ++j) {
+        if (!selected[j] && pinpairdist[i][j] < mindist) {
+          mindist = pinpairdist[i][j];
+          minidx1 = i;
+          minidx2 = j;
+        }
+      }
+    }
+    if (minidx2 >= 0) {
+      primorder.push_back(std::make_pair(pins[minidx1], pins[minidx2]));
+      selected[minidx2] = 1;
     }
   }
 
-  return primsorder;
+  return primorder;
 }
 
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3)
@@ -83,15 +94,15 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
     }*/
-    auto pins = reorderPins();
-    auto it1 = pins.begin();
-    auto it2 = std::next(it1);
-    while (it2 != pins.end()) {
+    auto pinpairs = reorderPins();
+    for (auto& pp : pinpairs) {
+      const auto& pin1 = pp.first;
+      const auto& pin2 = pp.second;
       router.clearSourceTargets();
-      COUT << "routing pins : " << (*it1)->name() << ' ' << (*it2)->name() << '\n';
-      router.setName(_name + "__" + (*it1)->name() + "__" + (*it2)->name());
-      const auto& p1 = (*it1)->shapes();
-      const auto& p2 = (*it2)->shapes();
+      COUT << "routing pins : " << pin1->name() << ' ' << pin2->name() << '\n';
+      router.setName(_name + "__" + pin1->name() + "__" + pin2->name());
+      const auto& p1 = pin1->shapes();
+      const auto& p2 = pin2->shapes();
       for (auto src : {true, false}) {
         for (auto& l : (src ? p1 : p2)) {
           if (l.first > router.maxLayer() || l.first < router.minLayer()) continue;
@@ -132,17 +143,21 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.addObstacles(l3, true);
       auto sol = router.findSol();
       if (!sol.empty()) {
+#if DEBUG
+        for (auto& l : sol) {
+          for (auto& s : l.second) {
+            COUT << "sol : " << l.first << ' ' << s.str() << ' ' << s.width() << ' ' << s.height() << '\n';
+          }
+        }
+#endif
         Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
       } else {
         _unroute = 1;
       }
-      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>((*it1)->shapes()), sol, &_bbox);
-      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>((*it2)->shapes()), sol, &_bbox);
-      it1 = it2;
-      ++it2;
+      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin1->shapes()), sol, &_bbox);
+      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin2->shapes()), sol, &_bbox);
       router.clearObstacles(true);
     }
-    router.clearObstacles(true);
   }
 }
 
