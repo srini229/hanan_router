@@ -151,122 +151,120 @@ Node* Router::createNode(const int x, const int y, const int z,
   return n;
 }
 
-Geom::PointSet Router::findValidPoints(const Geom::Rect& r, const int z) const
+Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, const Direction dir) const
 {
   auto vert = isVert(z);
   auto hor = isHor(z);
-  auto prev = z, next = z;
-  if (z < _maxLayer) {
-    next = z + 1;
-  }
-  if (z > _minLayer) {
-    prev = z - 1;
-  }
-
   auto x = r.xcenter(), y = r.ycenter(); 
-  Geom::PointSet points;
-  points.insert(Geom::Point(x, y));
+  Geom::PointWidthSet points;
 
-  if ((vert && r.isVert()) || (hor && r.isHor())) {
-    for (auto pr : {true, false}) {
-      if ((pr && prev == z) || (!pr && next == z)) continue;
-      auto layer = (pr ? prev : next);
-      if (vert) {
-        int space = _spacey[layer] + ((_widthy[layer] % 2 == 0) ? _widthy[layer]/2 : (_widthy[layer]/2 + 1));
-        int yn = r.ymax() - ((r.ymax() - y) % space);
-        while (yn > r.ymin()) {
-          points.insert(Geom::Point(x,yn));
-          yn -= space;
-        }
+  if (dir == DOWN || dir == UP) {
+    if ((vert && r.isVert()) || (hor && r.isHor())) {
+      auto adj = z;
+      if (dir == UP) {
+        if (z < _maxLayer) adj = z + 1;
       } else {
-        int space = _spacex[layer] + ((_widthx[layer] % 2 == 0) ? _widthx[layer]/2 : (_widthx[layer]/2 + 1));
-        int xn = r.xmax() - ((r.xmax() - x) % space);
-        while (xn > r.xmin()) {
-          points.insert(Geom::Point(xn,y));
-          xn -= space;
+        if (z > _minLayer) adj = z - 1;
+      }
+
+      if (adj != z) {
+        auto wx = widthx(adj), wy = widthy(adj);
+        if (vert) {
+          int space = _spacey[adj] + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1));
+          int yn = r.ymax() - ((r.ymax() - y) % space);
+          while (yn > r.ymin()) {
+            points.insert(std::make_pair(Geom::Point(x,yn), widthy(z)));
+            yn -= space;
+          }
+        } else {
+          int space = _spacex[adj] + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1));
+          int xn = r.xmax() - ((r.xmax() - x) % space);
+          while (xn > r.xmin()) {
+            points.insert(std::make_pair(Geom::Point(xn,y), widthx(z)));
+            xn -= space;
+          }
+        }
+      }
+    }
+  } else if (dir == EAST || dir == WEST) {
+    if (hor) {
+      auto width = widthx(z);
+      COUT << "we : " << width << '\n';
+      if (width <= r.height()) {
+        int y = (r.ymin() + width / 2);
+        int space = _spacex[z] + ((width % 2 == 0) ? width/2 : (width/2 + 1));
+        for (auto right : {true, false}) {
+          int x = (right ? r.xmax() : r.xmin());
+          int yn = y;
+          while (yn < r.ymax()) {
+            points.insert(std::make_pair(Geom::Point(x,yn), width));
+            yn += space;
+          }
+        }
+      }
+    }
+  } else if (dir == NORTH || dir == SOUTH) {
+    if (vert) {
+      auto width = widthy(z);
+      COUT << "wn : " << width << '\n';
+      if (width <= r.width()) {
+        int x = (r.xmin() + width / 2);
+        int space = _spacey[z] + ((width % 2 == 0) ? width/2 : (width/2 + 1));
+        for (auto top : {true, false}) {
+          int y = (top ? r.ymax() : r.ymin());
+          int xn = x;
+          while (xn < r.xmax()) {
+            points.insert(std::make_pair(Geom::Point(xn,y), width));
+            xn += space;
+          }
         }
       }
     }
   }
 
-#if DEBUG
-  COUT << z << ' ' << r.str() << ' ' << _widthx[z] << ' ' << _widthy[z] << ' ' << r.width() << ' ' << r.height() << '\n';
-  for (auto & p : points) {
-    COUT << "p : " << p.str() << '\n';
-  }
-#endif
-  if (vert && hor) {
-    if (_widthy[z] <= r.width()) {
-      int x = (r.xmin() + _widthy[z] / 2), y = r.ycenter();
-      int space = _spacey[z] + ((_widthy[z] % 2 == 0) ? _widthy[z]/2 : (_widthy[z]/2 + 1));
-      int xn = x;
-      while (xn < r.xmax()) {
-        points.insert(Geom::Point(xn,y));
-        xn += space;
-      }
-    }
-    if (_widthx[z] <= r.height()) {
-      int y = (r.ymin() + _widthx[z] / 2), x = r.xcenter();
-      int space = _spacex[z] + ((_widthx[z] % 2 == 0) ? _widthx[z]/2 : (_widthx[z]/2 + 1));
-      int yn = y;
-      while (yn < r.ymax()) {
-        points.insert(Geom::Point(x,yn));
-        yn += space;
-      }
-    }
-  }
-#if DEBUG
-  for (auto & p : points) {
-    COUT << "pp : " << p.str() << '\n';
-  }
-#endif
   return points;
 }
 
-void Router::addSource(const Geom::Rect& r, const int z)
+void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
 {
+  auto& shapes = (src ? _sourceshapes : _targetshapes);
+  auto& dest   = (src ? _sources : _targets);
+  int fcost    = (src ? 0 : -1);
+  int tcost    = (src ? -1 : 0);
   bool inserted{false};
-  for (auto it = _sourceshapes[z].begin(); it != _sourceshapes[z].end(); ++it) {
+  for (auto it = shapes[z].begin(); it != shapes[z].end(); ++it) {
     auto s = *it;
     if (s.contains(r)) {
       inserted = true;
       break;
     } else if (r.contains(s)) {
-      _sourceshapes[z].erase(it);
-      _sourceshapes[z].insert(r);
+      shapes[z].erase(it);
+      shapes[z].insert(r);
       inserted = true;
       break;
     }
   }
-  if (!inserted) _sourceshapes[z].insert(r);
-  auto points = findValidPoints(r, z);
-  for (auto& p : points) {
-    _sources.insert(createNode(p.x(), p.y(), z, nullptr, 0));
-  }
-  for (auto& s: _sources) {
-    setexpand(s);
-  }
-}
-
-void Router::addTarget(const Geom::Rect& r, const int z)
-{
-  bool inserted{false};
-  for (auto it = _targetshapes[z].begin(); it != _targetshapes[z].end(); ++it) {
-    auto s = *it;
-    if (s.contains(r)) {
-      inserted = true;
-      break;
-    } else if (r.contains(s)) {
-      _targetshapes[z].erase(it);
-      _targetshapes[z].insert(r);
-      inserted = true;
-      break;
+  if (!inserted) shapes[z].insert(r);
+  for (auto dir : {UP, DOWN, EAST, NORTH}) {
+    auto points = findValidPoints(r, z, dir);
+    for (auto& pp : points) {
+      auto& p = pp.first;
+      auto n = createNode(p.x(), p.y(), z, nullptr, fcost, tcost);
+      n->expand(dir, true);
+      if (dir == EAST) {
+        n->sethwx(pp.second/2);
+        n->expand(WEST, true);
+      }
+      if (dir == NORTH) {
+        n->sethwy(pp.second/2);
+        n->expand(SOUTH, true);
+      }
+#if DEBUG
+      COUT << r.str() << '\n';
+      n->print((src ? "src" : "tgt"));
+#endif
+      dest.insert(n);
     }
-  }
-  if (!inserted) _targetshapes[z].insert(r);
-  auto points = findValidPoints(r, z);
-  for (auto& p : points) {
-    _targets.insert(createNode(p.x(), p.y(), z, nullptr, -1, 0));
   }
 }
 
@@ -314,7 +312,7 @@ void Router::readDataFile(const std::string& ifile)
   COUT << "min layer : " << _minLayer << " max layer : " << _maxLayer << '\n';
 }
 
-void Router::insert(const Node* n)
+void Router::insertToPQ(const Node* n)
 {
 #if DEBUG
   n->print("adding to pq :");
@@ -326,32 +324,28 @@ void Router::insert(const Node* n)
 
 void Router::setexpand(Node* newn, const Node* parent) const
 {
-  newn->clearexpand();
-  if (newn->z() >= _maxLayer || !isViaValid(newn, true)) {
-    newn->setexpand(UP, false);
-  }
-  if (newn->z() <= _minLayer || !isViaValid(newn, false)) {
-    newn->setexpand(DOWN, false);
-  }
   if (parent) {
+    newn->clearexpand();
     if (newn->z() == parent->z()) {
       if (newn->x() == parent->x()) {
         if (newn->y() < parent->y()) {
-          newn->setexpand(NORTH, false);
+          newn->expand(NORTH, false);
         } else if (newn->y() > parent->y()) {
-          newn->setexpand(SOUTH, false);
+          newn->expand(SOUTH, false);
         }
       } else if (newn->y() == parent->y()) {
         if (newn->x() < parent->x()) {
-          newn->setexpand(EAST, false);
+          newn->expand(EAST, false);
         } else if (newn->x() > parent->x()) {
-          newn->setexpand(WEST, false);
+          newn->expand(WEST, false);
         }
       }
-    } else if (newn->z() < parent->z()) {
-      newn->setexpand(UP, false);
-    } else if (newn->z() > parent->z()) {
-      newn->setexpand(DOWN, false);
+    }
+    if (newn->z() < parent->z() || newn->z() >= _maxLayer || !isViaValid(newn, true)) {
+      newn->expand(UP, false);
+    }
+    if (newn->z() > parent->z() || newn->z() <= _minLayer || !isViaValid(newn, false)) {
+      newn->expand(DOWN, false);
     }
   }
 }
@@ -367,19 +361,33 @@ void Router::checkAndInsert(Node* newn, const Node* n)
   if (newn->cost() < 0) {
     if (newn->parent() != n) newn->setParent(n);
     evalCost(newn);
-    insert(newn);
+    insertToPQ(newn);
+    if (n->z() == newn->z()) {
+      if (n->x() == newn->x()) {
+        newn->sethwy(n->hwy());
+      } else {
+        newn->sethwx(n->hwx());
+      }
+    }
   } else if (newn->parent() != n) {
     auto oldfcost = newn->fcost();
     auto oldparent = newn->parent();
     auto it = _pq.find(newn);
     newn->setParent(n);
+    if (n->z() == newn->z()) {
+      if (n->x() == newn->x()) {
+        newn->sethwy(n->hwy());
+      } else {
+        newn->sethwx(n->hwx());
+      }
+    }
     evalFCost(newn);
     if (newn->fcost() > oldfcost) {
       newn->setParent(oldparent);
       newn->setFCost(oldfcost);
     } else if (it != _pq.end()) {
       _pq.erase(it);
-      insert(newn);
+      insertToPQ(newn);
     }
   }
 #if DEBUG
@@ -433,7 +441,7 @@ void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, 
   }
 }
 
-void Router::expand(const Node* n1)
+void Router::expandNode(const Node* n1)
 {
   auto n = const_cast<Node*>(n1);
 #if DEBUG
@@ -460,25 +468,25 @@ void Router::expand(const Node* n1)
   const bool vert = isVert(n->z());
   if (horiz) {
     if (n->x() < _bbox.xmin()) {
-      n->setexpand(2, false);
+      n->expand(EAST, false);
     }
     if (n->x() > _bbox.xmax()) {
-      n->setexpand(3, false);
+      n->expand(WEST, false);
     }
   } else {
-    n->setexpand(2, false);
-    n->setexpand(3, false);
+    n->expand(EAST, false);
+    n->expand(WEST, false);
   }
   if (vert) {
     if (n->y() < _bbox.ymin()) {
-      n->setexpand(4, false);
+      n->expand(NORTH, false);
     }
     if (n->y() > _bbox.ymax()) {
-      n->setexpand(5, false);
+      n->expand(SOUTH, false);
     }
   } else {
-    n->setexpand(4, false);
-    n->setexpand(5, false);
+    n->expand(NORTH, false);
+    n->expand(SOUTH, false);
   }
 
   std::set<int> gridpos;
@@ -705,7 +713,7 @@ Geom::LayerRects Router::findSol()
 {
   TIME_M();
 #if DEBUG
-  SaveRestoreStream src(_name + "_route.log");
+  COUT << "routing : " << _name << '\n';
 #endif
   static std::string debugplot{getenv("HANAN_DEBUG_WIRE") ? getenv("HANAN_DEBUG_WIRE") : ""};
   Geom::LayerRects sol;
@@ -713,7 +721,7 @@ Geom::LayerRects Router::findSol()
     _bbox = Geom::Rect();
     for (auto& s : _sources) {
       evalTCost(s);
-      insert(s);
+      insertToPQ(s);
       _bbox.merge(s->x(), s->y(), s->x(), s->y());
 #if DEBUG
       COUT << "src : " << s->x() << ' ' << s->y() << '\n';
@@ -733,7 +741,11 @@ Geom::LayerRects Router::findSol()
       }
     }*/
     Geom::MergeLayerRects(_tobstacles, _obstacles);
-    if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) writeSTO();
+#if DEBUG
+#else
+    if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) 
+#endif
+      writeSTO();
     /*for (auto& l : _tobstacles) {
       COUT << "layer after : " << l.first << '\n';
       for (auto& o : l.second) {
@@ -773,7 +785,7 @@ Geom::LayerRects Router::findSol()
         break;
       }
       _pq.erase(_pq.begin());
-      expand(t);
+      expandNode(t);
       ++_expansions;
       if (_expansions >= _maxExpansions) break;
     }
@@ -800,13 +812,15 @@ Geom::LayerRects Router::findSol()
                 break;
               }
             }
-            auto extnx1 = widthx(n->z())/2;
-            auto extnx2 = widthx(n->z())/2;
-            auto extny1 = widthy(n->z())/2;
-            auto extny2 = widthy(n->z())/2;
+            auto hwx = (n->hwx() == 0 ? widthx(n->z())/2 : n->hwx());
+            auto hwy = (n->hwy() == 0 ? widthy(n->z())/2 : n->hwy());
+            auto extnx1 = hwx;
+            auto extnx2 = hwx;
+            auto extny1 = hwy;
+            auto extny2 = hwy;
             if (n->y() > parent->y()) {
-              extnx1 = widthy(n->z())/2;
-              extnx2 = widthy(n->z())/2;
+              extnx1 = hwy;
+              extnx2 = hwy;
               if (isTarget(n)) extny2 = 0;
               if (isSource(parent)) extny1 = 0;
               auto it = _endextnymax.find(n);
@@ -818,8 +832,8 @@ Geom::LayerRects Router::findSol()
                 extny1 = it->second;
               }
             } else if (n->y() < parent->y()) {
-              extnx1 = widthy(n->z())/2;
-              extnx2 = widthy(n->z())/2;
+              extnx1 = hwy;
+              extnx2 = hwy;
               if (isTarget(n)) extny1 = 0;
               if (isSource(parent)) extny2 = 0;
               auto it = _endextnymax.find(n);
@@ -832,8 +846,8 @@ Geom::LayerRects Router::findSol()
               }
             }
             if (n->x() > parent->x()) {
-              extny1 = widthx(n->z())/2;
-              extny2 = widthx(n->z())/2;
+              extny1 = hwx;
+              extny2 = hwx;
               if (isTarget(n)) extnx2 = 0;
               if (isSource(parent)) extnx1 = 0;
               auto it = _endextnxmax.find(n);
@@ -845,8 +859,8 @@ Geom::LayerRects Router::findSol()
                 extnx1 = it->second;
               }
             } else if (n->x() < parent->x()) {
-              extny1 = widthx(n->z())/2;
-              extny2 = widthx(n->z())/2;
+              extny1 = hwx;
+              extny2 = hwx;
               if (isTarget(n)) extnx1 = 0;
               if (isSource(parent)) extnx2 = 0;
               auto it = _endextnxmax.find(parent);
@@ -878,7 +892,11 @@ Geom::LayerRects Router::findSol()
   } else {
     COUT << "source or target empty!\n";
   }
-  if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) {
+#if DEBUG
+#else
+  if (!debugplot.empty() && (debugplot == "1" || debugplot == _name))
+#endif
+  {
     plot();
     printSol();
   }
@@ -1073,10 +1091,10 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
       obs = r.bloatby(x1, y1, x2, y2);
       if (temp) {
         _tobstacles[layer].push_back(obs);
-        //COUT << "tobs : " << _tobstacles[layer].back().str() << '\n';
+        COUT << "tobs : " << _tobstacles[layer].back().str() << '\n';
       } else {
         _obstacles[layer].push_back(obs);
-        //COUT << "obs : " << _obstacles[layer].back().str() << '\n';
+        COUT << "obs : " << _obstacles[layer].back().str() << '\n';
       }
     }
   }
@@ -1122,6 +1140,16 @@ void Router::updatendr()
       }
     }
   }
+#if DEBUG
+  for (unsigned i = 0; i < _ndrwidthx.size(); ++i) {
+    if (_ndrwidthx[i] != INT_MAX) {
+      COUT << "ndr widthx z : " << i << ' ' << _ndrwidthx[i] << '\n';
+    }
+    if (_ndrwidthy[i] != INT_MAX) {
+      COUT << "ndr widthy z : " << i << ' ' << _ndrwidthy[i] << '\n';
+    }
+  }
+#endif
   /*if (_targetshapes.size() == 1) {
     auto it = _targetshapes.begin();
     if (it->second.size() == 1) {

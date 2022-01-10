@@ -44,6 +44,7 @@ class Point {
 
 };
 typedef std::set<Geom::Point> PointSet;
+typedef std::set<std::pair<Geom::Point, int>> PointWidthSet;
 
 
 class Rect {

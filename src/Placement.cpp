@@ -81,6 +81,9 @@ PinPairs Net::reorderPins() const
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3)
 {
   //TIME_M();
+#if DEBUG
+  SaveRestoreStream src(_name + "_route.log");
+#endif
   _unroute = 0;
   for (auto& p : _pins) {
     Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
@@ -115,6 +118,8 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
+      router.updatendr();
+      COUT << "adding line of sight nodes if they exist\n";
       for (auto& l : p1) {
         auto it = p2.find(l.first);
         if (it != p2.end()) {
@@ -137,7 +142,6 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
-      router.updatendr();
       router.addObstacles(l1, true);
       router.addObstacles(l2, true);
       router.addObstacles(l3, true);

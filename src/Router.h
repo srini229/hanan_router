@@ -55,17 +55,22 @@ class Node {
   private:
     friend class Router;
     int _x, _y, _z;
+    int _hwx, _hwy;
     CostType _fcost, _tcost;
     Node const* _parent;
     std::bitset<MAXDIR> _expanddir;
     Node(const int x = 0, const int y = 0, const int z = -1,
         const CostType fcost = -1, const CostType tcost = -1, Node const* parent = nullptr)
-      : _x(x), _y(y), _z(z), _fcost(fcost), _tcost(tcost), _parent(parent) {_expanddir.set();}
+      : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _fcost(fcost), _tcost(tcost), _parent(parent) {_expanddir.reset();}
   public:
     int x() const { return _x; }
     int y() const { return _y; }
     int z() const { return _z; }
     Node const* parent() const { return _parent; }
+    void sethwx(const int hwx) { _hwx = hwx; }
+    void sethwy(const int hwy) { _hwy = hwy; }
+    int hwx() const { return _hwx; }
+    int hwy() const { return _hwy; }
 
     bool viadown()     const { return _expanddir.test(DOWN); }
     bool viaup()       const { return _expanddir.test(UP); }
@@ -74,7 +79,7 @@ class Node {
     bool expandnorth() const { return _expanddir.test(NORTH); }
     bool expandsouth() const { return _expanddir.test(SOUTH); }
 
-    void setexpand(const int dir, const bool val) { if (dir < MAXDIR) _expanddir.set(dir, val); }
+    void expand(const int dir, const bool val) { if (dir < MAXDIR) _expanddir.set(dir, val); }
     void clearexpand(const bool clear = false)
     {
       if(clear) _expanddir.reset();
@@ -89,7 +94,14 @@ class Node {
     void setParent(const Node* n) { _parent = n; }
     void print(const std::string& s) const
     {
-      COUT << s << ' ' << _x << ' ' << _y << ' ' << _z << ' ' << _fcost << ' ' << _tcost <<  ' ' << cost() << ' ' << _expanddir.to_string() << '\n';
+      COUT << s << ' ' << _x << ' ' << _y << ' ' << _z << ' ' << _fcost << ' ' << _tcost <<  ' ' << cost();
+      if (_expanddir.test(NORTH)) COUT << " N";
+      if (_expanddir.test(SOUTH)) COUT << " S";
+      if (_expanddir.test(EAST))  COUT << " E";
+      if (_expanddir.test(WEST))  COUT << " W";
+      if (_expanddir.test(UP))    COUT << " VU";
+      if (_expanddir.test(DOWN))  COUT << " VD";
+      COUT << '\n';
     }
 };
 typedef std::vector<Node*> NodePtrVec;
@@ -177,11 +189,11 @@ class Router {
 
     void evalCost(Node* n) { evalFCost(n); evalTCost(n); }
 
-    void insert(const Node* n);
+    void insertToPQ(const Node* n);
 
     void invertRange(IntRangeSet& s, const bool vert);
     void insertRange(IntRangeSet& s, const IntRange& r);
-    void expand(const Node* n);
+    void expandNode(const Node* n);
     void generateHananGrid();
     bool isVert(const int l) const { return _lf.isVertical(l); }
     bool isHor(const int l) const { return _lf.isHorizontal(l); }
@@ -199,11 +211,11 @@ class Router {
       _expansions = 0;
       _bbox = Geom::Rect();
     }
-    Geom::PointSet findValidPoints(const Geom::Rect& r, const int z) const;
+    Geom::PointWidthSet findValidPoints(const Geom::Rect& r, const int z, const Direction dir) const;
 
     bool isTarget(const Node* n) const { return _targets.find(const_cast<Node*>(n)) != _targets.end(); }
     bool isSource(const Node* n) const { return _sources.find(const_cast<Node*>(n)) != _sources.end(); }
-    void setexpand(Node* newn, const Node* parent = nullptr) const;
+    void setexpand(Node* newn, const Node* parent) const;
 
     
   public:
@@ -246,8 +258,9 @@ class Router {
     }
     void addObstacles(const Geom::LayerRects& lr, const bool temp = false);
 
-    void addSource(const Geom::Rect& r, const int z);
-    void addTarget(const Geom::Rect& r, const int z);
+    void addSourceTarget(const Geom::Rect& r, const int z, const bool src);
+    void addSource(const Geom::Rect& r, const int z) { addSourceTarget(r, z, true); }
+    void addTarget(const Geom::Rect& r, const int z) { addSourceTarget(r, z, false); }
     bool isViaValid(const Node* n, const bool up) const;
     void updatendr();
 };
