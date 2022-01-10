@@ -105,7 +105,7 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100
       _widthy.push_back(mlayer->width());
       _spacex.push_back(mlayer->space());
       _spacey.push_back(mlayer->space());
-      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << "v : " << isVert(i) << " h : " << isHor(i) << '\n';
+      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << " v : " << isVert(i) << " h : " << isHor(i) << '\n';
     }
   }
   _aboveViaLayer.resize(_widthx.size(), -1);
@@ -189,9 +189,8 @@ Geom::PointSet Router::findValidPoints(const Geom::Rect& r, const int z) const
     }
   }
 
-  COUT << z << ' ' << r.str() << ' ' << _widthx[z] << ' ' << _widthy[z] << ' ' << r.width() << ' ' << r.height() << '\n';
-
 #if DEBUG
+  COUT << z << ' ' << r.str() << ' ' << _widthx[z] << ' ' << _widthy[z] << ' ' << r.width() << ' ' << r.height() << '\n';
   for (auto & p : points) {
     COUT << "p : " << p.str() << '\n';
   }
@@ -848,7 +847,7 @@ Geom::LayerRects Router::findSol()
             } else if (n->x() < parent->x()) {
               extny1 = widthx(n->z())/2;
               extny2 = widthx(n->z())/2;
-              if (isTarget(n)) extny1 = 0;
+              if (isTarget(n)) extnx1 = 0;
               if (isSource(parent)) extnx2 = 0;
               auto it = _endextnxmax.find(parent);
               if (it != _endextnxmax.end()) {

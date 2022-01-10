@@ -146,7 +146,7 @@ class LayerInfo {
     int _topMetal;
     bool _populated;
   public:
-    LayerInfo(const std::string& lj);
+    LayerInfo(const std::string& lj, const int uu);
     void print() const;
     ~LayerInfo();
     int getLayerIndex(const std::string& name) const

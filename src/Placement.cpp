@@ -80,7 +80,7 @@ PinPairs Net::reorderPins() const
 
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3)
 {
-  TIME_M();
+  //TIME_M();
   _unroute = 0;
   for (auto& p : _pins) {
     Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
@@ -215,6 +215,7 @@ void Module::build()
 
 void Module::route(Router::Router& router)
 {
+  TIME_M();
   if (!_routed) {
     writeDEF("_before");
     router.clearObstacles();

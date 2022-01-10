@@ -9,7 +9,7 @@ namespace DRC {
 
 using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
-LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullptr},
+LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr}, _stop{nullptr},
  _cbottom{nullptr}, _ctop{nullptr}, _pbottom{nullptr}, _ptop{nullptr}, _topMetal{0}, _populated{false}
 {
   if (ljfile.empty()) {
@@ -47,15 +47,15 @@ LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullp
           }
           if (mlayer != nullptr) {
             it = l.find("Width");
-            if (it != l.end() && it->is_number_integer()) mlayer->setWidth(static_cast<int>(*it));
+            if (it != l.end() && it->is_number_integer()) mlayer->setWidth(static_cast<int>(*it) * uu);
             it = l.find("MinL");
-            if (it != l.end() && it->is_number_integer()) mlayer->setMinL(static_cast<int>(*it));
+            if (it != l.end() && it->is_number_integer()) mlayer->setMinL(static_cast<int>(*it) * uu);
             it = l.find("MaxL");
-            if (it != l.end() && it->is_number_integer()) mlayer->setMaxL(static_cast<int>(*it));
+            if (it != l.end() && it->is_number_integer()) mlayer->setMaxL(static_cast<int>(*it) * uu);
             it = l.find("EndToEnd");
-            if (it != l.end() && it->is_number_integer()) mlayer->setE2E(static_cast<int>(*it));
+            if (it != l.end() && it->is_number_integer()) mlayer->setE2E(static_cast<int>(*it) * uu);
             it = l.find("Offset");
-            if (it != l.end() && it->is_number_integer()) mlayer->setOffset(static_cast<int>(*it));
+            if (it != l.end() && it->is_number_integer()) mlayer->setOffset(static_cast<int>(*it) * uu);
             it = l.find("Direction");
             if (it != l.end() && it->is_string()) mlayer->setDirection(*it == "H" ? 0 : (*it == "V" ? 1 : 2));
             _mlayers.push_back(mlayer);
@@ -100,26 +100,26 @@ LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullp
             vlayer->setLayerPair(layer1, layer2);
             int x(0), y(0);
             it = l.find("WidthX");
-            if (it != l.end() && it->is_number_integer()) x = static_cast<int>(*it);
+            if (it != l.end() && it->is_number_integer()) x = static_cast<int>(*it) * uu;
             it = l.find("WidthY");
-            if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it);
+            if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it) * uu;
             vlayer->setWidth(x, y);
             x = y = 0;
             it = l.find("SpaceX");
-            if (it != l.end() && it->is_number_integer()) x = static_cast<int>(*it);
+            if (it != l.end() && it->is_number_integer()) x = static_cast<int>(*it) * uu;
             it = l.find("SpaceY");
-            if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it);
+            if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it) * uu;
             vlayer->setSpace(x, y);
             x = y = 0;
             it = l.find("VencA_L");
-            if (it != l.end() && it->is_number_integer()) x = static_cast<int>(*it);
-            if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it);
+            if (it != l.end() && it->is_number_integer()) x = static_cast<int>(*it) * uu;
+            if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it) * uu;
             vlayer->setCoverL(x, y);
             x = y = 0;
             it = l.find("VencA_H");
-            if (it != l.end() && it->is_number_integer()) x = static_cast<int>(*it);
+            if (it != l.end() && it->is_number_integer()) x = static_cast<int>(*it) * uu;
             it = l.find("VencP_H");
-            if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it);
+            if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it) * uu;
             vlayer->setCoverU(x, y);
             x = y = 0;
             it = l.find("ViaCut");
@@ -128,17 +128,17 @@ LayerInfo::LayerInfo(const std::string& ljfile) : _sbottom{nullptr}, _stop{nullp
               if (itv != it->end() && *itv == "ViaArrayGenerator") {
                 int wx{0}, wy{0}, sx{0}, sy{0}, nx{1}, ny{1};
                 itv = it->find("WidthX");
-                if (itv != it->end() && itv->is_number_integer()) wx = static_cast<int>(*itv);
+                if (itv != it->end() && itv->is_number_integer()) wx = static_cast<int>(*itv) * uu;
                 itv = it->find("WidthY");
-                if (itv != it->end() && itv->is_number_integer()) wy = static_cast<int>(*itv);
+                if (itv != it->end() && itv->is_number_integer()) wy = static_cast<int>(*itv) * uu;
                 itv = it->find("SpaceX");
-                if (itv != it->end() && itv->is_number_integer()) sx = static_cast<int>(*itv);
+                if (itv != it->end() && itv->is_number_integer()) sx = static_cast<int>(*itv) * uu;
                 itv = it->find("SpaceY");
-                if (itv != it->end() && itv->is_number_integer()) sy = static_cast<int>(*itv);
+                if (itv != it->end() && itv->is_number_integer()) sy = static_cast<int>(*itv) * uu;
                 itv = it->find("NumX");
-                if (itv != it->end() && itv->is_number_integer()) nx = static_cast<int>(*itv);
+                if (itv != it->end() && itv->is_number_integer()) nx = static_cast<int>(*itv) * uu;
                 itv = it->find("NumY");
-                if (itv != it->end() && itv->is_number_integer()) ny = static_cast<int>(*itv);
+                if (itv != it->end() && itv->is_number_integer()) ny = static_cast<int>(*itv) * uu;
                 vlayer->addViaArray(wx, wy, sx, sy, nx, ny);
               }
             }

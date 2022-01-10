@@ -13,12 +13,13 @@ int main(int argc, char* argv[])
   std::string plfile = parseArgs(argc, argv, "-p");
   std::string leffile = parseArgs(argc, argv, "-l");
   const bool route = checkArg(argc, argv, "-r");
+  const bool uuflayer = checkArg(argc, argv, "-s");
   int uu{1000};
   try {
     uu = std::stoi(parseArgs(argc, argv, "-uu"));
   } catch (const std::invalid_argument& ia) {}
 
-  DRC::LayerInfo linfo(layerJSONFile);
+  DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 1));
   if (!linfo.populated())  {
     CERR << "missing or unable to read layers.json file argument" << std::endl;
     return 0;
