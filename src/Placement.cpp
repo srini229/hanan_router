@@ -20,8 +20,7 @@ PinPairs Net::reorderPins() const
   PinCVec pins(_pins.begin(), _pins.end());
   std::sort(pins.begin(), pins.end(),
       [](const Pin* p1, const Pin* p2) -> bool { return p1->bbox().halfpm() > p2->bbox().halfpm(); });
-  double pinpairdist[pins.size()][pins.size()];
-  std::fill_n(*pinpairdist, pins.size() * pins.size(), 0);
+  std::vector<std::vector<double>> pinpairdist(pins.size(), std::vector<double>(pins.size(), 0));
   double mindist{DBLMAX};
   int idx1{-1}, idx2{-1};
   for (unsigned i = 0; i < pins.size(); ++i) {
@@ -43,6 +42,7 @@ PinPairs Net::reorderPins() const
       }
       pinpairdist[i][j] = dist;
       pinpairdist[j][i] = dist;
+      COUT << "pins dist : " << pins[i]->name() << ' ' << pins[j]->name() << ' ' << dist << '\n';
       if (mindist > dist) {
         mindist = dist;
         idx1 = static_cast<int>(i);
@@ -50,9 +50,9 @@ PinPairs Net::reorderPins() const
       }
     }
   }
-  std::vector<std::pair<const Pin*, const Pin*>> primorder;
+  std::vector<std::pair<int, int>> primorder;
   primorder.reserve(pins.size() - 1);
-  primorder.push_back(std::make_pair(pins[idx1], pins[idx2]));
+  primorder.push_back(std::make_pair(idx1, idx2));
   std::vector<int> selected(pins.size(), 0);
   selected[idx1] = 1;
   selected[idx2] = 1;
@@ -70,12 +70,20 @@ PinPairs Net::reorderPins() const
       }
     }
     if (minidx2 >= 0) {
-      primorder.push_back(std::make_pair(pins[minidx1], pins[minidx2]));
+      primorder.push_back(std::make_pair(minidx1, minidx2));
+      COUT << "pins to route order : " << pins[minidx1]->name() << ' ' << pins[minidx2]->name() << '\n';
       selected[minidx2] = 1;
     }
   }
 
-  return primorder;
+  std::sort(primorder.begin(), primorder.end(), [pinpairdist](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool
+      { return pinpairdist[a.first][a.second] < pinpairdist[b.first][b.second]; });
+
+  
+  PinPairs porder;
+  for (auto& pp : primorder) porder.emplace_back(pins[pp.first], pins[pp.second]);
+
+  return porder;
 }
 
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3)
@@ -111,9 +119,9 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           if (l.first > router.maxLayer() || l.first < router.minLayer()) continue;
           for (auto& s : l.second) {
             if (src) {
-              router.addSource(s, l.first);
+              router.addSourceShapes(s, l.first);
             } else {
-              router.addTarget(s, l.first);
+              router.addTargetShapes(s, l.first);
             }
           }
         }

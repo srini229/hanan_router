@@ -225,6 +225,25 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
   return points;
 }
 
+void Router::addSourceTargetShapes(const Geom::Rect& r, const int z, const bool src)
+{
+  auto& shapes = (src ? _sourceshapes : _targetshapes);
+  bool inserted{false};
+  for (auto it = shapes[z].begin(); it != shapes[z].end(); ++it) {
+    auto s = *it;
+    if (s.contains(r)) {
+      inserted = true;
+      break;
+    } else if (r.contains(s)) {
+      shapes[z].erase(it);
+      shapes[z].insert(r);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) shapes[z].insert(r);
+}
+
 void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
 {
   auto& shapes = (src ? _sourceshapes : _targetshapes);
@@ -1162,6 +1181,16 @@ void Router::updatendr()
       }
     }
   }*/
+  for (const auto& l : _sourceshapes) {
+    for (auto& r : l.second) {
+      addSource(r, l.first);
+    }
+  }
+  for (const auto& l : _targetshapes) {
+    for (auto& r : l.second) {
+      addTarget(r, l.first);
+    }
+  }
 }
 
 bool Router::isViaValid(const Node* n, const bool up) const

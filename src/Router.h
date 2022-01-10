@@ -258,6 +258,9 @@ class Router {
     }
     void addObstacles(const Geom::LayerRects& lr, const bool temp = false);
 
+    void addSourceTargetShapes(const Geom::Rect& r, const int z, const bool src);
+    void addSourceShapes(const Geom::Rect& r, const int z) { addSourceTargetShapes(r, z, true); }
+    void addTargetShapes(const Geom::Rect& r, const int z) { addSourceTargetShapes(r, z, false); }
     void addSourceTarget(const Geom::Rect& r, const int z, const bool src);
     void addSource(const Geom::Rect& r, const int z) { addSourceTarget(r, z, true); }
     void addTarget(const Geom::Rect& r, const int z) { addSourceTarget(r, z, false); }
