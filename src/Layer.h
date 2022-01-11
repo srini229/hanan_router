@@ -27,14 +27,17 @@ class Layer {
     const std::string _name;
     const float _r[3]; // mean, -3\sigma, 3\sigma
     const LayerType _type;
+    int _index;
   public:
     Layer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur, const LayerType type)
-      : _gdsNo(gdsNo), _name(name), _r{mur, lr, ur}, _type{type} {}
+      : _gdsNo(gdsNo), _name(name), _r{mur, lr, ur}, _type{type}, _index{-1} {}
     int gdsNo() const { return _gdsNo; }
     const std::string& name() const { return _name; }
     float meanR() const { return _r[0]; }
     bool isMetal() const { return _type == LayerType::METAL; }
     bool isVia() const { return _type == LayerType::VIA; }
+    void setIndex(const int i) { _index = i; }
+    int index() const { return _index; }
     ~Layer()
     {
       //std::cout << "layer : " << _name << ' ' << _gdsNo << " {" << _r[0] << ',' << _r[1] << ',' << _r[2] << "}\n";
@@ -157,21 +160,19 @@ class LayerInfo {
     std::pair<int, int> getLayers(const ViaLayer* v) const
     {
       auto l = v->layers();
-      int ll{-1}, ul{-1};
-      if (l.first) ll =  getLayerIndex(l.first->name());
-      if (l.second) ul =  getLayerIndex(l.second->name());
-      return std::make_pair(ll, ul);
+      if (l.first && l.second) return std::make_pair(l.first->index(), l.second->index());
+      return std::make_pair(-1, -1);
     }
     const Layers& layers() const { return _layers; }
     int signalBottomLayer() const 
     {
-      if (_sbottom) getLayerIndex(_sbottom->name());
+      if (_sbottom) return _sbottom->index();
       for (int i = 0; i < static_cast<int>(_layers.size()); ++i) {
         if (_layers[i]->name() == "M1") return i;
       }
       return 0;
     }
-    int signalTopLayer() const { return (_stop ? getLayerIndex(_stop->name()) : _topMetal); }
+    int signalTopLayer() const { return (_stop ? _stop->index() : _topMetal); }
     bool populated() const { return _populated; }
     bool isVertical(const int z) const
     {

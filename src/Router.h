@@ -16,6 +16,22 @@ typedef long CostType;
 const auto CostMax = std::numeric_limits<CostType>::max();
 class Node;
 
+class Via {
+  private:
+    int _l, _u, _c;
+    Geom::Point _center;
+    Geom::Rect _lb, _ub, _cut, _bbox;
+    Geom::Rects _cuts;
+  public:
+    Via(const int l, const int u, const int c, const Geom::Point& ctr = Geom::Point(0, 0)) : _l{l}, _u{u}, _c{c}, _center{c}, _lb{}, _ub{}, _cut{}, _bbox{} {}
+    void setLB(const Geom::Rect& r) { _lb = r; _bbox.merge(_lb); }
+    void setUB(const Geom::Rect& r) { _ub = r; _bbox.merge(_ub); }
+    void addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow = 1, const int ncol = 1, const int sx = 0, const int sy = 0);
+    Via translate(const Geom::Point& p) const;
+
+};
+typedef std::vector<Via> Vias;
+
 class CostFn {
   private:
     int _topRoutingLayer;
@@ -158,6 +174,7 @@ class Router {
     std::vector<int> _widthx, _ndrwidthx, _spacex;
     std::vector<int> _widthy, _ndrwidthy, _spacey;
     int _minLayer, _maxLayer, _maxRoutingLayer;
+    Vias _vias;
     std::string _name;
     size_t _expansions{0};
     const size_t _maxExpansions{100000};
@@ -217,6 +234,7 @@ class Router {
     bool isSource(const Node* n) const { return _sources.find(const_cast<Node*>(n)) != _sources.end(); }
     void setexpand(Node* newn, const Node* parent) const;
 
+    void constructVias();
     
   public:
     Router(const DRC::LayerInfo& lf);

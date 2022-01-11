@@ -29,6 +29,7 @@ class Point {
     void translate(int x, int y) { _x += x; _y += y; }
     void translate(int c) { _x += c; _y += c; }
     void translate(const Point& p) { _x += p.x(); _y += p.y(); }
+    Point trans(const Point& p) const { return Point(_x + p.x(), _y + p.y()); }
     Point transform(const Transform& tr, const int width, const int height) const;
     //const json toJSON() const { return json{{"x", _x}, {"y", _y}}; }
     const std::string str() const { return "x : " + std::to_string(_x) + " y : " + std::to_string(_y); }
@@ -132,7 +133,7 @@ class Rect {
     void translate(const int x, const int y) { _ll.translate(x, y); _ur.translate(x, y); }
     void translate(const int c) { _ll.translate(c); _ur.translate(c); }
 
-    Rect translate(const Point& pt) const
+    Rect trans(const Point& pt) const
     {
       auto r = Rect(_ll, _ur);
       r.translate(pt.x(), pt.y());

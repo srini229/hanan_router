@@ -113,6 +113,7 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
             x = y = 0;
             it = l.find("VencA_L");
             if (it != l.end() && it->is_number_integer()) x = static_cast<int>(*it) * uu;
+            it = l.find("VencP_L");
             if (it != l.end() && it->is_number_integer()) y = static_cast<int>(*it) * uu;
             vlayer->setCoverL(x, y);
             x = y = 0;
@@ -168,6 +169,7 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
   _topMetal = (static_cast<int>(_layers.size()) - 1);
   _layers.insert(_layers.end(), _vlayers.begin(), _vlayers.end());
   for (unsigned i = 0; i < _layers.size(); ++i) {
+    _layers[i]->setIndex(i);
     LAYER_NAMES.push_back(_layers[i]->name());
     _layerIndex[_layers[i]->name()] = static_cast<int>(i);
     COUT << "layer : " << _layers[i]->name() << " index : " << i << '\n';

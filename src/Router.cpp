@@ -3,6 +3,38 @@
 namespace Router {
 
 
+void Via::addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow, const int ncol, const int sx, const int sy)
+{
+  _cuts.clear();
+  Geom::Rect r{o.x(), o.y(), o.x() + wx, o.y() + wy};
+  if (nrow == 1 && ncol == 1) {
+    _cut = r;
+    _bbox.merge(_cut);
+  } else {
+    for (int i = 0; i < nrow; ++i) {
+      for (int j = 0; j < ncol; ++i) {
+        _cuts.push_back(r.trans(Geom::Point(i * (sx + wx), j * (sy + wy))));
+        _cut.merge(_cuts.back());
+        _bbox.merge(_cuts.back());
+      }
+    }
+  }
+}
+
+Via Via::translate(const Geom::Point& p) const
+{
+  Via v{_l, _u, _c, _center};
+  v._center = _center.trans(p);
+  v._lb = _lb.trans(p);
+  v._ub = _ub.trans(p);
+  v._cut = _cut.trans(p);
+  v._bbox = _bbox.trans(p);
+  for (auto& c : _cuts) {
+    v._cuts.emplace_back(c.trans(p));
+  }
+  return v;
+}
+
 CostFn::CostFn(const DRC::LayerInfo& lf)
 {
   auto& layers = lf.layers();
@@ -1230,5 +1262,20 @@ bool Router::isViaValid(const Node* n, const bool up) const
   }
   return true;
 }
+
+void Router::constructVias()
+{
+  for (auto &v : _lf.layers()) {
+    if (v->isVia()) {
+      auto vl = static_cast<DRC::ViaLayer*>(v);
+      auto lp = vl->layers();
+      auto va = vl->viaArray();
+      if (va.empty()) {
+      } else {
+      }
+    }
+  }
+}
+
 
 }
