@@ -19,10 +19,10 @@ DEPFLAGS = -MMD -MP
 
 MAIN = hanan_router
 
+#OPTFLAGS = -Ofast
+OPTFLAGS = 
 ifeq ($(DEBUG), 1)
 OPTFLAGS = 
-else
-OPTFLAGS = -Ofast
 endif
 .PHONY: depend clean
 

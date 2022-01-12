@@ -41,6 +41,7 @@ class Net {
     std::string _name;
     std::set<const Pin*> _pins;
     Geom::LayerRects _routeshapes;
+    Router::Vias _vias;
     Geom::Rect _bbox;
     int _unroute : 1;
     PinPairs reorderPins() const;
@@ -78,6 +79,7 @@ class Instance {
     const Module* _m;
     Pins _pins;
     Geom::LayerRects _routeshapes;
+    Router::Vias _vias;
     void build(const bool rebuild = false);
     Geom::Rect _bbox;
   public:
@@ -106,6 +108,7 @@ class Module {
     Nets _nets;
     Pins _pins;
     Instances _instances;
+    Router::Vias _vias;
     std::map<const Net*, std::vector<std::pair<Instance*, std::string>>> _tmpnetpins;
     Geom::LayerRects _obstacles;
     Geom::Rect _bbox;

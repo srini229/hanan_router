@@ -30,7 +30,6 @@ class Point {
     void translate(int c) { _x += c; _y += c; }
     void translate(const Point& p) { _x += p.x(); _y += p.y(); }
     Point trans(const Point& p) const { return Point(_x + p.x(), _y + p.y()); }
-    Point transform(const Transform& tr, const int width, const int height) const;
     //const json toJSON() const { return json{{"x", _x}, {"y", _y}}; }
     const std::string str() const { return "(" + std::to_string(_x) + "," + std::to_string(_y) + ")"; }
     bool operator < (const Point& p) const
@@ -139,8 +138,6 @@ class Rect {
       r.translate(pt.x(), pt.y());
       return r;
     }
-
-    Rect transform(const Transform& tr, const int width, const int height) const;
 
     long area() const { return ((long)width()) * height(); }
     string str() const { return "[" + _ll.str() + "," + _ur.str() + "]"; }

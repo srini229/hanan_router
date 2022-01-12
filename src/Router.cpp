@@ -1,7 +1,9 @@
 #include "Router.h"
 
 namespace Router {
-
+#if DEBUG
+size_t Node::_nodectr = 0;
+#endif
 
 void Via::addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow, const int ncol, const int sx, const int sy)
 {
@@ -31,6 +33,20 @@ Via Via::translate(const Geom::Point& p) const
   v._bbox = _bbox.trans(p);
   for (auto& c : _cuts) {
     v._cuts.emplace_back(c.trans(p));
+  }
+  return v;
+}
+
+Via Via::transform(const Geom::Transform& tr) const
+{
+  Via v{_l, _u, _c};
+  v._center = tr.transform(_center);
+  v._lb = tr.transform(_lb);
+  v._ub = tr.transform(_ub);
+  v._cut = tr.transform(_cut);
+  v._bbox = tr.transform(_bbox);
+  for (auto& c : _cuts) {
+    v._cuts.emplace_back(tr.transform(c));
   }
   return v;
 }
@@ -188,20 +204,32 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100
 Node* Router::createNode(const int x, const int y, const int z,
     const Node* parent, const int fcost, const int tcost)
 {
-  auto& nz = _nodes[z];
   auto coord = std::make_pair(x,y);
-  auto it = nz.find(coord);
+  auto it = _nodes[z].find(coord);
   Node* n = nullptr;
-  if (it == nz.end()) {
+  if (x == 31680 && y == 22100) {
+    n = nullptr;
+    COUT << "creating new node : " << x << ',' << y << ',' << z << std::endl;
+  }
+  if (z < _minLayer || z > _maxLayer) COUT << "ERROR in layer no : " << z << '\n';
+  if (it == _nodes[z].end()) {
     n = new Node(x, y, z, fcost, tcost, parent);
-    nz[coord] = n;
+    auto itr = _nodes[z].emplace(std::make_pair(coord, n));
+    it = itr.first;
+    if (!itr.second) {
+      COUT << "ERROR adding node to nz "; n->print("n : ");
+      delete n;
+      n = itr.first->second;
+#if DEBUG
+    } else {
+      _nodeset.insert(n);
+#endif
+    }
 #if DEBUG
     COUT << "creating new node : " << x << ',' << y << ',' << z << '\n';
 #endif
-  } else {
-    n = it->second;
   }
-  return n;
+  return (it != _nodes[z].end()) ? it->second : nullptr;
 }
 
 Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, const Direction dir) const
@@ -675,9 +703,9 @@ void Router::expandNode(const Node* n1)
   n->clearexpand(true);
 }
 
-void Router::insertRange(IntRangeSet& s, const IntRange& r)
+void Router::insertRange(IntRangeSet& s, const IntPair& r)
 {
-  IntRange rc = r;
+  IntPair rc = r;
   std::vector<IntRangeSet::iterator> overlapit;
 #if DEBUG
   COUT << "insert range : " << rc.first << ' ' << rc.second << '\n';
@@ -982,6 +1010,7 @@ Geom::LayerRects Router::findSol()
     plot();
     printSol();
   }
+  clearSourceTargets();
   return sol;
 }
 
@@ -1307,7 +1336,7 @@ void Router::constructVias()
       if (lp.first && lp.second) {
         auto vas = vl->viaArray();
         if (vas.empty()) {
-          Via *via = new Via(lp.first->index(), lp.second->index(), v->index());
+          auto via = std::make_shared<Via>(lp.first->index(), lp.second->index(), v->index());
           auto wx = vl->widthx(), wy = vl->widthy();
           auto lx = wx + 2 * vl->coverlx();
           auto ly = wy + 2 * vl->coverly();
@@ -1321,7 +1350,7 @@ void Router::constructVias()
           _dnVias[lp.second->index()].push_back(via);
         } else {
           for (auto& va : vas) {
-            Via *via = new Via(lp.first->index(), lp.second->index(), v->index());
+            auto via = std::make_shared<Via>(lp.first->index(), lp.second->index(), v->index());
             auto lx = vl->widthx() + 2 * vl->coverlx();
             auto ly = vl->widthy() + 2 * vl->coverly();
             auto ux = vl->widthx() + 2 * vl->coverux();

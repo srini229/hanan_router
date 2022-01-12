@@ -5,6 +5,7 @@
 #include <queue>
 #include <bitset>
 #include <limits>
+#include <memory>
 
 #include "Util.h"
 #include "Geom.h"
@@ -28,6 +29,7 @@ class Via {
     void setUB(const Geom::Rect& r) { _ub = r; _bbox.merge(_ub); }
     void addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow = 1, const int ncol = 1, const int sx = 0, const int sy = 0);
     Via translate(const Geom::Point& p) const;
+    Via transform(const Geom::Transform& tr) const;
     std::string str() const;
     void addShapes(Geom::LayerRects& lr) const;
     Geom::LayerRects getShapes() const
@@ -39,7 +41,7 @@ class Via {
 
 
 };
-typedef std::vector<const Via*> Vias;
+typedef std::vector<std::shared_ptr<Via>> Vias;
 
 class CostFn {
   private:
@@ -77,6 +79,10 @@ enum Direction
 };
 
 class Node {
+#if DEBUG
+  public:
+    static size_t _nodectr;
+#endif
   private:
     friend class Router;
     int _x, _y, _z;
@@ -86,7 +92,19 @@ class Node {
     std::bitset<MAXDIR> _expanddir;
     Node(const int x = 0, const int y = 0, const int z = -1,
         const CostType fcost = -1, const CostType tcost = -1, Node const* parent = nullptr)
-      : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _fcost(fcost), _tcost(tcost), _parent(parent) {_expanddir.reset();}
+      : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _fcost(fcost), _tcost(tcost), _parent(parent)
+      {
+        _expanddir.reset();
+#if DEBUG
+        ++_nodectr;
+#endif
+      }
+#if DEBUG
+    ~Node()
+    {
+      --_nodectr;
+    }
+#endif
   public:
     int x() const { return _x; }
     int y() const { return _y; }
@@ -158,23 +176,26 @@ struct NodeCostComp {
   }
 };
 
-typedef std::pair<int, int> IntRange;
-struct RangeComp {
-  bool operator() (const IntRange& p1, const IntRange& p2) const
+typedef std::pair<int, int> IntPair;
+struct IntPairComp {
+  bool operator() (const IntPair& p1, const IntPair& p2) const
   {
     if (p1.first == p2.first) return p1.second < p2.second;
     return p1.first < p2.first;
   }
 };
-typedef std::set<IntRange, RangeComp> IntRangeSet;
+typedef std::set<IntPair, IntPairComp> IntRangeSet;
 typedef std::set<Node*, NodeComp> NodeSet;
 typedef std::multiset<const Node*, NodeCostComp> PriorityQueue;
-typedef std::vector<std::map<std::pair<int, int>, Node*>> NodeMap;
+typedef std::vector<std::map<IntPair, Node*, IntPairComp>> NodeMap;
 class Router {
   private:
     PriorityQueue _pq;
     NodeSet _sources, _targets;
     NodeMap _nodes;
+#if DEBUG
+    std::set<Node*> _nodeset;
+#endif
     Geom::LayerRects _obstacles, _tobstacles;
     CostFn _cf;
     std::vector<std::map<int, IntRangeSet>> _hanangridh, _hanangridv;
@@ -219,7 +240,7 @@ class Router {
     void insertToPQ(const Node* n);
 
     void invertRange(IntRangeSet& s, const bool vert);
-    void insertRange(IntRangeSet& s, const IntRange& r);
+    void insertRange(IntRangeSet& s, const IntPair& r);
     void expandNode(const Node* n);
     void generateHananGrid();
     bool isVert(const int l) const { return _lf.isVertical(l); }
@@ -229,12 +250,24 @@ class Router {
     void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);
     void flushNodes()
     {
-      COUT << "flushing nodes\n";
       _pq.clear();
       for (auto& l : _nodes) {
-        for (auto& n : l) delete n.second;
+        for (auto& n : l) {
+          delete n.second;
+#if DEBUG
+          _nodeset.erase(n.second);
+#endif
+          n.second = nullptr;
+        }
+        l.clear();
       }
-      _nodes.clear();
+      COUT << "flushing nodes\n";
+#if DEBUG
+      COUT << " remaining " << Node::_nodectr << ' ' << _nodeset.size() << "\n";
+      for (auto& n : _nodeset) {
+        n->print("rem node : ");
+      }
+#endif
       _expansions = 0;
       _bbox = Geom::Rect();
     }
@@ -253,7 +286,6 @@ class Router {
       flushNodes();
       _sources.clear();
       _targets.clear();
-      for (auto& v : _vias) delete v;
       _vias.clear();
     }
     void readDataFile(const std::string& ifile);
