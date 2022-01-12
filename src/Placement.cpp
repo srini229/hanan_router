@@ -127,7 +127,9 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
       router.updatendr();
+#if DEBUG
       COUT << "adding line of sight nodes if they exist\n";
+#endif
       for (auto& l : p1) {
         auto it = p2.find(l.first);
         if (it != p2.end()) {

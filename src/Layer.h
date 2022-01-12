@@ -131,6 +131,15 @@ class ViaLayer : public Layer {
     const std::pair<const MetalLayer*, const MetalLayer*>& layers() const { return _layerPair; }
     int widthx() const { return _sw._width.first; }
     int widthy() const { return _sw._width.second; }
+    int coverlx() const { return _coverl[0]; }
+    int coverly() const { return _coverl[1]; }
+    int coverux() const { return _coveru[0]; }
+    int coveruy() const { return _coveru[1]; }
+    void swapcover(bool up)
+    {
+      if (up) std::swap(_coveru[0], _coveru[1]); 
+      else std::swap(_coverl[0], _coverl[1]); 
+    }
     int spacex() const { return _sw._space.first; }
     int spacey() const { return _sw._space.second; }
 

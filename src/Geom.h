@@ -32,7 +32,7 @@ class Point {
     Point trans(const Point& p) const { return Point(_x + p.x(), _y + p.y()); }
     Point transform(const Transform& tr, const int width, const int height) const;
     //const json toJSON() const { return json{{"x", _x}, {"y", _y}}; }
-    const std::string str() const { return "x : " + std::to_string(_x) + " y : " + std::to_string(_y); }
+    const std::string str() const { return "(" + std::to_string(_x) + "," + std::to_string(_y) + ")"; }
     bool operator < (const Point& p) const
     {
       if (_x == p._x) return _y < p._y;
@@ -143,7 +143,7 @@ class Rect {
     Rect transform(const Transform& tr, const int width, const int height) const;
 
     long area() const { return ((long)width()) * height(); }
-    string str() const { return "LL : {" + _ll.str() + "} UR : {" + _ur.str() + "}"; }
+    string str() const { return "[" + _ll.str() + "," + _ur.str() + "]"; }
     //const json toJSON() const { return json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}; }
 
     bool overlaps (const Geom::Rect& r) const 

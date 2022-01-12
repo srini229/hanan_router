@@ -23,14 +23,23 @@ class Via {
     Geom::Rect _lb, _ub, _cut, _bbox;
     Geom::Rects _cuts;
   public:
-    Via(const int l, const int u, const int c, const Geom::Point& ctr = Geom::Point(0, 0)) : _l{l}, _u{u}, _c{c}, _center{c}, _lb{}, _ub{}, _cut{}, _bbox{} {}
+    Via(const int l, const int u, const int c, const Geom::Point& ctr = Geom::Point(0, 0)) : _l{l}, _u{u}, _c{c}, _center{ctr}, _lb{}, _ub{}, _cut{}, _bbox{} {}
     void setLB(const Geom::Rect& r) { _lb = r; _bbox.merge(_lb); }
     void setUB(const Geom::Rect& r) { _ub = r; _bbox.merge(_ub); }
     void addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow = 1, const int ncol = 1, const int sx = 0, const int sy = 0);
     Via translate(const Geom::Point& p) const;
+    std::string str() const;
+    void addShapes(Geom::LayerRects& lr) const;
+    Geom::LayerRects getShapes() const
+    {
+      Geom::LayerRects lr;
+      addShapes(lr);
+      return lr;
+    }
+
 
 };
-typedef std::vector<Via> Vias;
+typedef std::vector<const Via*> Vias;
 
 class CostFn {
   private:
@@ -175,6 +184,7 @@ class Router {
     std::vector<int> _widthy, _ndrwidthy, _spacey;
     int _minLayer, _maxLayer, _maxRoutingLayer;
     Vias _vias;
+    std::vector<Vias> _upVias, _dnVias;
     std::string _name;
     size_t _expansions{0};
     const size_t _maxExpansions{100000};
@@ -243,6 +253,8 @@ class Router {
       flushNodes();
       _sources.clear();
       _targets.clear();
+      for (auto& v : _vias) delete v;
+      _vias.clear();
     }
     void readDataFile(const std::string& ifile);
     const int maxRoutingLayer() const { return _maxRoutingLayer; }

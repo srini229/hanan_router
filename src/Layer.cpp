@@ -178,6 +178,14 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
       for (auto& it : vl->viaArray()) {
         COUT << "\t va : " << it._sw._space.first << ' ' << it._sw._space.second << ' ' << it._nx << ' ' << it._ny << '\n';
       }
+      COUT << " cover : l: " << vl->coverlx() << ',' << vl->coverly() << " u: " << vl->coverux() << ',' << vl->coveruy() << '\n';
+      auto lp = vl->layers();
+      if (lp.first && lp.first->isVertical()) {
+        vl->swapcover(false);
+      }
+      if (lp.second && lp.second->isVertical()) {
+        vl->swapcover(true);
+      }
     }
   }
   COUT << "signal routing layers : " << (_sbottom? _sbottom->name() : "") << " : " << (_stop ? _stop->name() : "") << "\n";

@@ -12,7 +12,7 @@ void Via::addCuts(const Geom::Point& o, const int wx, const int wy, const int nr
     _bbox.merge(_cut);
   } else {
     for (int i = 0; i < nrow; ++i) {
-      for (int j = 0; j < ncol; ++i) {
+      for (int j = 0; j < ncol; ++j) {
         _cuts.push_back(r.trans(Geom::Point(i * (sx + wx), j * (sy + wy))));
         _cut.merge(_cuts.back());
         _bbox.merge(_cuts.back());
@@ -33,6 +33,26 @@ Via Via::translate(const Geom::Point& p) const
     v._cuts.emplace_back(c.trans(p));
   }
   return v;
+}
+
+std::string Via::str() const
+{
+  return "l: " + std::to_string(_l) + " u: " + std::to_string(_u) + " c: " + std::to_string(_c) +
+    " center: " + _center.str() + " lb: " + _lb.str() + " ub: " + _ub.str() + " cut: " + _cut.str() +
+    " bbox: " + _bbox.str();
+}
+
+void Via::addShapes(Geom::LayerRects& lr) const
+{
+  lr[_l].push_back(_lb);
+  lr[_u].push_back(_ub);
+  if (_cuts.empty()) {
+    lr[_c].push_back(_cut);
+  } else {
+    for (auto& c : _cuts) {
+      lr[_c].push_back(c);
+    }
+  }
 }
 
 CostFn::CostFn(const DRC::LayerInfo& lf)
@@ -162,6 +182,7 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100
   _maxRoutingLayer = static_cast<int>(_widthx.size()) - 1;
   _nodes.clear();
   _nodes.resize(_maxLayer + 1);
+  constructVias();
 }
 
 Node* Router::createNode(const int x, const int y, const int z,
@@ -221,7 +242,9 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
   } else if (dir == EAST || dir == WEST) {
     if (hor) {
       auto width = widthx(z);
+#if DEBUG
       COUT << "we : " << width << '\n';
+#endif
       if (width <= r.height()) {
         int y = (r.ymin() + width / 2);
         int space = _spacex[z] + ((width % 2 == 0) ? width/2 : (width/2 + 1));
@@ -238,7 +261,9 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
   } else if (dir == NORTH || dir == SOUTH) {
     if (vert) {
       auto width = widthy(z);
+#if DEBUG
       COUT << "wn : " << width << '\n';
+#endif
       if (width <= r.width()) {
         int x = (r.xmin() + width / 2);
         int space = _spacey[z] + ((width % 2 == 0) ? width/2 : (width/2 + 1));
@@ -928,12 +953,18 @@ Geom::LayerRects Router::findSol()
             COUT << n->z() << ' ' << sol[n->z()].back().str() << '\n';
 #endif
           } else {
-            auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
-            if (adjLayer >= 0) {
-              sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer]/2, _widthy[adjLayer]/2));
+            if (parent->z() < n->z() && !_dnVias[n->z()].empty()) {
+              _dnVias[n->z()][0]->translate(Geom::Point(n->x(), n->y())).addShapes(sol);
+            } else if (parent->z() > n->z() && !_upVias[n->z()].empty()) {
+              _upVias[n->z()][0]->translate(Geom::Point(n->x(), n->y())).addShapes(sol);
+            } else {
+              auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
+              if (adjLayer >= 0) {
+                sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer]/2, _widthy[adjLayer]/2));
 #if DEBUG
-              COUT << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
+                COUT << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
 #endif
+              }
             }
           }
         }
@@ -1142,10 +1173,10 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
       obs = r.bloatby(x1, y1, x2, y2);
       if (temp) {
         _tobstacles[layer].push_back(obs);
-        COUT << "tobs : " << _tobstacles[layer].back().str() << '\n';
+        //COUT << "tobs : " << _tobstacles[layer].back().str() << '\n';
       } else {
         _obstacles[layer].push_back(obs);
-        COUT << "obs : " << _obstacles[layer].back().str() << '\n';
+        //COUT << "obs : " << _obstacles[layer].back().str() << '\n';
       }
     }
   }
@@ -1265,15 +1296,61 @@ bool Router::isViaValid(const Node* n, const bool up) const
 
 void Router::constructVias()
 {
+  _upVias.clear();
+  _upVias.resize(_widthx.size());
+  _dnVias.clear();
+  _dnVias.resize(_widthx.size());
   for (auto &v : _lf.layers()) {
     if (v->isVia()) {
       auto vl = static_cast<DRC::ViaLayer*>(v);
       auto lp = vl->layers();
-      auto va = vl->viaArray();
-      if (va.empty()) {
-      } else {
+      if (lp.first && lp.second) {
+        auto vas = vl->viaArray();
+        if (vas.empty()) {
+          Via *via = new Via(lp.first->index(), lp.second->index(), v->index());
+          auto wx = vl->widthx(), wy = vl->widthy();
+          auto lx = wx + 2 * vl->coverlx();
+          auto ly = wy + 2 * vl->coverly();
+          auto ux = wx + 2 * vl->coverux();
+          auto uy = wy + 2 * vl->coveruy();
+          via->setLB(Geom::Rect(-lx/2, -ly/2, lx/2, ly/2));
+          via->setUB(Geom::Rect(-ux/2, -uy/2, ux/2, uy/2));
+          via->addCuts(Geom::Point(-wx/2, -wy/2), wx, wy);
+          _vias.push_back(via);
+          _upVias[lp.first->index()].push_back(via);
+          _dnVias[lp.second->index()].push_back(via);
+        } else {
+          for (auto& va : vas) {
+            Via *via = new Via(lp.first->index(), lp.second->index(), v->index());
+            auto lx = vl->widthx() + 2 * vl->coverlx();
+            auto ly = vl->widthy() + 2 * vl->coverly();
+            auto ux = vl->widthx() + 2 * vl->coverux();
+            auto uy = vl->widthy() + 2 * vl->coveruy();
+            via->setLB(Geom::Rect(-lx/2, -ly/2, lx/2, ly/2));
+            via->setUB(Geom::Rect(-ux/2, -uy/2, ux/2, uy/2));
+            const auto& wx = va._sw._width.first;
+            const auto& wy = va._sw._width.second;
+            const auto& sx = va._sw._space.first;
+            const auto& sy = va._sw._space.second;
+            Geom::Point c(-wx/2, -wy/2);
+            if (va._nx > 1) {
+              c.x() = -((va._nx - 1) * (wx + sx) + wx)/2;
+            }
+            if (va._ny > 1) {
+              c.y() = -((va._ny - 1) * (wy + sy) + wy)/2;
+            }
+            via->addCuts(c, wx, wy, va._nx, va._ny, sx, sy);
+            _vias.push_back(via);
+            _upVias[lp.first->index()].push_back(via);
+            _dnVias[lp.second->index()].push_back(via);
+          }
+        }
       }
     }
+  }
+
+  for (auto& v : _vias) {
+    COUT << "via : " << v->str() << '\n';
   }
 }
 
