@@ -5,6 +5,18 @@ namespace Router {
 size_t Node::_nodectr = 0;
 #endif
 
+Via::Via(const Via& via, const Geom::Point& p) : _l{via._l}, _u{via._u}, _c{via._c}
+{
+  _center = _center.trans(p);
+  _lb = _lb.trans(p);
+  _ub = _ub.trans(p);
+  _cut = _cut.trans(p);
+  _bbox = _bbox.trans(p);
+  for (auto& c : _cuts) {
+    _cuts.emplace_back(c.trans(p));
+  }
+}
+
 void Via::addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow, const int ncol, const int sx, const int sy)
 {
   _cuts.clear();
@@ -445,11 +457,21 @@ void Router::setexpand(Node* newn, const Node* parent) const
         }
       }
     }
-    if (newn->z() < parent->z() || newn->z() >= _maxLayer || !isViaValid(newn, true)) {
-      newn->expand(UP, false);
+    if (newn->z() < parent->z() || newn->z() >= _maxLayer) {
+      auto v = isViaValid(newn, true);
+      if (v) {
+        newn->upVia(v);
+      } else {
+        newn->expand(UP, false);
+      }
     }
-    if (newn->z() > parent->z() || newn->z() <= _minLayer || !isViaValid(newn, false)) {
-      newn->expand(DOWN, false);
+    if (newn->z() > parent->z() || newn->z() <= _minLayer) {
+      auto v = isViaValid(newn, false);
+      if (v) {
+        newn->dnVia(v);
+      } else {
+        newn->expand(DOWN, false);
+      }
     }
   }
 }
@@ -981,10 +1003,10 @@ Geom::LayerRects Router::findSol()
             COUT << n->z() << ' ' << sol[n->z()].back().str() << '\n';
 #endif
           } else {
-            if (parent->z() < n->z() && !_dnVias[n->z()].empty()) {
-              _dnVias[n->z()][0]->translate(Geom::Point(n->x(), n->y())).addShapes(sol);
-            } else if (parent->z() > n->z() && !_upVias[n->z()].empty()) {
-              _upVias[n->z()][0]->translate(Geom::Point(n->x(), n->y())).addShapes(sol);
+            if (parent->z() < n->z() && parent->upVia()) {
+              parent->upVia()->addShapes(sol);
+            } else if (parent->z() > n->z() && parent->dnVia()) {
+              parent->dnVia()->addShapes(sol);
             } else {
               auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
               if (adjLayer >= 0) {
@@ -1285,42 +1307,41 @@ void Router::updatendr()
   }
 }
 
-bool Router::isViaValid(const Node* n, const bool up) const
+const Via* Router::isViaValid(const Node* n, const bool up) const
 {
+  Via* via{nullptr};
   if (up) {
-    if (n->z() < _maxLayer) {
+    if (n->z() < _maxLayer && !_upVias[n->z()].empty()) {
+      via = new Via(*(_upVias[n->z()][0]), Geom::Point(n->x(), n->y()));
       auto aboveLayer = _aboveViaLayer[n->z()];
       if (aboveLayer >= 0) {
         auto it = _tobstacles.find(aboveLayer);
         if (it != _tobstacles.end()) {
           for (auto& o : it->second) {
-            if (o.contains(Geom::Point(n->x(), n->y()))) return false;
+            for (auto& c : via->cuts()) {
+              if (o.overlaps(c, true)) return nullptr;
+            }
           }
         }
-      } else {
-        return false;
       }
-    } else {
-      return false;
     }
   } else {
-    if (n->z() > _minLayer) {
+    if (n->z() > _minLayer && !_dnVias[n->z()].empty()) {
+      via = new Via(*(_dnVias[n->z()][0]), Geom::Point(n->x(), n->y()));
       auto belowLayer = _belowViaLayer[n->z()];
       if (belowLayer >= 0) {
         auto it = _tobstacles.find(belowLayer);
         if (it != _tobstacles.end()) {
           for (auto& o : it->second) {
-            if (o.contains(Geom::Point(n->x(), n->y()))) return false;
+            for (auto& c : via->cuts()) {
+              if (o.overlaps(c, true)) return nullptr;
+            }
           }
         }
-      } else {
-        return false;
       }
-    } else {
-      return false;
     }
   }
-  return true;
+  return via;
 }
 
 void Router::constructVias()

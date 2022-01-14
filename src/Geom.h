@@ -143,11 +143,17 @@ class Rect {
     string str() const { return "[" + _ll.str() + "," + _ur.str() + "]"; }
     //const json toJSON() const { return json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}; }
 
-    bool overlaps (const Geom::Rect& r) const 
+    bool overlaps (const Geom::Rect& r, const bool strict = false) const 
     {
-      if (xmin() <= r.xmax() && xmax() >= r.xmin()
-          && ymin() <= r.ymax() && ymax() >= r.ymin())
-        return true;
+      if (strict) {
+        if (xmin() <= r.xmax() && xmax() >= r.xmin()
+            && ymin() <= r.ymax() && ymax() >= r.ymin())
+          return true;
+      } else {
+        if (xmin() < r.xmax() && xmax() > r.xmin()
+            && ymin() < r.ymax() && ymax() > r.ymin())
+          return true;
+      }
       return false;
     }
 

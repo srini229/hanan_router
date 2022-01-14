@@ -25,8 +25,10 @@ class Via {
     Geom::Rects _cuts;
   public:
     Via(const int l, const int u, const int c, const Geom::Point& ctr = Geom::Point(0, 0)) : _l{l}, _u{u}, _c{c}, _center{ctr}, _lb{}, _ub{}, _cut{}, _bbox{} {}
+    Via(const Via& via, const Geom::Point& p = Geom::Point(0, 0));
     void setLB(const Geom::Rect& r) { _lb = r; _bbox.merge(_lb); }
     void setUB(const Geom::Rect& r) { _ub = r; _bbox.merge(_ub); }
+    const Geom::Rects& cuts() const { return _cuts; }
     void addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow = 1, const int ncol = 1, const int sx = 0, const int sy = 0);
     Via translate(const Geom::Point& p) const;
     Via transform(const Geom::Transform& tr) const;
@@ -89,22 +91,27 @@ class Node {
     int _hwx, _hwy;
     CostType _fcost, _tcost;
     Node const* _parent;
+    const Via *_upVia, *_dnVia;
     std::bitset<MAXDIR> _expanddir;
     Node(const int x = 0, const int y = 0, const int z = -1,
         const CostType fcost = -1, const CostType tcost = -1, Node const* parent = nullptr)
-      : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _fcost(fcost), _tcost(tcost), _parent(parent)
+      : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _fcost(fcost), _tcost(tcost),
+      _parent(parent), _upVia(nullptr), _dnVia(nullptr)
       {
         _expanddir.reset();
 #if DEBUG
         ++_nodectr;
 #endif
       }
-#if DEBUG
+
     ~Node()
     {
+      delete _upVia;
+      delete _dnVia;
+#if DEBUG
       --_nodectr;
-    }
 #endif
+    }
   public:
     int x() const { return _x; }
     int y() const { return _y; }
@@ -128,6 +135,11 @@ class Node {
       if(clear) _expanddir.reset();
       else _expanddir.set();
     }
+
+    const Via* upVia() const { return _upVia; }
+    const Via* dnVia() const { return _dnVia; }
+    void upVia(const Via* v) { _upVia = v; }
+    void dnVia(const Via* v) { _dnVia = v; }
 
     CostType fcost() const { return _fcost; }
     CostType tcost() const { return _tcost; }
@@ -326,7 +338,7 @@ class Router {
     void addSourceTarget(const Geom::Rect& r, const int z, const bool src);
     void addSource(const Geom::Rect& r, const int z) { addSourceTarget(r, z, true); }
     void addTarget(const Geom::Rect& r, const int z) { addSourceTarget(r, z, false); }
-    bool isViaValid(const Node* n, const bool up) const;
+    const Via* isViaValid(const Node* n, const bool up) const;
     void updatendr();
 };
 
