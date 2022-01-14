@@ -1312,14 +1312,21 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
   Via* via{nullptr};
   if (up) {
     if (n->z() < _maxLayer && !_upVias[n->z()].empty()) {
-      via = new Via(*(_upVias[n->z()][0]), Geom::Point(n->x(), n->y()));
       auto aboveLayer = _aboveViaLayer[n->z()];
       if (aboveLayer >= 0) {
-        auto it = _tobstacles.find(aboveLayer);
-        if (it != _tobstacles.end()) {
-          for (auto& o : it->second) {
-            for (auto& c : via->cuts()) {
-              if (o.overlaps(c, true)) return nullptr;
+        for (auto& v : _upVias[n->z()]) {
+          delete via;
+          via = new Via(*v, Geom::Point(n->x(), n->y()));
+          auto it = _tobstacles.find(aboveLayer);
+          if (it != _tobstacles.end()) {
+            for (auto& o : it->second) {
+              for (auto& c : via->cuts()) {
+                if (o.overlaps(c, true)) {
+                  delete via;
+                  via = nullptr;
+                  return via;
+                }
+              }
             }
           }
         }
@@ -1327,17 +1334,24 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
     }
   } else {
     if (n->z() > _minLayer && !_dnVias[n->z()].empty()) {
-      via = new Via(*(_dnVias[n->z()][0]), Geom::Point(n->x(), n->y()));
       auto belowLayer = _belowViaLayer[n->z()];
       if (belowLayer >= 0) {
+      for (auto& v : _dnVias[n->z()]) {
+        delete via;
+        via = new Via(*v, Geom::Point(n->x(), n->y()));
         auto it = _tobstacles.find(belowLayer);
         if (it != _tobstacles.end()) {
           for (auto& o : it->second) {
             for (auto& c : via->cuts()) {
-              if (o.overlaps(c, true)) return nullptr;
+              if (o.overlaps(c, true)) {
+                delete via;
+                via = nullptr;
+                return via;
+              }
             }
           }
         }
+      }
       }
     }
   }
