@@ -7,6 +7,11 @@
 int main(int argc, char* argv[])
 {
   const std::string logfile = parseArgs(argc, argv, "-log", "route.log");
+  if (argc <= 1) {
+    std::cerr << "usage : " << argv[0] << "\n\t-d <layers.json>\n\t-p <placement file>\n\t-l <lef file>\n"
+      << "\t-r <route on/off>\n\t-s <lef scaling>\n\t-uu <user units scaling>\n";
+    exit(0);
+  }
   SaveRestoreStream srs(logfile);
   TIME_M();
   std::string layerJSONFile = parseArgs(argc, argv, "-d");
@@ -14,6 +19,7 @@ int main(int argc, char* argv[])
   std::string leffile = parseArgs(argc, argv, "-l");
   const bool route = checkArg(argc, argv, "-r");
   const bool uuflayer = checkArg(argc, argv, "-s");
+
   int uu{1000};
   try {
     uu = std::stoi(parseArgs(argc, argv, "-uu"));

@@ -251,7 +251,7 @@ void Module::route(Router::Router& router)
     for (auto &n : _nets) nets.push_back(&n.second);
     std::sort(nets.begin(), nets.end(), [](const Net* a, const Net* b) -> bool
         { return a->halfpm() < b->halfpm(); });
-    COUT << " routing : " << _name << '\n';
+    COUT << " routing : " << _name << "; num nets : " << nets.size() << '\n';
     //router.addObstacles(_obstacles);
     Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
     for (auto it = nets.begin(); it != nets.end(); ++it) {
@@ -263,6 +263,7 @@ void Module::route(Router::Router& router)
       }
       (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles);
       Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());
+      writeDEF((*it)->name());
     }
     router.clearObstacles();
     for (auto& p : _pins) {
