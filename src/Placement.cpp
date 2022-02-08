@@ -254,6 +254,7 @@ void Module::route(Router::Router& router)
     COUT << " routing : " << _name << "; num nets : " << nets.size() << '\n';
     //router.addObstacles(_obstacles);
     Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
+    unsigned cnt{0};
     for (auto it = nets.begin(); it != nets.end(); ++it) {
       _netObstaclesUnrouted.clear();
       for (auto itn = std::next(it); itn != nets.end(); ++itn) {
@@ -264,6 +265,7 @@ void Module::route(Router::Router& router)
       (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles);
       Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());
       writeDEF((*it)->name());
+      //if (++cnt >= 7) break;
     }
     router.clearObstacles();
     for (auto& p : _pins) {
@@ -379,6 +381,7 @@ void Module::plot() const
 
 void Module::checkShort() const
 {
+  COUT << "Checking SHORT for module : " << _name << '\n';
   for (auto it1 = _nets.begin(); it1 != _nets.end(); ++it1) {
     for (auto it2 = std::next(it1); it2 != _nets.end(); ++it2) {
       auto& s1 = it1->second.routeShapes();

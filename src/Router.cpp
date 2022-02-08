@@ -847,6 +847,8 @@ Geom::LayerRects Router::findSol()
   static std::string debugplot{getenv("HANAN_DEBUG_WIRE") ? getenv("HANAN_DEBUG_WIRE") : ""};
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
+    if (_targets.size() < _sources.size()) std::swap(_sources,_targets);
+    COUT << "num src : " << _sources.size() << " tgt : " << _targets.size() << std::endl;
     _bbox = Geom::Rect();
     for (auto& s : _sources) {
       evalTCost(s);
@@ -1025,7 +1027,7 @@ Geom::LayerRects Router::findSol()
       }
     }
   } else {
-    COUT << "source or target empty!\n";
+    COUT << "source or target empty! " << _sources.empty() << ' ' << _targets.empty() << '\n';
   }
 #if DEBUG
 #else
@@ -1238,7 +1240,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 
 void Router::updatendr()
 {
-  _ndrwidthx.clear(); _ndrwidthy.clear();
+  /*_ndrwidthx.clear(); _ndrwidthy.clear();
   _ndrwidthx.resize(_widthx.size(), INT_MAX);
   _ndrwidthy.resize(_widthy.size(), INT_MAX);
   if (_sourceshapes.size() == 1) {
@@ -1275,7 +1277,7 @@ void Router::updatendr()
         _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
       }
     }
-  }
+  }*/
 #if DEBUG
   for (unsigned i = 0; i < _ndrwidthx.size(); ++i) {
     if (_ndrwidthx[i] != INT_MAX) {
