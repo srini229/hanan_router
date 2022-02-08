@@ -324,25 +324,28 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
 
 void Router::addSourceTargetShapes(const Geom::Rect& r, const int z, const bool src)
 {
-  auto& shapes = (src ? _sourceshapes : _targetshapes);
-  bool inserted{false};
-  for (auto it = shapes[z].begin(); it != shapes[z].end(); ++it) {
-    auto s = *it;
-    if (s.contains(r)) {
-      inserted = true;
-      break;
-    } else if (r.contains(s)) {
-      shapes[z].erase(it);
-      shapes[z].insert(r);
-      inserted = true;
-      break;
+  if (z >= _minLayer && z <= _maxLayer) {
+    auto& shapes = (src ? _sourceshapes : _targetshapes);
+    bool inserted{false};
+    for (auto it = shapes[z].begin(); it != shapes[z].end(); ++it) {
+      auto s = *it;
+      if (s.contains(r)) {
+        inserted = true;
+        break;
+      } else if (r.contains(s)) {
+        shapes[z].erase(it);
+        shapes[z].insert(r);
+        inserted = true;
+        break;
+      }
     }
+    if (!inserted) shapes[z].insert(r);
   }
-  if (!inserted) shapes[z].insert(r);
 }
 
 void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
 {
+  if (z < _minLayer || z > _maxLayer) return;
   auto& shapes = (src ? _sourceshapes : _targetshapes);
   auto& dest   = (src ? _sources : _targets);
   int fcost    = (src ? 0 : -1);
