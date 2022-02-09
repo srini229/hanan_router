@@ -254,7 +254,6 @@ void Module::route(Router::Router& router)
     COUT << " routing : " << _name << "; num nets : " << nets.size() << '\n';
     //router.addObstacles(_obstacles);
     Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
-    unsigned cnt{0};
     for (auto it = nets.begin(); it != nets.end(); ++it) {
       _netObstaclesUnrouted.clear();
       for (auto itn = std::next(it); itn != nets.end(); ++itn) {
@@ -265,7 +264,6 @@ void Module::route(Router::Router& router)
       (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles);
       Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());
       writeDEF((*it)->name());
-      //if (++cnt >= 7) break;
     }
     router.clearObstacles();
     for (auto& p : _pins) {
