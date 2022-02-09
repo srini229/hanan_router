@@ -222,7 +222,6 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
         double llx{0}, lly{0}, urx{0}, ury{0};
         ss >> str >> llx >> lly >> urx >> ury;
         if (layer > 0) {
-          COUT << layer << ' ' << (llx * units) << ' ' << (lly * units) << ' ' << (urx * units) << ' ' << (ury * units) << '\n';
           curr_pin->addRect(layer, Geom::Rect(llx * units, lly * units, urx * units, ury * units));
         }
         continue;
