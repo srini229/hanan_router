@@ -119,14 +119,16 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           if (l.first > router.maxLayer() || l.first < router.minLayer()) continue;
           for (auto& s : l.second) {
             if (src) {
+              COUT << "adding src " << s.str() << '\n';
               router.addSourceShapes(s, l.first);
             } else {
+              COUT << "adding tgt " << s.str() << '\n';
               router.addTargetShapes(s, l.first);
             }
           }
         }
       }
-      router.updatendr();
+      router.updatendr(true);
 #if DEBUG
       COUT << "adding line of sight nodes if they exist\n";
 #endif
@@ -260,6 +262,10 @@ void Module::route(Router::Router& router)
         for (auto& p : (*itn)->pins()) {
           Geom::MergeLayerRects(_netObstaclesUnrouted, p->shapes());
         }
+      }
+      if (_name == "mixer_first_rx_0") {
+        COUT << "net : " << (*it)->name() << '\n';
+        if ((*it)->name().find("VCMBIAS") == std::string::npos)  continue;
       }
       (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles);
       Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());

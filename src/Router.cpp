@@ -1005,7 +1005,8 @@ Geom::LayerRects Router::findSol()
             }
             sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
 #if DEBUG
-            COUT << n->z() << ' ' << sol[n->z()].back().str() << '\n';
+            COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
+            COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
 #endif
           } else {
             if (parent->z() < n->z() && n->dnVia()) {
@@ -1017,7 +1018,7 @@ Geom::LayerRects Router::findSol()
               if (adjLayer >= 0) {
                 sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer]/2, _widthy[adjLayer]/2));
 #if DEBUG
-                COUT << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
+                COUT << "sol : " << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
 #endif
               }
             }
@@ -1240,43 +1241,45 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
   }
 }
 
-void Router::updatendr()
+void Router::updatendr(const bool usendr)
 {
   _ndrwidthx.clear(); _ndrwidthy.clear();
   _ndrwidthx.resize(_widthx.size(), INT_MAX);
   _ndrwidthy.resize(_widthy.size(), INT_MAX);
-  if (_sourceshapes.size() == 1) {
-    auto itsrc = _sourceshapes.begin();
-    auto ittgt = _targetshapes.find(itsrc->first);
+  if (usendr) {
+    if (_sourceshapes.size() == 1) {
+      auto itsrc = _sourceshapes.begin();
+      auto ittgt = _targetshapes.find(itsrc->first);
 
-    if (ittgt != _targetshapes.end() 
-        && ittgt->second.size() == 1
-        && itsrc->second.size() == 1) {
-      auto z = itsrc->first;
-      if (isVert(z)) {
-        _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
-        _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
-      }
-      if (isHor(z)) {
-        _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
-        _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+      if (ittgt != _targetshapes.end() 
+          && ittgt->second.size() == 1
+          && itsrc->second.size() == 1) {
+        auto z = itsrc->first;
+        if (isVert(z)) {
+          _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
+          _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
+        }
+        if (isHor(z)) {
+          _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
+          _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+        }
       }
     }
-  }
-  if (_targetshapes.size() == 1) {
-    auto ittgt = _targetshapes.begin();
-    auto itsrc = _sourceshapes.find(ittgt->first);
-    if (itsrc != _sourceshapes.end() 
-        && ittgt->second.size() == 1
-        && itsrc->second.size() == 1) {
-      auto z = ittgt->first;
-      if (isVert(z)) {
-        _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
-        _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
-      }
-      if (isHor(z)) {
-        _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
-        _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+    if (_targetshapes.size() == 1) {
+      auto ittgt = _targetshapes.begin();
+      auto itsrc = _sourceshapes.find(ittgt->first);
+      if (itsrc != _sourceshapes.end() 
+          && ittgt->second.size() == 1
+          && itsrc->second.size() == 1) {
+        auto z = ittgt->first;
+        if (isVert(z)) {
+          _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
+          _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
+        }
+        if (isHor(z)) {
+          _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
+          _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+        }
       }
     }
   }

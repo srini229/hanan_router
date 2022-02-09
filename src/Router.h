@@ -340,7 +340,7 @@ class Router {
     void addSource(const Geom::Rect& r, const int z) { addSourceTarget(r, z, true); }
     void addTarget(const Geom::Rect& r, const int z) { addSourceTarget(r, z, false); }
     const Via* isViaValid(const Node* n, const bool up) const;
-    void updatendr();
+    void updatendr(const bool usendr);
 };
 
 }
