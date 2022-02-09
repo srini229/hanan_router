@@ -282,6 +282,7 @@ void Module::route(Router::Router& router)
     writeLEF();
   }
   _routed = 1;
+  checkShort();
 }
 
 

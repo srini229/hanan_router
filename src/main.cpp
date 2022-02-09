@@ -25,7 +25,7 @@ int main(int argc, char* argv[])
     uu = std::stoi(parseArgs(argc, argv, "-uu"));
   } catch (const std::invalid_argument& ia) {}
 
-  DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 1));
+  DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 2));
   if (!linfo.populated())  {
     CERR << "missing or unable to read layers.json file argument" << std::endl;
     return 0;

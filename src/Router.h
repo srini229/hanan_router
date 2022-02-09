@@ -320,6 +320,7 @@ class Router {
       _endextnymax.clear();
       _sol = nullptr;
       flushNodes();
+      _bbox = Geom::Rect();
     }
     Geom::LayerRects findSol();
     void printSol() const;

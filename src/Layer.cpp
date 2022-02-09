@@ -137,9 +137,9 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
                 itv = it->find("SpaceY");
                 if (itv != it->end() && itv->is_number_integer()) sy = static_cast<int>(*itv) * uu;
                 itv = it->find("NumX");
-                if (itv != it->end() && itv->is_number_integer()) nx = static_cast<int>(*itv) * uu;
+                if (itv != it->end() && itv->is_number_integer()) nx = static_cast<int>(*itv);
                 itv = it->find("NumY");
-                if (itv != it->end() && itv->is_number_integer()) ny = static_cast<int>(*itv) * uu;
+                if (itv != it->end() && itv->is_number_integer()) ny = static_cast<int>(*itv);
                 vlayer->addViaArray(wx, wy, sx, sy, nx, ny);
               }
             }
