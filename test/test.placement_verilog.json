@@ -1,0 +1,47 @@
+{
+  "global_signals": [],
+  "leaves": [
+    {
+      "abstract_name": "BLOCK_A",
+      "bbox": [ 0, 0, 100, 100 ],
+      "concrete_name": "BLOCK_A",
+      "terminals": [
+        { "name": "A", "rect": [ 0, 0, 32, 100] },
+        { "name": "D", "rect": [ 64, 0, 96, 100 ] }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "abstract_name": "test",
+      "bbox": [ 0, 0, 1000, 1000 ],
+      "concrete_name": "test_0",
+      "instances": [
+        {
+          "abstract_template_name": "BLOCK_A",
+          "concrete_template_name": "BLOCK_A",
+          "fa_map": [
+            { "actual": "X", "formal": "A" },
+            { "actual": "Y", "formal": "B" }
+          ],
+          "instance_name": "A_0",
+          "transformation": { "oX": 0, "oY": 0, "sX": 1, "sY": 1 }
+        },
+        {
+          "abstract_template_name": "BLOCK_A",
+          "concrete_template_name": "BLOCK_A",
+          "fa_map": [
+            { "actual": "X", "formal": "A" },
+            { "actual": "Y", "formal": "B" }
+          ],
+          "instance_name": "A_1",
+          "transformation": { "oX": 900, "oY": 900, "sX": 1, "sY": 1 }
+        }
+      ],
+      "parameters": [
+        "X",
+        "Y"
+      ]
+    }
+  ]
+}
