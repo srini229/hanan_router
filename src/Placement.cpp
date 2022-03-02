@@ -231,6 +231,8 @@ void Module::route(Router::Router& router)
 {
   TIME_M();
   if (!_routed) {
+    router.setModName(_name);
+    router.setuu(_uu);
     //writeDEF("_before");
     router.clearObstacles();
     router.clearObstacles(true);
@@ -265,9 +267,10 @@ void Module::route(Router::Router& router)
         COUT << "net : " << (*it)->name() << '\n';
         if ((*it)->name().find("VCMBIAS") == std::string::npos)  continue;
       }*/
-      (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles, true);
+      router.setNetName((*it)->name());
+      (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles, false);
+      writeDEF("_" + (*it)->name(), (*it)->name());
       Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());
-      //writeDEF((*it)->name());
     }
     router.clearObstacles();
     for (auto& p : _pins) {
@@ -421,21 +424,25 @@ void Module::checkShort() const
   }
 }
 
-void Module::writeDEF(const std::string& nstr) const
+void Module::writeDEF(const std::string& nstr, const std::string& netname) const
 {
   std::ofstream ofs(_name + nstr + ".def");
   if (ofs.is_open()) {
     ofs << "VERSION 5.8 ;\nDIVIDERCHAR \"/\" ;\nBUSBITCHARS \"[]\" ;\nDESIGN " << _name << " ;\n";
     ofs << "UNITS DISTANCE MICRONS " << _uu << " ;\n";
     ofs << "DIEAREA ( " << _bbox.xmin() << ' ' << _bbox.ymin() << " ) ( " << _bbox.xmax() << ' ' << _bbox.ymax() << " ) ; \n\n";
-    if (!_instances.empty()) {
-      ofs << "COMPONENTS " << _instances.size() << " ;\n";
+    if (!_instances.empty() || !netname.empty()) {
+      ofs << "COMPONENTS " << (_instances.size() + !netname.empty()) << " ;\n";
       for (auto& inst : _instances) {
         auto& tr = inst->transform();
         ofs << "- " << inst->name() << ' ' << inst->moduleName();
         ofs << " + PLACED ( ";
         ofs << ((tr.sX() > 0 ) ? tr.x() : (tr.x() - inst->bbox().width()))  << ' ';
         ofs << ((tr.sY() > 0 ) ? tr.y() : (tr.y() - inst->bbox().height())) << " ) " << tr.orient() << " ;\n";
+      }
+      if (!netname.empty()) {
+        ofs << "- " << _name << '_' << netname << "_0 " << _name << '_' << netname;
+        ofs << " + PLACED ( 0 0 ) N ;\n";
       }
       ofs << "END COMPONENTS\n\n";
     }

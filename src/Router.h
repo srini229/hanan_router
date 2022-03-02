@@ -29,6 +29,10 @@ class Via {
     void setLB(const Geom::Rect& r) { _lb = r; _bbox.merge(_lb); }
     void setUB(const Geom::Rect& r) { _ub = r; _bbox.merge(_ub); }
     const Geom::Rects& cuts() const { return _cuts; }
+    const Geom::Rect& upad() const { return _ub; }
+    const Geom::Rect& lpad() const { return _lb; }
+    const int u() const { return _u; }
+    const int l() const { return _l; }
     void addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow = 1, const int ncol = 1, const int sx = 0, const int sy = 0);
     Via translate(const Geom::Point& p) const;
     Via transform(const Geom::Transform& tr) const;
@@ -225,6 +229,8 @@ class Router {
     const DRC::LayerInfo& _lf;
     std::map<const Node*, int> _endextnxmin, _endextnymin, _endextnxmax, _endextnymax;
     std::map<int, std::set<Geom::Rect>> _sourceshapes, _targetshapes;
+    std::string _modname, _netname;
+    int _uu;
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -341,6 +347,10 @@ class Router {
     void addTarget(const Geom::Rect& r, const int z) { addSourceTarget(r, z, false); }
     const Via* isViaValid(const Node* n, const bool up) const;
     void updatendr(const bool usendr);
+    void setModName(const std::string& n) { _modname = n; }
+    void setNetName(const std::string& n) { _netname = n; }
+    void setuu(const int uu) { _uu = uu; }
+    void writeLEF() const;
 };
 
 }

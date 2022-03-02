@@ -278,6 +278,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }
         }
       }
+      points.insert(std::make_pair(Geom::Point(r.xcenter(), r.ycenter()), (vert ? widthy(z) : widthx(z))));
     }
   } else if (dir == EAST || dir == WEST) {
     if (hor) {
@@ -780,10 +781,10 @@ void Router::generateHananGrid()
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
     auto box = _bbox;
     //box.bloat(_bbox.width(), _bbox.height());
-    _tobstacles[l].push_back(Geom::Rect(box.xmin() - 10, box.ymin(), box.xmin(), box.ymax()));
-    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymin() - 10, box.xmax(), box.ymin()));
-    _tobstacles[l].push_back(Geom::Rect(box.xmax(), box.ymin(), box.xmax() + 10, box.ymax()));
-    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymax(), box.xmax(), box.ymax() + 10));
+    _tobstacles[l].push_back(Geom::Rect(box.xmin() - 100, box.ymin(), box.xmin() - 50, box.ymax()));
+    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymin() - 100, box.xmax(), box.ymin() - 50));
+    _tobstacles[l].push_back(Geom::Rect(box.xmax() + 50, box.ymin(), box.xmax() + 100, box.ymax()));
+    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymax() + 50, box.xmax(), box.ymax() + 100));
   }
   for (auto& l : _tobstacles) {
     if (l.first > _maxLayer) continue;
@@ -864,6 +865,7 @@ Geom::LayerRects Router::findSol()
       COUT << "tgt : " << t->x() << ' ' << t->y() << '\n';
 #endif
     }
+    _bbox.bloat(100);
 
     /*for (auto& l : _tobstacles) {
       COUT << "layer before : " << l.first << '\n';
@@ -884,6 +886,7 @@ Geom::LayerRects Router::findSol()
       }
     }*/
     generateHananGrid();
+    writeLEF();
 
 #if DEBUG
     for (unsigned l = 0; l < _hanangridh.size(); ++l) {
@@ -1342,9 +1345,27 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
                 if (o.overlaps(c, true)) {
                   delete via;
                   via = nullptr;
-                  return via;
+                  break;
                 }
               }
+              if (via == nullptr) break;
+            }
+          }
+          if (via) {
+            for (bool lower : {true, false}) {
+              it = _tobstacles.find(lower ? via->l() : via->u());
+              if (it != _tobstacles.end()) {
+                const auto& p = (lower ? via->lpad() : via->upad());
+                for (auto& o : it->second) {
+                  if (o.overlaps(p, true)) {
+                    COUT << "obs : " << lower << ' ' << o.str() << ' ' << p.str() << '\n';
+                    delete via;
+                    via = nullptr;
+                    break;
+                  }
+                }
+              }
+              if (via == nullptr) break;
             }
           }
         }
@@ -1364,9 +1385,25 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
                 if (o.overlaps(c, true)) {
                   delete via;
                   via = nullptr;
-                  return via;
+                  break;
                 }
               }
+              if (via == nullptr) break;
+            }
+          }
+          if (via) {
+            for (bool lower : {true, false}) {
+              it = _tobstacles.find(lower ? via->l() : via->u());
+              if (it != _tobstacles.end()) {
+                for (auto& o : it->second) {
+                  if (o.overlaps((lower ? via->lpad() : via->upad()), true)) {
+                    delete via;
+                    via = nullptr;
+                    break;
+                  }
+                }
+              }
+              if (via == nullptr) break;
             }
           }
         }
@@ -1436,5 +1473,28 @@ void Router::constructVias()
   }
 }
 
+void Router::writeLEF() const
+{
+  auto name(_modname + "_" + _netname);
+  std::ofstream ofs(name + ".lef");
+  if (ofs.is_open()) { 
+    ofs << "MACRO " << name << "\n";
+    ofs << "  UNITS\n    DISTANCE MICRONS " << _uu << ";\n  END UNITS\n";
+    ofs << "  ORIGIN "  << _bbox.xmin()  << ' ' << _bbox.ymin() << " ;\n";
+    ofs << "  FOREIGN " << name << ' '  << (1.*_bbox.xmin()/_uu) << ' ' << (1.*_bbox.ymin()/_uu) << " ;\n";
+    ofs << "  SIZE "    << (1.*_bbox.width()/_uu) << " BY " << (1.* _bbox.height()/_uu) << " ;\n";
+    if (!_tobstacles.empty()) {
+      ofs << "    OBS\n";
+      for (auto& l : _tobstacles) {
+        ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+        for (auto& r : l.second) {
+          ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+        }
+      }
+      ofs << "    END\n";
+    }
+    ofs << "END " << name << "\nEND LIBRARY\n";
+  }
+}
 
 }

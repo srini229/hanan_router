@@ -187,7 +187,7 @@ class Module {
     const Geom::Rect& bbox() const { return _bbox; }
     void checkShort() const;
 
-    void writeDEF(const std::string& nstr = "") const;
+    void writeDEF(const std::string& nstr = "", const std::string& netname = "") const;
     void writeLEF() const;
 
 };
