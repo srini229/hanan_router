@@ -231,7 +231,7 @@ void Module::route(Router::Router& router)
 {
   TIME_M();
   if (!_routed) {
-    writeDEF("_before");
+    //writeDEF("_before");
     router.clearObstacles();
     router.clearObstacles(true);
     for (auto& inst : _instances) {
@@ -267,7 +267,7 @@ void Module::route(Router::Router& router)
       }*/
       (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles, (_name != "mixer_first_rx_0"));
       Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());
-      writeDEF((*it)->name());
+      //writeDEF((*it)->name());
     }
     router.clearObstacles();
     for (auto& p : _pins) {

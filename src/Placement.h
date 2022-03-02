@@ -219,6 +219,11 @@ class Netlist {
       if (!_valid) return;
       for (auto& m : _modules) m.second->checkShort();
     }
+    void writeDEF() const
+    {
+      if (!_valid) return;
+      for (auto& m : _modules) if (!m.second->isLeaf()) m.second->writeDEF();
+    }
 };
 
 

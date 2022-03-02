@@ -35,6 +35,8 @@ int main(int argc, char* argv[])
     Placement::Netlist netlist(plfile, leffile, linfo, uu);
     if (route) {
       netlist.route(hrdb);
+    } else {
+      netlist.writeDEF();
     }
     netlist.print();
     netlist.plot();

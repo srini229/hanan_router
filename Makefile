@@ -19,8 +19,8 @@ DEPFLAGS = -MMD -MP
 
 MAIN = hanan_router
 
-#OPTFLAGS = -Ofast
-OPTFLAGS = 
+OPTFLAGS = -Ofast
+#OPTFLAGS = 
 ifeq ($(DEBUG), 1)
 OPTFLAGS = 
 endif
