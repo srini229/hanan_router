@@ -3,11 +3,11 @@
   "leaves": [
     {
       "abstract_name": "BLOCK_A",
-      "bbox": [ 0, 0, 100, 100 ],
+      "bbox": [ 0, 0, 100, 200 ],
       "concrete_name": "BLOCK_A",
       "terminals": [
         { "name": "A", "rect": [ 0, 0, 32, 100] },
-        { "name": "D", "rect": [ 64, 0, 96, 100 ] }
+        { "name": "B", "rect": [ 64, 100, 96, 200 ] }
       ]
     }
   ],
@@ -35,7 +35,7 @@
             { "actual": "Y", "formal": "B" }
           ],
           "instance_name": "A_1",
-          "transformation": { "oX": 900, "oY": 900, "sX": 1, "sY": 1 }
+          "transformation": { "oX": 900, "oY": 800, "sX": 1, "sY": 1 }
         }
       ],
       "parameters": [
