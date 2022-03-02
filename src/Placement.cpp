@@ -265,7 +265,7 @@ void Module::route(Router::Router& router)
         COUT << "net : " << (*it)->name() << '\n';
         if ((*it)->name().find("VCMBIAS") == std::string::npos)  continue;
       }*/
-      (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles, (_name != "mixer_first_rx_0"));
+      (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles, true);
       Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());
       //writeDEF((*it)->name());
     }

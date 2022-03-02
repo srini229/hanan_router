@@ -908,20 +908,28 @@ Geom::LayerRects Router::findSol()
     }
 #endif
 
+    std::vector<unsigned> layerExpansions(_maxLayer + 1, 0);
     while (!_pq.empty()) {
       auto t = const_cast<Node*>(*_pq.begin());
       if (_targets.find(t) != _targets.end()) {
         _sol = t;
-        COUT << "sol found " << std::endl;
+        COUT << "sol found with " << _expansions << " expansions!" << std::endl;
+        for (unsigned i = 0; i < layerExpansions.size(); ++i) {
+          COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
+        }
         break;
       }
       _pq.erase(_pq.begin());
+      ++layerExpansions[t->z()];
       expandNode(t);
       ++_expansions;
       if (_expansions >= _maxExpansions) break;
     }
     if (!_sol) {
-      COUT << "sol not found for " << _name << '\n';
+      COUT << "sol not found for " << _name << "after " << _expansions << " expansions!\n";
+      for (unsigned i = 0; i < layerExpansions.size(); ++i) {
+        COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
+      }
     }
     _pq.clear();
     _hanangridv.clear();
