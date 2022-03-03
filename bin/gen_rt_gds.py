@@ -147,8 +147,14 @@ for j,m in modules.items():
 if args.deff:
     with open(args.deff) as fp:
         innets = False
+        sca = args.scale
         for line in fp:
             line.strip()
+            if "UNITS" in line:
+              if "DISTANCE" in line:
+                s = line.split()
+                if len(s) == 5:
+                  sca = int(s[3])
             if "NETS" in line:
                 if "END" in line:
                     innets = False
@@ -163,7 +169,7 @@ if args.deff:
                     if s[1] == "RECT":
                         index = 1
                     layer = s[index + 1]
-                    rect = [float(s[index + 3])/args.scale, float(s[index + 4])/args.scale, float(s[index + 7])/args.scale, float(s[index + 8])/args.scale]
+                    rect = [float(s[index + 3])/sca, float(s[index + 4])/sca, float(s[index + 7])/sca, float(s[index + 8])/sca]
                     l = layers[layer]
                     print(rect)
                     if args.top_cell in modules:
