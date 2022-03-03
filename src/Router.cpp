@@ -886,7 +886,11 @@ Geom::LayerRects Router::findSol()
       }
     }*/
     generateHananGrid();
-    writeLEF();
+#if DEBUG
+#else
+    if (!debugplot.empty() && (debugplot == "1" || debugplot == _name))
+#endif
+      writeLEF();
 
 #if DEBUG
     for (unsigned l = 0; l < _hanangridh.size(); ++l) {
@@ -1353,12 +1357,14 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
           }
           if (via) {
             for (bool lower : {true, false}) {
-              it = _tobstacles.find(lower ? via->l() : via->u());
+              auto l = (lower ? via->l() : via->u());
+              it = _tobstacles.find(l);
               if (it != _tobstacles.end()) {
-                const auto& p = (lower ? via->lpad() : via->upad());
+                Geom::Rect p = (lower ? via->lpad() : via->upad());
+                p.bloat(-std::min(widthx(l), p.width())/2, -std::min(widthy(l), p.height())/2);
                 for (auto& o : it->second) {
-                  if (o.overlaps(p, true)) {
-                    COUT << "obs : " << lower << ' ' << o.str() << ' ' << p.str() << '\n';
+                  if (o.overlaps(p, false)) {
+                    //COUT << "obs viapad up : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;
                     via = nullptr;
                     break;
@@ -1393,10 +1399,14 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
           }
           if (via) {
             for (bool lower : {true, false}) {
-              it = _tobstacles.find(lower ? via->l() : via->u());
+              auto l = (lower ? via->l() : via->u());
+              it = _tobstacles.find(l);
               if (it != _tobstacles.end()) {
+                Geom::Rect p = (lower ? via->lpad() : via->upad());
+                p.bloat(-std::min(widthx(l), p.width())/2, -std::min(widthy(l), p.height())/2);
                 for (auto& o : it->second) {
-                  if (o.overlaps((lower ? via->lpad() : via->upad()), true)) {
+                  if (o.overlaps(p, false)) {
+                    //COUT << "obs viapad down : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;
                     via = nullptr;
                     break;

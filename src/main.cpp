@@ -43,13 +43,13 @@ int main(int argc, char* argv[])
     netlist.checkShort();
   }
 
-  std::string stfile = parseArgs(argc, argv, "-s");
+  /*std::string stfile = parseArgs(argc, argv, "-st");
   if (!stfile.empty()) {
     hrdb.readDataFile(stfile);
     hrdb.findSol();
     hrdb.plot();
     hrdb.printSol();
-  }
+  }*/
 
   return 0;
 }

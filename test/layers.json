@@ -93,7 +93,7 @@
                 "c1",
                 "c2"
             ],
-            "Pitch": 80,
+            "Pitch": 64,
             "Width": 32,
             "MinL": 180,
             "MaxL": null,
@@ -155,7 +155,7 @@
                 "c2",
                 "c1"
             ],
-            "Pitch": 84,
+            "Pitch": 64,
             "Width": 32,
             "MinL": 200,
             "MaxL": null,
