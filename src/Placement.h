@@ -18,9 +18,9 @@ class Pin {
     std::string _name;
     Geom::LayerRects _shapes;
     Geom::Rect _bbox;
-    int _real; // 0 : real, 1 : virtual
+    int _real; // 1 : real, 0 : virtual
   public:
-    Pin(const std::string& name = "", const int r = 0) : _name{name}, _bbox{}, _real{r} {}
+    Pin(const std::string& name = "", const int r = 1) : _name{name}, _bbox{}, _real{r} {}
     const std::string& name() const { return _name; }
     void addRect(const int layer, const Geom::Rect& r)
     {
@@ -64,6 +64,7 @@ class Net {
       _vpins.clear();
     }
     const std::set<const Pin*>& pins() const { return _pins; }
+    const std::vector<Pin*>& vpins() const { return _vpins; }
     void addPin(const Pin* p) { _pins.insert(p); }
     void print() const;
     const std::string& name() const { return _name; }

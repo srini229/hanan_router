@@ -102,7 +102,7 @@ PinPairs Net::findSteiners()
   double cost = findMST(porder);
   double minCost{cost};
   for (int ctr = 0; ctr < static_cast<int>(_pins.size()) - 2; ++ctr) {
-    Pin* vp = new Pin(_name + "+" + std::to_string(ctr));
+    Pin* vp = new Pin(_name + "+" + std::to_string(ctr), 0);
     _vpins.push_back(vp);
     Geom::Point ptstore;
     for (auto& xp : xpts) {
@@ -125,6 +125,7 @@ PinPairs Net::findSteiners()
       pinpoints.insert(ptstore);
       vp->clearRects();
       vp->addRect(minl, Geom::Rect(ptstore.x() - 16, ptstore.y() - 16, ptstore.x() + 16, ptstore.y() + 16));
+      COUT << "adding vpin at : " << ptstore.x() << ',' << ptstore.y() << ' ' << vp->name() << '\n';
     } else {
       delete vp;
       _vpins.pop_back();
@@ -219,7 +220,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
 #endif
   _unroute = 0;
   for (auto& p : _pins) {
-    if (!p->isReal()) Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
+    Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
   }
   if (_pins.size() > 1) {
     COUT << "routing net : " << _name << ' ' << halfpm() << '\n';
@@ -231,6 +232,9 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       }
     }*/
     auto pinpairs = findSteiners();
+    for (auto& p : _vpins) {
+      Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
+    }
     for (auto& pp : pinpairs) {
       const auto& pin1 = pp.first;
       const auto& pin2 = pp.second;
@@ -293,8 +297,8 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       } else {
         _unroute = 1;
       }
-      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin1->shapes()), sol, &_bbox);
-      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin2->shapes()), sol, &_bbox);
+      //Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin1->shapes()), sol, &_bbox);
+      //Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin2->shapes()), sol, &_bbox);
       router.clearObstacles(true);
     }
   }
@@ -591,6 +595,14 @@ void Module::writeDEF(const std::string& nstr, const std::string& netname) const
           for (auto& l : routeShapes) {
             for (auto& r : l.second) {
               ofs << "  + RECT " << LAYER_NAMES[l.first];
+              ofs << " ( " << r.xmin() << ' ' << r.ymin() << " ) ( " << r.xmax() << ' ' << r.ymax() << " )\n";
+            }
+          }
+        }
+        for (auto& p : n.second.vpins()) {
+          for (auto& l : p->shapes()) {
+            for (auto& r : l.second) {
+              ofs << "  + RECT " << LAYER_NAMES[l.first] << "_vp";
               ofs << " ( " << r.xmin() << ' ' << r.ymin() << " ) ( " << r.xmax() << ' ' << r.ymax() << " )\n";
             }
           }
