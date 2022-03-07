@@ -781,10 +781,10 @@ void Router::generateHananGrid()
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
     auto box = _bbox;
     //box.bloat(_bbox.width(), _bbox.height());
-    _tobstacles[l].push_back(Geom::Rect(box.xmin() - 100, box.ymin(), box.xmin() - 50, box.ymax()));
-    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymin() - 100, box.xmax(), box.ymin() - 50));
-    _tobstacles[l].push_back(Geom::Rect(box.xmax() + 50, box.ymin(), box.xmax() + 100, box.ymax()));
-    _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymax() + 50, box.xmax(), box.ymax() + 100));
+    _tobstacles[l].push_back(Geom::Rect(box.xmin() - 100, box.ymin() - 100, box.xmin() - 50, box.ymax() + 100));
+    _tobstacles[l].push_back(Geom::Rect(box.xmin() - 100, box.ymin() - 100, box.xmax() + 100, box.ymin() - 50));
+    _tobstacles[l].push_back(Geom::Rect(box.xmax() + 50, box.ymin() - 100, box.xmax() + 100, box.ymax() + 100));
+    _tobstacles[l].push_back(Geom::Rect(box.xmin() - 100, box.ymax() + 50, box.xmax() + 100, box.ymax() + 100));
   }
   for (auto& l : _tobstacles) {
     if (l.first > _maxLayer) continue;
