@@ -18,13 +18,19 @@ class Pin {
     std::string _name;
     Geom::LayerRects _shapes;
     Geom::Rect _bbox;
+    int _real; // 0 : real, 1 : virtual
   public:
-    Pin(const std::string& name = "") : _name{name}, _bbox{} {}
+    Pin(const std::string& name = "", const int r = 0) : _name{name}, _bbox{}, _real{r} {}
     const std::string& name() const { return _name; }
     void addRect(const int layer, const Geom::Rect& r)
     {
       _shapes[layer].push_back(r);
       _bbox.merge(r);
+    }
+    void clearRects()
+    {
+      _bbox = Geom::Rect();
+      _shapes.clear();
     }
     const Geom::LayerRects& shapes() const { return _shapes; }
     const Geom::Rect& bbox() const { return _bbox; }
@@ -32,6 +38,8 @@ class Pin {
     {
       Geom::MergeLayerRects(_shapes, lr, &_bbox);
     }
+    int isReal() const { return _real; }
+    int minLayer() const { return (_shapes.empty() ? -1 : _shapes.begin()->first); }
 };
 typedef std::map<std::string, Pin*> Pins;
 typedef std::vector<const Pin*> PinCVec;
@@ -40,13 +48,21 @@ class Net {
   private:
     std::string _name;
     std::set<const Pin*> _pins;
+    std::vector<Pin*> _vpins;
     Geom::LayerRects _routeshapes;
     Router::Vias _vias;
     Geom::Rect _bbox;
     int _unroute : 1;
-    PinPairs reorderPins() const;
+    //PinPairs reorderPins() const;
+    double findMST(PinPairs& porder) const;
+    PinPairs findSteiners();
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1} {}
+    ~Net()
+    {
+      for (auto& v : _vpins) delete v;
+      _vpins.clear();
+    }
     const std::set<const Pin*>& pins() const { return _pins; }
     void addPin(const Pin* p) { _pins.insert(p); }
     void print() const;

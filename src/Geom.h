@@ -21,10 +21,12 @@ class Point {
   public:
     Point(int x = INT_MAX, int y = INT_MAX) : _x(x), _y(y) {}
     Point(const Point& p) : _x(p._x), _y(p._y) {}
+    bool valid() const { return (_x != INT_MAX && _y != INT_MAX); }
     const int& x() const { return _x; }
     const int& y() const { return _y; }
     int& x() { return _x; }
     int& y() { return _y; }
+    void set(const int x, const int y) { _x = x; _y = y; }
     void scale(int t) { _x *= t; _y *= t; }
     void translate(int x, int y) { _x += x; _y += y; }
     void translate(int c) { _x += c; _y += c; }

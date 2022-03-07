@@ -15,9 +15,11 @@ inline void Net::print() const
   }
 }
 
-PinPairs Net::reorderPins() const
+
+double Net::findMST(PinPairs& porder) const
 {
   PinCVec pins(_pins.begin(), _pins.end());
+  pins.insert(pins.end(), _vpins.begin(), _vpins.end());
   std::sort(pins.begin(), pins.end(),
       [](const Pin* p1, const Pin* p2) -> bool { return p1->bbox().halfpm() > p2->bbox().halfpm(); });
   std::vector<std::vector<double>> pinpairdist(pins.size(), std::vector<double>(pins.size(), 0));
@@ -28,21 +30,20 @@ PinPairs Net::reorderPins() const
     auto& s1 = p1->shapes();
     for (unsigned j = i + 1; j < pins.size(); ++j) {
       auto& p2 = pins[j];
-      double dist = Geom::Dist(p1->bbox(), p2->bbox()) / (1. * p1->bbox().halfpm() * p2->bbox().halfpm());
+      double dist = Geom::Dist(p1->bbox(), p2->bbox());
       auto& s2 = p2->shapes();
       for (auto& l : s1) {
         auto its2 = s2.find(l.first);
         if (its2 != s2.end()) {
           for (auto& r1 : l.second) {
             for (auto& r2 : its2->second) {
-              dist = std::min(Geom::Dist(r1, r2) / (1. * p1->bbox().halfpm() * p2->bbox().halfpm()), dist);
+              dist = std::min(Geom::Dist(r1, r2), dist);
             }
           }
         }
       }
       pinpairdist[i][j] = dist;
       pinpairdist[j][i] = dist;
-      COUT << "pins dist : " << pins[i]->name() << ' ' << pins[j]->name() << ' ' << dist << '\n';
       if (mindist > dist) {
         mindist = dist;
         idx1 = static_cast<int>(i);
@@ -56,6 +57,7 @@ PinPairs Net::reorderPins() const
   std::vector<int> selected(pins.size(), 0);
   selected[idx1] = 1;
   selected[idx2] = 1;
+  double cost{pinpairdist[idx1][idx2]};
   while (primorder.size() < pins.size() - 1) {
     double mindist{DBLMAX};
     int minidx2 = -1, minidx1 = -1;
@@ -71,20 +73,143 @@ PinPairs Net::reorderPins() const
     }
     if (minidx2 >= 0) {
       primorder.push_back(std::make_pair(minidx1, minidx2));
-      COUT << "pins to route order : " << pins[minidx1]->name() << ' ' << pins[minidx2]->name() << '\n';
       selected[minidx2] = 1;
+      cost += mindist;
     }
   }
 
   std::sort(primorder.begin(), primorder.end(), [pinpairdist](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool
       { return pinpairdist[a.first][a.second] < pinpairdist[b.first][b.second]; });
 
-  
-  PinPairs porder;
   for (auto& pp : primorder) porder.emplace_back(pins[pp.first], pins[pp.second]);
+  return cost;
+}
 
+PinPairs Net::findSteiners()
+{
+  Geom::PointSet pinpoints;
+  std::set<int> xpts, ypts;
+  int minl{INT_MAX};
+  for (auto& p : _pins) {
+    auto xc(p->bbox().xcenter()), yc(p->bbox().ycenter());
+    pinpoints.insert(Geom::Point(xc, yc));
+    xpts.insert(xc);
+    ypts.insert(yc);
+    minl = std::min(minl, p->minLayer());
+  }
+
+  PinPairs porder;
+  double cost = findMST(porder);
+  double minCost{cost};
+  for (int ctr = 0; ctr < static_cast<int>(_pins.size()) - 2; ++ctr) {
+    Pin* vp = new Pin(_name + "+" + std::to_string(ctr));
+    _vpins.push_back(vp);
+    Geom::Point ptstore;
+    for (auto& xp : xpts) {
+      for (auto& yp : ypts) {
+        if (pinpoints.find(Geom::Point(xp, yp)) == pinpoints.end()) {
+          vp->clearRects();
+          vp->addRect(minl, Geom::Rect(xp - 16, yp - 16, xp + 16, yp + 16));
+          PinPairs tmporder;
+          cost = findMST(tmporder);
+          //COUT << "MST cost : " << cost << ' ' << minCost << " (" << xp << ',' << yp << ") " << minl << '\n';
+          if (cost < minCost) {
+            minCost = cost;
+            porder = tmporder;
+            ptstore.set(xp, yp);
+          }
+        }
+      }
+    }
+    if (ptstore.valid()) {
+      pinpoints.insert(ptstore);
+      vp->clearRects();
+      vp->addRect(minl, Geom::Rect(ptstore.x() - 16, ptstore.y() - 16, ptstore.x() + 16, ptstore.y() + 16));
+    } else {
+      delete vp;
+      _vpins.pop_back();
+      break;
+    }
+  }
   return porder;
 }
+
+/*PinPairs Net::reorderPins() const
+{
+  PinPairs porder;
+  PinCVec pins(_pins.begin(), _pins.end());
+  if (pins.size() == 2) {
+    porder.emplace_back(pins.front(), pins.back());
+  } else {
+    std::sort(pins.begin(), pins.end(),
+        [](const Pin* p1, const Pin* p2) -> bool { return p1->bbox().halfpm() > p2->bbox().halfpm(); });
+    std::vector<std::vector<double>> pinpairdist(pins.size(), std::vector<double>(pins.size(), 0));
+    double mindist{DBLMAX};
+    int idx1{-1}, idx2{-1};
+    for (unsigned i = 0; i < pins.size(); ++i) {
+      auto& p1 = pins[i];
+      auto& s1 = p1->shapes();
+      for (unsigned j = i + 1; j < pins.size(); ++j) {
+        auto& p2 = pins[j];
+        double dist = Geom::Dist(p1->bbox(), p2->bbox());
+        auto& s2 = p2->shapes();
+        for (auto& l : s1) {
+          auto its2 = s2.find(l.first);
+          if (its2 != s2.end()) {
+            for (auto& r1 : l.second) {
+              for (auto& r2 : its2->second) {
+                dist = std::min(Geom::Dist(r1, r2), dist);
+              }
+            }
+          }
+        }
+        pinpairdist[i][j] = dist;
+        pinpairdist[j][i] = dist;
+        COUT << "pins dist : " << pins[i]->name() << ' ' << pins[j]->name() << ' ' << dist << '\n';
+        if (mindist > dist) {
+          mindist = dist;
+          idx1 = static_cast<int>(i);
+          idx2 = static_cast<int>(j);
+        }
+      }
+    }
+    std::vector<std::pair<int, int>> primorder;
+    primorder.reserve(pins.size() - 1);
+    primorder.push_back(std::make_pair(idx1, idx2));
+    std::vector<int> selected(pins.size(), 0);
+    selected[idx1] = 1;
+    selected[idx2] = 1;
+    double cost{pinpairdist[idx1][idx2]};
+    while (primorder.size() < pins.size() - 1) {
+      double mindist{DBLMAX};
+      int minidx2 = -1, minidx1 = -1;
+      for (int i = 0; i < static_cast<int>(pins.size()); ++i) {
+        if (!selected[i]) continue;
+        for (int j = 0; j < static_cast<int>(pins.size()); ++j) {
+          if (!selected[j] && pinpairdist[i][j] < mindist) {
+            mindist = pinpairdist[i][j];
+            minidx1 = i;
+            minidx2 = j;
+          }
+        }
+      }
+      if (minidx2 >= 0) {
+        cost += mindist;
+        primorder.push_back(std::make_pair(minidx1, minidx2));
+        COUT << "pins to route order : " << pins[minidx1]->name() << ' ' << pins[minidx2]->name() << '\n';
+        selected[minidx2] = 1;
+      }
+    }
+
+    std::sort(primorder.begin(), primorder.end(), [pinpairdist](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool
+        { return pinpairdist[a.first][a.second] < pinpairdist[b.first][b.second]; });
+
+
+    for (auto& pp : primorder) porder.emplace_back(pins[pp.first], pins[pp.second]);
+  }
+
+  return porder;
+}*/
 
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update)
 {
@@ -94,7 +219,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
 #endif
   _unroute = 0;
   for (auto& p : _pins) {
-    Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
+    if (!p->isReal()) Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
   }
   if (_pins.size() > 1) {
     COUT << "routing net : " << _name << ' ' << halfpm() << '\n';
@@ -105,7 +230,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
     }*/
-    auto pinpairs = reorderPins();
+    auto pinpairs = findSteiners();
     for (auto& pp : pinpairs) {
       const auto& pin1 = pp.first;
       const auto& pin2 = pp.second;
