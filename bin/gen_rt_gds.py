@@ -22,6 +22,10 @@ print(f"units             : {args.units}")
 print(f"layers.json       : {args.layers}")
 print(f"route def file    : {args.deff}")
 
+if args.pl_file == "" or args.gds_dir == "" or args.layers == "" or args.deff == "":
+    ap.print_help()
+    exit()
+
 class Transform:
     def __init__(self, oX = 0, oY = 0, sX = 1, sY = 1):
         self._oX = oX 
