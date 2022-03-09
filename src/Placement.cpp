@@ -398,7 +398,7 @@ void Module::route(Router::Router& router)
       }*/
       router.setNetName((*it)->name());
       (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles, true);
-      writeDEF("_" + (*it)->name(), (*it)->name());
+      //writeDEF("_" + (*it)->name(), (*it)->name());
       Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());
     }
     router.clearObstacles();

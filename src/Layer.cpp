@@ -188,9 +188,10 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
       }
     }
   }
-  COUT << "signal routing layers : " << (_sbottom? _sbottom->name() : "") << " : " << (_stop ? _stop->name() : "") << "\n";
-  COUT << "power  routing layers : " << (_pbottom? _pbottom->name() : "") << " : " << (_ptop ? _ptop->name() : "") << "\n";
-  COUT << "clock  routing layers : " << (_cbottom? _cbottom->name() : "") << " : " << (_ctop ? _ctop->name() : "") << "\n";
+  COUT << "top metal layer : " << LAYER_NAMES[_topMetal] << '\n';
+  COUT << "signal routing layers : " << (_sbottom? _sbottom->name() : "unsp") << " : " << (_stop ? _stop->name() : "unsp") << "\n";
+  COUT << "power  routing layers : " << (_pbottom? _pbottom->name() : "unsp") << " : " << (_ptop ? _ptop->name() : "unsp") << "\n";
+  COUT << "clock  routing layers : " << (_cbottom? _cbottom->name() : "unsp") << " : " << (_ctop ? _ctop->name() : "unsp") << "\n";
   _populated = true;
 }
 

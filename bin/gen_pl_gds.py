@@ -18,6 +18,9 @@ print(f"gds dir           : {args.gds_dir}")
 print(f"top cell          : {args.top_cell}")
 print(f"units             : {args.units}")
 
+if args.pl_file == "" or args.gds_dir == "" or args.layers == "":
+    ap.print_help()
+    exit()
 
 class Transform:
     def __init__(self, oX = 0, oY = 0, sX = 1, sY = 1):
