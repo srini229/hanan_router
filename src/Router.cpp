@@ -208,6 +208,7 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100
   _minLayer = lf.signalBottomLayer();
   _maxLayer = lf.signalTopLayer();
   _maxRoutingLayer = static_cast<int>(_widthx.size()) - 1;
+  COUT << "min routing layer : " << LAYER_NAMES[_minLayer] << " max routing layer : " << LAYER_NAMES[_maxLayer] << '\n';
   _nodes.clear();
   _nodes.resize(_maxLayer + 1);
   constructVias();
@@ -371,6 +372,9 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
       auto& p = pp.first;
       auto n = createNode(p.x(), p.y(), z, nullptr, fcost, tcost);
       n->expand(dir, true);
+      if ((dir == UP && z >= _maxLayer) || (dir == DOWN && z <= _minLayer)) {
+        n->expand(dir, false);
+      }
       if (dir == EAST) {
         n->sethwx(pp.second/2);
         n->expand(WEST, true);
@@ -446,7 +450,7 @@ void Router::insertToPQ(const Node* n)
 void Router::setexpand(Node* newn, const Node* parent) const
 {
   if (parent) {
-    newn->clearexpand();
+    newn->setexpand();
     if (newn->z() == parent->z()) {
       if (newn->x() == parent->x()) {
         if (newn->y() < parent->y()) {
@@ -462,20 +466,43 @@ void Router::setexpand(Node* newn, const Node* parent) const
         }
       }
     }
-    if (newn->z() < parent->z() || newn->z() >= _minLayer) {
+    if (newn->z() >= _maxLayer) newn->expand(UP, false);
+    else {
+      if (newn->z() < parent->z() && newn->z() >= _minLayer) {
+        auto v = isViaValid(newn, true);
+        if (v) {
+          newn->upVia(v);
+        } else {
+          newn->expand(UP, false);
+        }
+      }
+    }
+    if (newn->z() <= _minLayer) newn->expand(DOWN, false);
+    else {
+      if (newn->z() > parent->z() && newn->z() <= _maxLayer) {
+        auto v = isViaValid(newn, false);
+        if (v) {
+          newn->dnVia(v);
+        } else {
+          newn->expand(DOWN, false);
+        }
+      }
+    }
+  } else {
+    if (newn->z() >= _minLayer && newn->z() < _maxLayer) {
+      newn->expand(UP, false);
       auto v = isViaValid(newn, true);
       if (v) {
         newn->upVia(v);
-      } else {
-        newn->expand(UP, false);
+        newn->expand(UP, true);
       }
     }
-    if (newn->z() > parent->z() || newn->z() <= _maxLayer) {
+    if (newn->z() <= _maxLayer) {
+      newn->expand(DOWN, false);
       auto v = isViaValid(newn, false);
       if (v) {
         newn->dnVia(v);
-      } else {
-        newn->expand(DOWN, false);
+        newn->expand(DOWN, true);
       }
     }
   }
@@ -727,7 +754,7 @@ void Router::expandNode(const Node* n1)
     }
     gridpos.clear();
   }
-  n->clearexpand(true);
+  n->resetexpand();
 }
 
 void Router::insertRange(IntRangeSet& s, const IntPair& r)

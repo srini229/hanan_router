@@ -134,11 +134,8 @@ class Node {
     bool expandsouth() const { return _expanddir.test(SOUTH); }
 
     void expand(const int dir, const bool val) { if (dir < MAXDIR) _expanddir.set(dir, val); }
-    void clearexpand(const bool clear = false)
-    {
-      if(clear) _expanddir.reset();
-      else _expanddir.set();
-    }
+    void setexpand() { _expanddir.set(); }
+    void resetexpand() { _expanddir.reset(); }
 
     const Via* upVia() const { return _upVia; }
     const Via* dnVia() const { return _dnVia; }
@@ -279,6 +276,8 @@ class Router {
         }
         l.clear();
       }
+      _nodes.clear();
+      _nodes.resize(_maxLayer + 1);
       COUT << "flushing nodes\n";
 #if DEBUG
       COUT << " remaining " << Node::_nodectr << ' ' << _nodeset.size() << "\n";
