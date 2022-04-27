@@ -45,6 +45,7 @@ class Net {
     Geom::Rect _bbox;
     int _unroute : 1;
     PinPairs reorderPins() const;
+    std::map<int, int> _ndrwidths;
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1} {}
     const std::set<const Pin*>& pins() const { return _pins; }
@@ -66,6 +67,7 @@ class Net {
       }
     }
     int halfpm() const { return _bbox.halfpm(); }
+    void addNDR(const int layer, const int width) { _ndrwidths[layer] = width; }
 };
 typedef std::map<std::string, Net> Nets;
 typedef std::vector<Net*> NetsVec;
@@ -179,6 +181,13 @@ class Module {
         n.second.update();
       }
     }
+    void addNDR(const std::string& net, const int layer, const int width)
+    {
+      auto it = _nets.find(net);
+      if (it != _nets.end()) {
+        it->second.addNDR(layer, width);
+      }
+    }
 
     void print() const;
     void route(Router::Router& r);
@@ -200,9 +209,10 @@ class Netlist {
     Modules _modules;
     void build();
     void loadLEF(const std::string& leffile, const DRC::LayerInfo& lf);
+    void readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf);
 
   public:
-    Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu);
+    Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile);
     ~Netlist();
     void print() const;
     void route(Router::Router& r)

@@ -13,6 +13,12 @@ inline void Net::print() const
   for (const auto& p : _pins) {
     std::cout << " " << p->name();
   }
+  if (!_ndrwidths.empty()) {
+    COUT << " ndr :";
+    for (const auto& lw : _ndrwidths) {
+      COUT << "(layer : " << lw.first << " width : " << lw.second << ") ";
+    }
+  }
 }
 
 PinPairs Net::reorderPins() const
@@ -126,7 +132,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
-      router.updatendr(update);
+      router.updatendr(update, _ndrwidths);
 #if DEBUG
       COUT << "adding line of sight nodes if they exist\n";
 #endif

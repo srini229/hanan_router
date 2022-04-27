@@ -8,7 +8,7 @@ using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
 const auto& npos = std::string::npos;
 
-Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu) : _uu(uu), _valid{1}
+Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile) : _uu(uu), _valid{1}
 {
   if (plfile.empty()) {
     CERR<< "missing placement file" <<std::endl;
@@ -92,6 +92,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
   }
   loadLEF(leffile, lf);
   build();
+  readNDR(ndrfile, lf);
 }
 
 
@@ -244,6 +245,42 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     }
   }
   ifs.close();
+}
+
+void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
+{
+  if (!ndrfile.empty()) {
+    std::ifstream ifs(ndrfile);
+    if (!ifs) {
+      CERR << "unable to open NDR file " << ndrfile <<std::endl;
+      _valid = 0;
+      return;
+    }
+    ordered_json oj = json::parse(ifs);
+    for (auto& m : oj) {
+      auto it = m.find("module");
+      if (it != m.end()) {
+        auto modit = _modules.find(*it);
+        it = m.find("nets");
+        if (modit != _modules.end() && it != m.end()) {
+          for (auto& netiter : *it) {
+            auto itnetname = netiter.find("name");
+            COUT<< "net xx : " << *itnetname << std::endl;
+            auto itwidths = netiter.find("widths");
+            if (itnetname != netiter.end() && itwidths != netiter.end()) {
+              for (auto& el : (*itwidths).items()) {
+                auto layer = lf.getLayerIndex(el.key());
+                COUT << "layer : " << layer << " w : " << el.value() << std::endl;
+                if (layer >= 0) {
+                  modit->second->addNDR(*itnetname, layer, el.value());
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 }

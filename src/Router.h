@@ -345,7 +345,7 @@ class Router {
     void addSource(const Geom::Rect& r, const int z) { addSourceTarget(r, z, true); }
     void addTarget(const Geom::Rect& r, const int z) { addSourceTarget(r, z, false); }
     const Via* isViaValid(const Node* n, const bool up) const;
-    void updatendr(const bool usendr);
+    void updatendr(const bool usendr, const std::map<int, int>& ndrwidths);
     void setModName(const std::string& n) { _modname = n; }
     void setNetName(const std::string& n) { _netname = n; }
     void setuu(const int uu) { _uu = uu; }

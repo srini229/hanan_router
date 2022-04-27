@@ -1283,49 +1283,58 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
   }
 }
 
-void Router::updatendr(const bool usendr)
+void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths)
 {
   _ndrwidthx.clear(); _ndrwidthy.clear();
   _ndrwidthx.resize(_widthx.size(), INT_MAX);
   _ndrwidthy.resize(_widthy.size(), INT_MAX);
   if (usendr) {
-    if (_sourceshapes.size() == 1) {
-      auto itsrc = _sourceshapes.begin();
-      auto ittgt = _targetshapes.find(itsrc->first);
+    if (!ndrwidths.empty()) {
+      _ndrwidthx = _widthx;
+      _ndrwidthy = _widthy;
+      for (auto& it : ndrwidths) {
+        _ndrwidthx[it.first] = std::max(_ndrwidthx[it.first], it.second);
+        _ndrwidthy[it.first] = std::max(_ndrwidthy[it.first], it.second);
+      }
+    } else {
+      if (_sourceshapes.size() == 1) {
+        auto itsrc = _sourceshapes.begin();
+        auto ittgt = _targetshapes.find(itsrc->first);
 
-      if (ittgt != _targetshapes.end() 
-          && ittgt->second.size() == 1
-          && itsrc->second.size() == 1) {
-        auto z = itsrc->first;
-        if (isVert(z)) {
-          _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
-          _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
-        }
-        if (isHor(z)) {
-          _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
-          _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+        if (ittgt != _targetshapes.end() 
+            && ittgt->second.size() == 1
+            && itsrc->second.size() == 1) {
+          auto z = itsrc->first;
+          if (isVert(z)) {
+            _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
+            _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
+          }
+          if (isHor(z)) {
+            _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
+            _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+          }
         }
       }
-    }
-    if (_targetshapes.size() == 1) {
-      auto ittgt = _targetshapes.begin();
-      auto itsrc = _sourceshapes.find(ittgt->first);
-      if (itsrc != _sourceshapes.end() 
-          && ittgt->second.size() == 1
-          && itsrc->second.size() == 1) {
-        auto z = ittgt->first;
-        if (isVert(z)) {
-          _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
-          _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
-        }
-        if (isHor(z)) {
-          _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
-          _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+      if (_targetshapes.size() == 1) {
+        auto ittgt = _targetshapes.begin();
+        auto itsrc = _sourceshapes.find(ittgt->first);
+        if (itsrc != _sourceshapes.end() 
+            && ittgt->second.size() == 1
+            && itsrc->second.size() == 1) {
+          auto z = ittgt->first;
+          if (isVert(z)) {
+            _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
+            _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
+          }
+          if (isHor(z)) {
+            _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
+            _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+          }
         }
       }
     }
   }
-#if DEBUG
+//#if DEBUG
   for (unsigned i = 0; i < _ndrwidthx.size(); ++i) {
     if (_ndrwidthx[i] != INT_MAX) {
       COUT << "ndr widthx z : " << i << ' ' << _ndrwidthx[i] << '\n';
@@ -1334,7 +1343,7 @@ void Router::updatendr(const bool usendr)
       COUT << "ndr widthy z : " << i << ' ' << _ndrwidthy[i] << '\n';
     }
   }
-#endif
+//#endif
   /*if (_targetshapes.size() == 1) {
     auto it = _targetshapes.begin();
     if (it->second.size() == 1) {
