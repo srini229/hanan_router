@@ -178,6 +178,8 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100
   _spacey.reserve(layers.size());
   _ndrwidthx.reserve(layers.size());
   _ndrwidthy.reserve(layers.size());
+  _ndrspacex.reserve(layers.size());
+  _ndrspacey.reserve(layers.size());
   for (unsigned i = 0; i < layers.size(); ++i) {
     if (layers[i]->isMetal()) {
       auto mlayer = static_cast<DRC::MetalLayer*>(layers[i]);
@@ -264,14 +266,14 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       if (adj != z) {
         auto wx = widthx(adj), wy = widthy(adj);
         if (vert) {
-          int space = _spacey[adj] + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1));
+          int space = spacey(adj) + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1));
           int yn = r.ymax() - ((r.ymax() - y) % space);
           while (yn > r.ymin()) {
             points.insert(std::make_pair(Geom::Point(x,yn), widthy(z)));
             yn -= space;
           }
         } else {
-          int space = _spacex[adj] + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1));
+          int space = spacex(adj) + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1));
           int xn = r.xmax() - ((r.xmax() - x) % space);
           while (xn > r.xmin()) {
             points.insert(std::make_pair(Geom::Point(xn,y), widthx(z)));
@@ -289,7 +291,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
 #endif
       if (width <= r.height()) {
         int y = (r.ymin() + width / 2);
-        int space = _spacex[z] + ((width % 2 == 0) ? width/2 : (width/2 + 1));
+        int space = spacex(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1));
         for (auto right : {true, false}) {
           int x = (right ? r.xmax() : r.xmin());
           int yn = y;
@@ -308,7 +310,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
 #endif
       if (width <= r.width()) {
         int x = (r.xmin() + width / 2);
-        int space = _spacey[z] + ((width % 2 == 0) ? width/2 : (width/2 + 1));
+        int space = spacey(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1));
         for (auto top : {true, false}) {
           int y = (top ? r.ymax() : r.ymin());
           int xn = x;
@@ -1202,16 +1204,16 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
   for (auto& l : lr) {
     const auto& layer = l.first;
     for (auto& r : l.second) {
-      int spacex{0}, spacey{0};
+      int sx{0}, sy{0};
       if (layer < static_cast<int>(_widthx.size())) {
-        spacex = _spacex[layer] + ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1));
-        spacey = _spacey[layer] + ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1));
+        sx = spacex(layer) + ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1));
+        sy = spacey(layer) + ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1));
       }
 #if DEBUG
-      COUT << "layer : " << layer << " obs : " << spacex << ' ' << spacey << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
+      COUT << "layer : " << layer << " obs : " << sx << ' ' << sy << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
 #endif
-      auto obs = r.bloatby(spacex, spacey);
-      int x1 = spacex, x2 = spacex, y1 = spacey, y2 = spacey;
+      auto obs = r.bloatby(sx, sy);
+      int x1 = sx, x2 = sx, y1 = sy, y2 = sy;
       for (auto src : {true, false}) {
         const auto it = src ? _sourceshapes.find(l.first) : _targetshapes.find(l.first);
         const auto itend = src ? _sourceshapes.end() : _targetshapes.end();
@@ -1283,12 +1285,23 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
   }
 }
 
-void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths)
+void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, const std::map<int, int>& ndrspaces)
 {
   _ndrwidthx.clear(); _ndrwidthy.clear();
+  _ndrspacex.clear(); _ndrspacey.clear();
   _ndrwidthx.resize(_widthx.size(), INT_MAX);
   _ndrwidthy.resize(_widthy.size(), INT_MAX);
+  _ndrspacex.resize(_spacex.size(), INT_MAX);
+  _ndrspacey.resize(_spacey.size(), INT_MAX);
   if (usendr) {
+    if (!ndrspaces.empty()) {
+      _ndrspacex = _spacex;
+      _ndrspacey = _spacey;
+      for (auto& it : ndrspaces) {
+        _ndrspacex[it.first] = std::max(_ndrspacex[it.first], it.second);
+        _ndrspacey[it.first] = std::max(_ndrspacey[it.first], it.second);
+      }
+    }
     if (!ndrwidths.empty()) {
       _ndrwidthx = _widthx;
       _ndrwidthy = _widthy;

@@ -1,6 +1,6 @@
 [
   {
     "module": "test_0",
-    "nets": [{"name": "X", "widths": {"M1": 34, "M2": 36}}]
+    "nets": [{"name": "X", "widths": {"M1": 34, "M2": 36}, "spaces": {"M1":31, "M2":31}}]
   }
 ]

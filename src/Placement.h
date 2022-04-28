@@ -45,7 +45,7 @@ class Net {
     Geom::Rect _bbox;
     int _unroute : 1;
     PinPairs reorderPins() const;
-    std::map<int, int> _ndrwidths;
+    std::map<int, int> _ndrwidths, _ndrspaces;
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1} {}
     const std::set<const Pin*>& pins() const { return _pins; }
@@ -67,7 +67,8 @@ class Net {
       }
     }
     int halfpm() const { return _bbox.halfpm(); }
-    void addNDR(const int layer, const int width) { _ndrwidths[layer] = width; }
+    void addNDRWidth(const int layer, const int width) { _ndrwidths[layer] = width; }
+    void addNDRSpace(const int layer, const int space) { _ndrspaces[layer] = space; }
 };
 typedef std::map<std::string, Net> Nets;
 typedef std::vector<Net*> NetsVec;
@@ -181,11 +182,12 @@ class Module {
         n.second.update();
       }
     }
-    void addNDR(const std::string& net, const int layer, const int width)
+    void addNDR(const std::string& net, const int layer, const int ws, const bool w)
     {
       auto it = _nets.find(net);
       if (it != _nets.end()) {
-        it->second.addNDR(layer, width);
+        if (w) it->second.addNDRWidth(layer, ws);
+        else it->second.addNDRSpace(layer, ws);
       }
     }
 

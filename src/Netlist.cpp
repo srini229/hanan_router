@@ -265,14 +265,14 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
         if (modit != _modules.end() && it != m.end()) {
           for (auto& netiter : *it) {
             auto itnetname = netiter.find("name");
-            COUT<< "net xx : " << *itnetname << std::endl;
-            auto itwidths = netiter.find("widths");
-            if (itnetname != netiter.end() && itwidths != netiter.end()) {
-              for (auto& el : (*itwidths).items()) {
-                auto layer = lf.getLayerIndex(el.key());
-                COUT << "layer : " << layer << " w : " << el.value() << std::endl;
-                if (layer >= 0) {
-                  modit->second->addNDR(*itnetname, layer, el.value());
+            for (auto width : {true, false}) {
+              auto itws = netiter.find(width ? "widths" : "spaces");
+              if (itnetname != netiter.end() && itws != netiter.end()) {
+                for (auto& el : (*itws).items()) {
+                  auto layer = lf.getLayerIndex(el.key());
+                  if (layer >= 0) {
+                    modit->second->addNDR(*itnetname, layer, el.value(), width);
+                  }
                 }
               }
             }

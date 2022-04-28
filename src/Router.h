@@ -214,8 +214,8 @@ class Router {
     std::vector<std::map<int, IntRangeSet>> _hanangridh, _hanangridv;
     Geom::Rect _bbox;
     const Node *_sol;
-    std::vector<int> _widthx, _ndrwidthx, _spacex;
-    std::vector<int> _widthy, _ndrwidthy, _spacey;
+    std::vector<int> _widthx, _ndrwidthx, _spacex, _ndrspacex;
+    std::vector<int> _widthy, _ndrwidthy, _spacey, _ndrspacey;
     int _minLayer, _maxLayer, _maxRoutingLayer;
     Vias _vias;
     std::vector<Vias> _upVias, _dnVias;
@@ -313,6 +313,8 @@ class Router {
 
     int widthx(const int z) const { return (_ndrwidthx[z] != INT_MAX ? std::max(_ndrwidthx[z], _widthx[z]) : _widthx[z]); }
     int widthy(const int z) const { return (_ndrwidthy[z] != INT_MAX ? std::max(_ndrwidthy[z], _widthy[z]) : _widthy[z]); }
+    int spacex(const int z) const { return (_ndrspacex[z] != INT_MAX ? std::max(_ndrspacex[z], _spacex[z]) : _spacex[z]); }
+    int spacey(const int z) const { return (_ndrspacey[z] != INT_MAX ? std::max(_ndrspacey[z], _spacey[z]) : _spacey[z]); }
 
     void clearSourceTargets() {
       _sources.clear();
@@ -345,7 +347,7 @@ class Router {
     void addSource(const Geom::Rect& r, const int z) { addSourceTarget(r, z, true); }
     void addTarget(const Geom::Rect& r, const int z) { addSourceTarget(r, z, false); }
     const Via* isViaValid(const Node* n, const bool up) const;
-    void updatendr(const bool usendr, const std::map<int, int>& ndrwidths);
+    void updatendr(const bool usendr, const std::map<int, int>& ndrwidths, const std::map<int, int>& ndrspaces);
     void setModName(const std::string& n) { _modname = n; }
     void setNetName(const std::string& n) { _netname = n; }
     void setuu(const int uu) { _uu = uu; }
