@@ -81,7 +81,6 @@ class Instance {
     Geom::Transform _tr;
     const Module* _m;
     Pins _pins;
-    Geom::LayerRects _routeshapes;
     Router::Vias _vias;
     void build(const bool rebuild = false);
     Geom::Rect _bbox;
@@ -98,7 +97,6 @@ class Instance {
     void print(const std::string& prefix = "") const;
     const Geom::Rect& bbox() const { return _bbox; }
     const Pins& pins() const { return _pins; }
-    const Geom::LayerRects& routeShapes() const { return _routeshapes; }
 };
 
 
@@ -113,7 +111,7 @@ class Module {
     Instances _instances;
     Router::Vias _vias;
     std::map<const Net*, std::vector<std::pair<Instance*, std::string>>> _tmpnetpins;
-    Geom::LayerRects _obstacles;
+    Geom::LayerRects _obstacles, _internalroutes;
     Geom::Rect _bbox;
     const int _uu;
 
@@ -131,6 +129,7 @@ class Module {
     const Instances& instances() const { return _instances; }
     Instances& instances() { return _instances; }
     const Geom::LayerRects& obstacles() const { return _obstacles; }
+    const Geom::LayerRects& internalroutes() const { return _internalroutes; }
     bool isLeaf() const { return _leaf ? true : false; }
     const Nets& nets() const { return _nets; }
     const Pins& pins() const { return _pins; }

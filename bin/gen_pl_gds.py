@@ -18,7 +18,7 @@ print(f"gds dir           : {args.gds_dir}")
 print(f"top cell          : {args.top_cell}")
 print(f"units             : {args.units}")
 
-if args.pl_file == "" or args.gds_dir == "" or args.layers == "":
+if args.pl_file == "" or args.gds_dir == "":
     ap.print_help()
     exit()
 

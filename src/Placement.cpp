@@ -174,7 +174,9 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       } else {
         _unroute = 1;
       }
+      std::cout << "Adding routes to " << pin1->name() << ' ' << sol.size() << std::endl;
       Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin1->shapes()), sol, &_bbox);
+      std::cout << "Adding routes to " << pin2->name() << ' ' << sol.size() << std::endl;
       Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin2->shapes()), sol, &_bbox);
       router.clearObstacles(true);
     }
@@ -217,6 +219,12 @@ void Module::print() const
       std::cout << "\t\t" << r.str() << '\n';
     }
   }
+  for (const auto& l : _internalroutes) {
+    COUT << "\tinternal routes : layer : " << l.first;
+    for (const auto& r : l.second) {
+      std::cout << "\t\t" << r.str() << '\n';
+    }
+  }
 }
 
 void Module::build()
@@ -253,6 +261,12 @@ void Module::route(Router::Router& router)
           _obstacles[l.first].push_back(inst->transform(r));
         }
       }
+      for (const auto& l : m->internalroutes()) {
+        for (const auto& r : l.second) {
+          _obstacles[l.first].push_back(inst->transform(r));
+          _internalroutes[l.first].push_back(inst->transform(r));
+        }
+      }
     }
     updateNets();
     NetsVec nets;
@@ -279,17 +293,25 @@ void Module::route(Router::Router& router)
       Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());
     }
     router.clearObstacles();
+    std::set<std::string> _addednets;
     for (auto& p : _pins) {
       auto itn = _nets.find(p.first);
       std::cout << "DEBUG pin name " << p.first << '\n';
       if (itn != _nets.end()) {
+        _addednets.insert(itn->first);
         std::cout << "DEBUG found net : " << itn->second.name() << ' ' << itn->second.routeShapes().size() << '\n';
         p.second->copyRects(itn->second.routeShapes());
       }
     }
+    writeDEF();
+    for (auto& n : _nets) {
+      if (_addednets.find(n.first) == _addednets.end()) {
+        std::cout << "unadded net : " << n.first << '\n';
+        Geom::MergeLayerRects(_internalroutes, n.second.routeShapes());
+      }
+    }
   }
   if (!_leaf) {
-    writeDEF();
     writeLEF();
   }
   _routed = 1;
@@ -480,6 +502,19 @@ void Module::writeDEF(const std::string& nstr, const std::string& netname) const
       }
       ofs << "END NETS\n\n";
     }
+    if (!_internalroutes.empty()) {
+      ofs << "FILLS " << _internalroutes.size() << " ;\n ";
+      for (auto& l : _internalroutes) {
+        ofs << "  - LAYER " << LAYER_NAMES[l.first] << "\n";
+        for (unsigned i = 0; i < l.second.size(); ++i) {
+          auto& r = l.second[i];
+          ofs << "    RECT ( " << r.xmin() << ' ' << r.ymin() << " ) ( " << r.xmax() << ' ' << r.ymax() << " )";
+          if (i == l.second.size() - 1) ofs << " ;\n";
+          else ofs << "\n";
+        }
+      }
+      ofs << "END FILLS\n\n";
+    }
     ofs << "END DESIGN\n";
   }
 }
@@ -510,9 +545,15 @@ void Module::writeLEF() const
         ofs << "  END " << p.first << '\n';
       }
     }
-    if (!_obstacles.empty()) {
+    if (!_obstacles.empty() || !_internalroutes.empty()) {
       ofs << "    OBS\n";
       for (auto& l : _obstacles) {
+        ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+        for (auto& r : l.second) {
+          ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+        }
+      }
+      for (auto& l : _internalroutes) {
         ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
         for (auto& r : l.second) {
           ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";

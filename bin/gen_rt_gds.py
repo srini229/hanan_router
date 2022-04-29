@@ -151,7 +151,9 @@ for j,m in modules.items():
 if args.deff:
     with open(args.deff) as fp:
         innets = False
+        infills = False
         sca = args.scale
+        layeridx = None
         for line in fp:
             line.strip()
             if "UNITS" in line:
@@ -164,6 +166,30 @@ if args.deff:
                     innets = False
                 else:
                     innets = True
+            if "FILLS" in line:
+                if "END" in line:
+                    infills = False
+                else:
+                    infills = True
+                    print("in fills")
+            if infills:
+                if "LAYER" in line:
+                    s = line.split()
+                    if len(s) > 1:
+                        if s[1] == "LAYER":
+                            layeridx = layers[s[2]]
+                            print("layeridx", layeridx)
+                if "RECT" in line and layeridx:
+                    s = line.split()
+                    print("layer ", s)
+                    if len(s) > 8:
+                        if s[0] == "RECT":
+                            index = 0
+                        rect = [float(s[index + 2])/sca, float(s[index + 3])/sca, float(s[index + 6])/sca, float(s[index + 7])/sca]
+                        l = layeridx
+                        print("fill shape : ", rect)
+                        if args.top_cell in modules:
+                            modules[args.top_cell]._cell.add(gdspy.Rectangle((rect[0], rect[1]), (rect[2], rect[3]), layer=l[0], datatype=l[1]))
             if innets and "RECT" in line:
                 s = line.split()
                 if len(s) > 10:
