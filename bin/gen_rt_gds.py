@@ -144,7 +144,6 @@ if args.layers:
 
         
 for j,m in modules.items():
-    print(j)
     m.add()
     gdslib.add(m._cell)
 
@@ -171,17 +170,14 @@ if args.deff:
                     infills = False
                 else:
                     infills = True
-                    print("in fills")
             if infills:
                 if "LAYER" in line:
                     s = line.split()
                     if len(s) > 1:
                         if s[1] == "LAYER":
                             layeridx = layers[s[2]]
-                            print("layeridx", layeridx)
                 if "RECT" in line and layeridx:
                     s = line.split()
-                    print("layer ", s)
                     if len(s) > 8:
                         if s[0] == "RECT":
                             index = 0
