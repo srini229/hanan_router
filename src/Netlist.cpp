@@ -161,6 +161,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
       inMacro = true;
       continue;
     }
+    if (line.find("FOREIGN ") != npos) continue;
     if (line.find("END") != npos) {
       if (inUnits) {
         if (line.find("UNITS") != npos) {
