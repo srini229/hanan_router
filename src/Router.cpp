@@ -1370,7 +1370,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
         _ndrwidthy[it.first] = std::max(_ndrwidthy[it.first], it.second);
       }
     } else {
-      /*if (_sourceshapes.size() == 1) {
+      if (_sourceshapes.size() == 1) {
         auto itsrc = _sourceshapes.begin();
         auto ittgt = _targetshapes.find(itsrc->first);
 
@@ -1404,7 +1404,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
             _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
           }
         }
-      }*/
+      }
     }
   }
 //#if DEBUG
