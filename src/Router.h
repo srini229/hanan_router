@@ -26,6 +26,7 @@ class Via {
   public:
     Via(const int l, const int u, const int c, const Geom::Point& ctr = Geom::Point(0, 0)) : _l{l}, _u{u}, _c{c}, _center{ctr}, _lb{}, _ub{}, _cut{}, _bbox{} {}
     Via(const Via& via, const Geom::Point& p = Geom::Point(0, 0));
+    const Geom::Rect& bbox() const { return _bbox; }
     void setLB(const Geom::Rect& r) { _lb = r; _bbox.merge(_lb); }
     void setUB(const Geom::Rect& r) { _ub = r; _bbox.merge(_ub); }
     const Geom::Rects& cuts() const { return _cuts; }

@@ -987,8 +987,8 @@ Geom::LayerRects Router::findSol()
                 break;
               }
             }
-            auto hwx = (n->hwx() == 0 ? widthy(n->z())/2 : n->hwx());
-            auto hwy = (n->hwy() == 0 ? widthx(n->z())/2 : n->hwy());
+            auto hwx = (n->hwx() == 0 ? widthx(n->z())/2 : n->hwx());
+            auto hwy = (n->hwy() == 0 ? widthy(n->z())/2 : n->hwy());
             auto extnx1 = hwx;
             auto extnx2 = hwx;
             auto extny1 = hwy;
@@ -1058,13 +1058,24 @@ Geom::LayerRects Router::findSol()
             } else if (parent->z() > n->z() && n->upVia()) {
               n->upVia()->addShapes(sol);
             } else {
-              auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
+              if (parent->z() < n->z()) {
+                if (!_dnVias[n->z()].empty()) {
+                  Via v(*(_dnVias[n->z()][0]), Geom::Point(n->x(), n->y()));
+                  v.addShapes(sol);
+                }
+              } else if (parent->z() > n->z()) {
+                if (!_upVias[n->z()].empty()) {
+                  Via v(*(_upVias[n->z()][0]), Geom::Point(n->x(), n->y()));
+                  v.addShapes(sol);
+                }
+              }
+/*              auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
               if (adjLayer >= 0) {
                 sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer]/2, _widthy[adjLayer]/2));
 #if DEBUG
                 COUT << "sol : " << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
 #endif
-              }
+              }*/
             }
           }
         }
@@ -1310,7 +1321,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
         _ndrwidthy[it.first] = std::max(_ndrwidthy[it.first], it.second);
       }
     } else {
-      if (_sourceshapes.size() == 1) {
+      /*if (_sourceshapes.size() == 1) {
         auto itsrc = _sourceshapes.begin();
         auto ittgt = _targetshapes.find(itsrc->first);
 
@@ -1344,7 +1355,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
             _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
           }
         }
-      }
+      }*/
     }
   }
 //#if DEBUG
@@ -1500,12 +1511,6 @@ void Router::constructVias()
         } else {
           for (auto& va : vas) {
             auto via = std::make_shared<Via>(lp.first->index(), lp.second->index(), v->index());
-            auto lx = vl->widthx() + 2 * vl->coverlx();
-            auto ly = vl->widthy() + 2 * vl->coverly();
-            auto ux = vl->widthx() + 2 * vl->coverux();
-            auto uy = vl->widthy() + 2 * vl->coveruy();
-            via->setLB(Geom::Rect(-lx/2, -ly/2, lx/2, ly/2));
-            via->setUB(Geom::Rect(-ux/2, -uy/2, ux/2, uy/2));
             const auto& wx = va._sw._width.first;
             const auto& wy = va._sw._width.second;
             const auto& sx = va._sw._space.first;
@@ -1518,6 +1523,13 @@ void Router::constructVias()
               c.y() = -((va._ny - 1) * (wy + sy) + wy)/2;
             }
             via->addCuts(c, wx, wy, va._nx, va._ny, sx, sy);
+            Geom::Rect cbbox = via->bbox();
+            auto lx = cbbox.width() + 2 * vl->coverlx();
+            auto ly = cbbox.height() + 2 * vl->coverly();
+            auto ux = cbbox.width() + 2 * vl->coverux();
+            auto uy = cbbox.height() + 2 * vl->coveruy();
+            via->setLB(Geom::Rect(-lx/2, -ly/2, lx/2, ly/2));
+            via->setUB(Geom::Rect(-ux/2, -uy/2, ux/2, uy/2));
             _vias.push_back(via);
             _upVias[lp.first->index()].push_back(via);
             _dnVias[lp.second->index()].push_back(via);
