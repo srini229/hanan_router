@@ -146,12 +146,12 @@ class Rect {
     bool overlaps (const Geom::Rect& r, const bool strict = false) const 
     {
       if (strict) {
-        if (xmin() <= r.xmax() && xmax() >= r.xmin()
-            && ymin() <= r.ymax() && ymax() >= r.ymin())
-          return true;
-      } else {
         if (xmin() < r.xmax() && xmax() > r.xmin()
             && ymin() < r.ymax() && ymax() > r.ymin())
+          return true;
+      } else {
+        if (xmin() <= r.xmax() && xmax() >= r.xmin()
+            && ymin() <= r.ymax() && ymax() >= r.ymin())
           return true;
       }
       return false;

@@ -43,6 +43,7 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
           MetalLayer* mlayer(nullptr);
           if (it != l.end() && it->is_number_integer()) {
             mlayer = new MetalLayer(gdsNo, name, mur, lr, ur);
+            COUT << "layer resistance : " << name << ' ' << mur << ' ' << lr << ' ' << ur << std::endl;
             mlayer->setPitch(static_cast<int>(*it));
           }
           if (mlayer != nullptr) {

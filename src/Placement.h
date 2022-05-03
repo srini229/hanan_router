@@ -21,17 +21,14 @@ class Pin {
   public:
     Pin(const std::string& name = "") : _name{name}, _bbox{} {}
     const std::string& name() const { return _name; }
-    void addRect(const int layer, const Geom::Rect& r)
-    {
-      _shapes[layer].push_back(r);
-      _bbox.merge(r);
-    }
+    void addRect(const int layer, const Geom::Rect& r);
     const Geom::LayerRects& shapes() const { return _shapes; }
     const Geom::Rect& bbox() const { return _bbox; }
     void copyRects(const Geom::LayerRects& lr)
     {
       Geom::MergeLayerRects(_shapes, lr, &_bbox);
     }
+    void print() const;
 };
 typedef std::map<std::string, Pin*> Pins;
 typedef std::vector<const Pin*> PinCVec;

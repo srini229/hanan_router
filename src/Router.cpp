@@ -987,8 +987,8 @@ Geom::LayerRects Router::findSol()
                 break;
               }
             }
-            auto hwx = (n->hwx() == 0 ? widthx(n->z())/2 : n->hwx());
-            auto hwy = (n->hwy() == 0 ? widthy(n->z())/2 : n->hwy());
+            auto hwx = (n->hwx() == 0 ? widthy(n->z())/2 : n->hwx());
+            auto hwy = (n->hwy() == 0 ? widthx(n->z())/2 : n->hwy());
             auto extnx1 = hwx;
             auto extnx2 = hwx;
             auto extny1 = hwy;
@@ -1206,8 +1206,8 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
     for (auto& r : l.second) {
       int sx{0}, sy{0};
       if (layer < static_cast<int>(_widthx.size())) {
-        sx = spacex(layer) + ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1));
-        sy = spacey(layer) + ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1));
+        sx = spacex(layer) + ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1));
+        sy = spacey(layer) + ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1));
       }
 #if DEBUG
       COUT << "layer : " << layer << " obs : " << sx << ' ' << sy << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
@@ -1395,7 +1395,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
           if (it != _tobstacles.end()) {
             for (auto& o : it->second) {
               for (auto& c : via->cuts()) {
-                if (o.overlaps(c, true)) {
+                if (o.overlaps(c, false)) {
                   delete via;
                   via = nullptr;
                   break;
@@ -1410,9 +1410,9 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
               it = _tobstacles.find(l);
               if (it != _tobstacles.end()) {
                 Geom::Rect p = (lower ? via->lpad() : via->upad());
-                p.bloat(-std::min(widthx(l), p.width())/2, -std::min(widthy(l), p.height())/2);
+                p.bloat(-std::min(widthy(l), p.width())/2, -std::min(widthx(l), p.height())/2);
                 for (auto& o : it->second) {
-                  if (o.overlaps(p, false)) {
+                  if (o.overlaps(p, true)) {
                     //COUT << "obs viapad up : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;
                     via = nullptr;
@@ -1437,7 +1437,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
           if (it != _tobstacles.end()) {
             for (auto& o : it->second) {
               for (auto& c : via->cuts()) {
-                if (o.overlaps(c, true)) {
+                if (o.overlaps(c, false)) {
                   delete via;
                   via = nullptr;
                   break;
@@ -1452,9 +1452,9 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
               it = _tobstacles.find(l);
               if (it != _tobstacles.end()) {
                 Geom::Rect p = (lower ? via->lpad() : via->upad());
-                p.bloat(-std::min(widthx(l), p.width())/2, -std::min(widthy(l), p.height())/2);
+                p.bloat(-std::min(widthy(l), p.width())/2, -std::min(widthx(l), p.height())/2);
                 for (auto& o : it->second) {
-                  if (o.overlaps(p, false)) {
+                  if (o.overlaps(p, true)) {
                     //COUT << "obs viapad down : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;
                     via = nullptr;

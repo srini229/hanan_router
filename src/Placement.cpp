@@ -5,6 +5,50 @@
 
 namespace Placement {
 
+void Pin::print() const
+{
+  std::cout << "pin : " << _name << '\n';
+  for (const auto& l : _shapes) {
+    std::cout << "\tlayer : " << l.first << '\n';
+    for (const auto& r : l.second) {
+      std::cout << "\t\t" << r.str() << '\n';
+    }
+  }
+}
+
+void Pin::addRect(const int layer, const Geom::Rect& r)
+{
+  auto it = _shapes.find(layer);
+  if (it != _shapes.end()) {
+    bool pushed{false};
+    for (auto& s : it->second) {
+      if (r.contains(s)) {
+        pushed = true;
+        s = r;
+        break;
+      }
+      if (s.contains(r)) {
+        pushed = true;
+        break;
+      }
+      if (r.overlaps(s)) {
+        if (r.xmin() == s.xmin() && r.xmax() == s.xmax()) {
+          s.ymin() = std::min(s.ymin(), r.ymin());
+          s.ymax() = std::max(s.ymax(), r.ymax());
+          pushed = true;
+        } else if (r.ymin() == s.ymin() && r.ymax() == s.ymax()) {
+          s.xmin() = std::min(s.xmin(), r.xmin());
+          s.xmax() = std::max(s.xmax(), r.xmax());
+          pushed = true;
+        }
+      }
+    }
+    if (!pushed) it->second.push_back(r);
+  } else {
+    _shapes[layer].push_back(r);
+  }
+  _bbox.merge(r);
+}
 
 auto DBLMAX = std::numeric_limits<double>::max();
 inline void Net::print() const
@@ -174,10 +218,14 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       } else {
         _unroute = 1;
       }
+      //pin1->print();
       std::cout << "Adding routes to " << pin1->name() << ' ' << sol.size() << std::endl;
       Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin1->shapes()), sol, &_bbox);
+      //pin1->print();
+      //pin2->print();
       std::cout << "Adding routes to " << pin2->name() << ' ' << sol.size() << std::endl;
       Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin2->shapes()), sol, &_bbox);
+      //pin2->print();
       router.clearObstacles(true);
     }
   }

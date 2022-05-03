@@ -29,7 +29,40 @@ double Dist(const Geom::Rect& r1, const Geom::Rect& r2, const bool manh)
 void MergeLayerRects(Geom::LayerRects& l1, const Geom::LayerRects& l2, Geom::Rect* b)
 {
   for (auto& l : l2) {
-    l1[l.first].insert(l1[l.first].end(), l.second.begin(), l.second.end());
+    auto it = l1.find(l.first);
+    if (it != l1.end()) {
+      Rects cprects;
+      for (const auto& s : l.second) {
+        bool pushed{false};
+        for (auto& t : it->second) {
+          if (t.contains(s)) {
+            pushed = true;
+            continue;
+          }
+          if (s.contains(t)) {
+            t = s;
+            pushed = true;
+            break;
+          }
+          if (t.overlaps(s)) {
+            if (t.xmin() == s.xmin() && t.xmax() == s.xmax()) {
+              t.ymin() = std::min(t.ymin(), s.ymin());
+              t.ymax() = std::max(t.ymax(), s.ymax());
+              pushed = true;
+              break;
+            } else if (t.ymin() == s.ymin() && t.ymax() == s.ymax()) {
+              t.xmin() = std::min(t.xmin(), s.xmin());
+              t.xmax() = std::max(t.xmax(), s.xmax());
+              pushed = true;
+              break;
+            }
+          }
+        }
+        if (!pushed) it->second.push_back(s);
+      }
+    } else {
+      l1[l.first].insert(l1[l.first].end(), l.second.begin(), l.second.end());
+    }
   }
   if (b != nullptr) {
     for (const auto& l : l2) {
