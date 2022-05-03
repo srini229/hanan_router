@@ -168,6 +168,26 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   return dc;
 }
 
+void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir)
+{
+  _savedLayerHCost = _layerHCost;
+  _savedLayerVCost = _layerVCost;
+  for (auto& it : ndrdir) {
+    auto mincost{std::min(_layerHCost[it.first], _layerVCost[it.first])};
+    auto maxcost{std::max(_layerHCost[it.first], _layerVCost[it.first])};
+    if (it.second == DRC::Direction::ORTHOGONAL) {
+      _layerVCost[it.first] = mincost;
+      _layerHCost[it.first] = mincost;
+    } else if (it.second == DRC::Direction::VERTICAL) {
+      _layerVCost[it.first] = mincost;
+      _layerHCost[it.first] = maxcost;
+    } else if (it.second == DRC::Direction::HORIZONTAL) {
+      _layerVCost[it.first] = maxcost;
+      _layerHCost[it.first] = mincost;
+    }
+    COUT << "ndr dir : " << it.first << ' ' << _layerVCost[it.first] << ' ' << _layerHCost[it.first] << '\n';
+  }
+}
 
 Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}, _maxRoutingLayer{0}, _name{}, _lf{lf}
 {
@@ -187,7 +207,7 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100
       _widthy.push_back(mlayer->width());
       _spacex.push_back(mlayer->space());
       _spacey.push_back(mlayer->space());
-      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << " v : " << isVert(i) << " h : " << isHor(i) << '\n';
+      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << " v : " << _cf.isVert(i) << " h : " << _cf.isHor(i) << '\n';
     }
   }
   _aboveViaLayer.resize(_widthx.size(), -1);
@@ -249,8 +269,8 @@ Node* Router::createNode(const int x, const int y, const int z,
 
 Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, const Direction dir) const
 {
-  auto vert = isVert(z);
-  auto hor = isHor(z);
+  auto vert = _cf.isVert(z);
+  auto hor = _cf.isHor(z);
   auto x = r.xcenter(), y = r.ycenter(); 
   Geom::PointWidthSet points;
 
@@ -588,7 +608,7 @@ void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, 
 {
   int adjLayer = (above ? (n->z() < _maxLayer ? n->z() + 1 : -1) : (n->z() > _minLayer ? n->z() - 1 : -1));
   if (adjLayer >= 0) {
-    auto vert = isVert(n->z());
+    auto vert = _cf.isVert(n->z());
     const auto& grid = (vert ? _hanangridh[adjLayer] : _hanangridv[adjLayer]);
     if (!grid.empty()) {
       auto coord = (vert ? n->y() : n->x());
@@ -624,8 +644,8 @@ void Router::expandNode(const Node* n1)
     checkAndInsert(newn, n);
   }
 
-  const bool horiz = isHor(n->z());
-  const bool vert = isVert(n->z());
+  const bool horiz = _cf.isHor(n->z());
+  const bool vert = _cf.isVert(n->z());
   if (horiz) {
     if (n->x() < _bbox.xmin()) {
       n->expand(EAST, false);
@@ -834,7 +854,7 @@ void Router::generateHananGrid()
   for (auto& l : _tobstacles) {
     if (l.first > _maxLayer) continue;
     for (auto i : {0, 1}) {
-      if ((i == 0 && !isVert(l.first)) || (i == 1 && !isHor(l.first))) continue;
+      if ((i == 0 && !_cf.isVert(l.first)) || (i == 1 && !_cf.isHor(l.first))) continue;
       std::map<int, IntRangeSet> tmpranges;
       for (auto& x : ((i == 0) ? xcoords : ycoords)) {
         if ((i == 0 && x >= _bbox.xmin() && x <= _bbox.xmax()) || 
@@ -987,8 +1007,8 @@ Geom::LayerRects Router::findSol()
                 break;
               }
             }
-            auto hwx = (n->hwx() == 0 ? widthy(n->z())/2 : n->hwx());
-            auto hwy = (n->hwy() == 0 ? widthx(n->z())/2 : n->hwy());
+            auto hwx = (n->hwx() == 0 ? widthx(n->z())/2 : n->hwx());
+            auto hwy = (n->hwy() == 0 ? widthy(n->z())/2 : n->hwy());
             auto extnx1 = hwx;
             auto extnx2 = hwx;
             auto extny1 = hwy;
@@ -997,54 +1017,68 @@ Geom::LayerRects Router::findSol()
               extnx1 = hwy;
               extnx2 = hwy;
               if (isTarget(n)) extny2 = 0;
-              if (isSource(parent)) extny1 = 0;
-              auto it = _endextnymax.find(n);
-              if (it != _endextnymax.end()) {
-                extny2 = it->second;
+              else {
+                auto it = _endextnymax.find(n);
+                if (it != _endextnymax.end()) {
+                  extny2 = it->second;
+                }
               }
-              it = _endextnymin.find(parent);
-              if (it != _endextnymin.end()) {
-                extny1 = it->second;
+              if (isSource(parent)) extny1 = 0;
+              else {auto it = _endextnymin.find(parent);
+                if (it != _endextnymin.end()) {
+                  extny1 = it->second;
+                }
               }
             } else if (n->y() < parent->y()) {
               extnx1 = hwy;
               extnx2 = hwy;
-              if (isTarget(n)) extny1 = 0;
               if (isSource(parent)) extny2 = 0;
-              auto it = _endextnymax.find(n);
-              if (it != _endextnymax.end()) {
-                extny2 = it->second;
+              else {
+                auto it = _endextnymax.find(n);
+                if (it != _endextnymax.end()) {
+                  extny2 = it->second;
+                }
               }
-              it = _endextnymin.find(parent);
-              if (it != _endextnymin.end()) {
-                extny1 = it->second;
+              if (isTarget(n)) extny1 = 0;
+              else {
+                auto it = _endextnymin.find(parent);
+                if (it != _endextnymin.end()) {
+                  extny1 = it->second;
+                }
               }
             }
             if (n->x() > parent->x()) {
               extny1 = hwx;
               extny2 = hwx;
               if (isTarget(n)) extnx2 = 0;
-              if (isSource(parent)) extnx1 = 0;
-              auto it = _endextnxmax.find(n);
-              if (it != _endextnxmax.end()) {
-                extnx2 = it->second;
+              else {auto it = _endextnxmax.find(n);
+                if (it != _endextnxmax.end()) {
+                  extnx2 = it->second;
+                }
               }
-              it = _endextnxmin.find(parent);
-              if (it != _endextnxmin.end()) {
-                extnx1 = it->second;
+              if (isSource(parent)) extnx1 = 0;
+              else {
+                auto it = _endextnxmin.find(parent);
+                if (it != _endextnxmin.end()) {
+                  extnx1 = it->second;
+                }
               }
             } else if (n->x() < parent->x()) {
               extny1 = hwx;
               extny2 = hwx;
-              if (isTarget(n)) extnx1 = 0;
               if (isSource(parent)) extnx2 = 0;
-              auto it = _endextnxmax.find(parent);
-              if (it != _endextnxmax.end()) {
-                extnx2 = it->second;
+              else {
+                auto it = _endextnxmax.find(parent);
+                if (it != _endextnxmax.end()) {
+                  extnx2 = it->second;
+                }
               }
-              it = _endextnxmin.find(n);
-              if (it!= _endextnxmin.end()) {
-                extnx1 = it->second;
+              if (isTarget(n)) extnx1 = 0;
+              else {
+                auto it = _endextnxmin.find(n);
+                if (it!= _endextnxmin.end()) {
+                  extnx1 = it->second;
+                }
               }
             }
             sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
@@ -1220,7 +1254,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         const auto& nodes = src ? _sources : _targets;
         if (it != itend) {
           for (const auto& s : it->second) {
-            if (isVert(l.first)) {
+            if (_cf.isVert(l.first)) {
 #if DEBUG
               COUT << "source/target shape : " << s.str() << '\n';
               COUT << "obs : " << obs.str() << '\n';
@@ -1248,7 +1282,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
                 }
               }
             }
-            if (isHor(l.first)) {
+            if (_cf.isHor(l.first)) {
               if (obs.xmin() <= s.xmin() && obs.xmax() >= s.xmax() &&
                   obs.ymin() <= s.ymax() && obs.ymax() >= s.ymin() ) {
                 if (r.xmin() >= s.xmax()) {
@@ -1285,7 +1319,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
   }
 }
 
-void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, const std::map<int, int>& ndrspaces)
+void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs)
 {
   _ndrwidthx.clear(); _ndrwidthy.clear();
   _ndrspacex.clear(); _ndrspacey.clear();
@@ -1294,6 +1328,8 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
   _ndrspacex.resize(_spacex.size(), INT_MAX);
   _ndrspacey.resize(_spacey.size(), INT_MAX);
   if (usendr) {
+    if (!ndrdirs.empty()) _cf.updatendr(ndrdirs);
+    else _cf.resetdirs();
     if (!ndrspaces.empty()) {
       _ndrspacex = _spacex;
       _ndrspacey = _spacey;
@@ -1318,11 +1354,11 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
             && ittgt->second.size() == 1
             && itsrc->second.size() == 1) {
           auto z = itsrc->first;
-          if (isVert(z)) {
+          if (_cf.isVert(z)) {
             _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
             _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
           }
-          if (isHor(z)) {
+          if (_cf.isHor(z)) {
             _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
             _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
           }
@@ -1335,11 +1371,11 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
             && ittgt->second.size() == 1
             && itsrc->second.size() == 1) {
           auto z = ittgt->first;
-          if (isVert(z)) {
+          if (_cf.isVert(z)) {
             _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
             _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
           }
-          if (isHor(z)) {
+          if (_cf.isHor(z)) {
             _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
             _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
           }
@@ -1361,10 +1397,10 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
     auto it = _targetshapes.begin();
     if (it->second.size() == 1) {
       auto z = it->first;
-      if (isVert(z)) {
+      if (_cf.isVert(z)) {
         _ndrwidthy[z] = std::min(_ndrwidthy[z], it->second.begin()->width());
       }
-      if (isHor(z)) {
+      if (_cf.isHor(z)) {
         _ndrwidthx[z] = std::min(_ndrwidthx[z], it->second.begin()->height());
       }
     }

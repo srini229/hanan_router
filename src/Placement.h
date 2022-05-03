@@ -43,6 +43,7 @@ class Net {
     int _unroute : 1;
     PinPairs reorderPins() const;
     std::map<int, int> _ndrwidths, _ndrspaces;
+    std::map<int, DRC::Direction> _ndrdirs;
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1} {}
     const std::set<const Pin*>& pins() const { return _pins; }
@@ -66,6 +67,12 @@ class Net {
     int halfpm() const { return _bbox.halfpm(); }
     void addNDRWidth(const int layer, const int width) { _ndrwidths[layer] = width; }
     void addNDRSpace(const int layer, const int space) { _ndrspaces[layer] = space; }
+    void addNDRDir(const int layer, const std::string& dir)
+    {
+      if (dir == "O" || dir == "o") _ndrdirs[layer] = DRC::Direction::ORTHOGONAL;
+      else if (dir == "H" || dir == "h") _ndrdirs[layer] = DRC::Direction::HORIZONTAL;
+      else if (dir == "V" || dir == "v") _ndrdirs[layer] = DRC::Direction::VERTICAL;
+    }
 };
 typedef std::map<std::string, Net> Nets;
 typedef std::vector<Net*> NetsVec;
@@ -178,13 +185,20 @@ class Module {
         n.second.update();
       }
     }
-    void addNDR(const std::string& net, const int layer, const int ws, const bool w)
+    void addNDRWidth(const std::string& net, const int layer, const int ws)
     {
       auto it = _nets.find(net);
-      if (it != _nets.end()) {
-        if (w) it->second.addNDRWidth(layer, ws);
-        else it->second.addNDRSpace(layer, ws);
-      }
+      if (it != _nets.end()) it->second.addNDRWidth(layer, ws);
+    }
+    void addNDRSpace(const std::string& net, const int layer, const int ws)
+    {
+      auto it = _nets.find(net);
+      if (it != _nets.end()) it->second.addNDRSpace(layer, ws);
+    }
+    void addNDRDir(const std::string& net, const int layer, const std::string& d)
+    {
+      auto it = _nets.find(net);
+      if (it != _nets.end()) it->second.addNDRDir(layer, d);
     }
 
     void print() const;

@@ -53,10 +53,13 @@ class CostFn {
   private:
     int _topRoutingLayer;
     std::vector<CostType> _layerHCost, _layerVCost;
+    std::vector<CostType> _savedLayerHCost, _savedLayerVCost;
     std::vector<std::vector<CostType>> _layerPairCost;
   public:
     CostType deltaCost(const Node& n1, const Node& n2) const;
     CostFn(const DRC::LayerInfo& lf);
+    bool isVert(const int l) const { return _layerVCost[l] <= _layerHCost[l]; }
+    bool isHor(const int l) const { return _layerHCost[l] <= _layerVCost[l]; }
 
     CostFn(const int numLayers = 0, const int minHLayer = 1, const int minVLayer = 0): _topRoutingLayer(numLayers - 1), _layerHCost(numLayers, 10000), _layerVCost(numLayers, 10000),
     _layerPairCost(numLayers, std::vector<CostType>(numLayers, 10000))
@@ -74,6 +77,11 @@ class CostFn {
       //for (int i = 0; i < numLayers; ++i) {
       //  COUT << "layer : " << i << " cost : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
       //}
+    }
+    void updatendr(const std::map<int, DRC::Direction>& ndrdir);
+    void resetdirs() {
+      if (!_savedLayerHCost.empty()) _layerHCost = _savedLayerHCost;
+      if (!_savedLayerVCost.empty()) _layerVCost = _savedLayerVCost;
     }
 };
 
@@ -258,8 +266,6 @@ class Router {
     void insertRange(IntRangeSet& s, const IntPair& r);
     void expandNode(const Node* n);
     void generateHananGrid();
-    bool isVert(const int l) const { return _lf.isVertical(l); }
-    bool isHor(const int l) const { return _lf.isHorizontal(l); }
     void checkAndInsert(Node* newn, const Node* n);
     int snap(const Node* n, const bool vert, const bool up) const;
     void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);
@@ -347,7 +353,7 @@ class Router {
     void addSource(const Geom::Rect& r, const int z) { addSourceTarget(r, z, true); }
     void addTarget(const Geom::Rect& r, const int z) { addSourceTarget(r, z, false); }
     const Via* isViaValid(const Node* n, const bool up) const;
-    void updatendr(const bool usendr, const std::map<int, int>& ndrwidths, const std::map<int, int>& ndrspaces);
+    void updatendr(const bool usendr, const std::map<int, int>& ndrwidths, const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs);
     void setModName(const std::string& n) { _modname = n; }
     void setNetName(const std::string& n) { _netname = n; }
     void setuu(const int uu) { _uu = uu; }
