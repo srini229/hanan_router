@@ -285,8 +285,18 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
 
       if (adj != z) {
         auto wx = widthx(adj), wy = widthy(adj);
+        Geom::Rect padbox;
+        if (dir == UP && !_upVias[z].empty()) {
+          padbox = _upVias[z][0]->upad();
+        }
+        if (dir == DOWN && !_dnVias[z].empty()) {
+          padbox = _dnVias[z][0]->lpad();
+        }
         if (vert) {
           int space = spacey(adj) + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1));
+          if (padbox.valid()) {
+            space = std::max(space, padbox.width());
+          }
           int yn = r.ymax() - ((r.ymax() - y) % space);
           while (yn > r.ymin()) {
             points.insert(std::make_pair(Geom::Point(x,yn), widthy(z)));
@@ -294,6 +304,9 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }
         } else {
           int space = spacex(adj) + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1));
+          if (padbox.valid()) {
+            space = std::max(space, padbox.height());
+          }
           int xn = r.xmax() - ((r.xmax() - x) % space);
           while (xn > r.xmin()) {
             points.insert(std::make_pair(Geom::Point(xn,y), widthx(z)));
@@ -1092,13 +1105,24 @@ Geom::LayerRects Router::findSol()
             } else if (parent->z() > n->z() && n->upVia()) {
               n->upVia()->addShapes(sol);
             } else {
-              auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
+              if (parent->z() < n->z()) {
+                if (!_dnVias[n->z()].empty()) {
+                  Via v(*(_dnVias[n->z()][0]), Geom::Point(n->x(), n->y()));
+                  v.addShapes(sol);
+                }
+              } else if (parent->z() > n->z()) {
+                if (!_upVias[n->z()].empty()) {
+                  Via v(*(_upVias[n->z()][0]), Geom::Point(n->x(), n->y()));
+                  v.addShapes(sol);
+                }
+              }
+/*              auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
               if (adjLayer >= 0) {
                 sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer]/2, _widthy[adjLayer]/2));
 #if DEBUG
                 COUT << "sol : " << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
 #endif
-              }
+              }*/
             }
           }
         }
@@ -1405,6 +1429,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
       }
     }
   }*/
+  constructVias();
   for (const auto& l : _sourceshapes) {
     for (auto& r : l.second) {
       addSource(r, l.first);
@@ -1536,12 +1561,6 @@ void Router::constructVias()
         } else {
           for (auto& va : vas) {
             auto via = std::make_shared<Via>(lp.first->index(), lp.second->index(), v->index());
-            auto lx = vl->widthx() + 2 * vl->coverlx();
-            auto ly = vl->widthy() + 2 * vl->coverly();
-            auto ux = vl->widthx() + 2 * vl->coverux();
-            auto uy = vl->widthy() + 2 * vl->coveruy();
-            via->setLB(Geom::Rect(-lx/2, -ly/2, lx/2, ly/2));
-            via->setUB(Geom::Rect(-ux/2, -uy/2, ux/2, uy/2));
             const auto& wx = va._sw._width.first;
             const auto& wy = va._sw._width.second;
             const auto& sx = va._sw._space.first;
@@ -1554,6 +1573,13 @@ void Router::constructVias()
               c.y() = -((va._ny - 1) * (wy + sy) + wy)/2;
             }
             via->addCuts(c, wx, wy, va._nx, va._ny, sx, sy);
+            Geom::Rect cbbox = via->bbox();
+            auto lx = cbbox.width() + 2 * vl->coverlx();
+            auto ly = cbbox.height() + 2 * vl->coverly();
+            auto ux = cbbox.width() + 2 * vl->coverux();
+            auto uy = cbbox.height() + 2 * vl->coveruy();
+            via->setLB(Geom::Rect(-lx/2, -ly/2, lx/2, ly/2));
+            via->setUB(Geom::Rect(-ux/2, -uy/2, ux/2, uy/2));
             _vias.push_back(via);
             _upVias[lp.first->index()].push_back(via);
             _dnVias[lp.second->index()].push_back(via);
