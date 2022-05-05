@@ -323,9 +323,8 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       COUT << "we : " << width << '\n';
 #endif
       if (width < r.height()) {
-        int y = (r.ymin() + width / 2);
         int space = spacex(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1));
-        for (auto right : {true, false}) {
+        /* for (auto right : {true, false}) {
           int x = (right ? r.xmax() : r.xmin());
           int yn = y;
           while (yn < r.ymax()) {
@@ -342,6 +341,18 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
             points.insert(std::make_pair(Geom::Point(x,yn), width));
             yn -= space;
           }
+        } */
+        int yn = r.ycenter();
+        while (yn <= (r.ymax() - width/2)) {
+          points.insert(std::make_pair(Geom::Point(r.xmin(),yn), width));
+          points.insert(std::make_pair(Geom::Point(r.xmax(),yn), width));
+          yn += space;
+        }
+        yn = r.ycenter();
+        while (yn >= (r.ymin() + width/2)) {
+          points.insert(std::make_pair(Geom::Point(r.xmin(),yn), width));
+          points.insert(std::make_pair(Geom::Point(r.xmax(),yn), width));
+          yn -= space;
         }
       } else if (width == r.height()) {
         points.insert(std::make_pair(Geom::Point(r.xmin(),r.ycenter()), width));
@@ -355,25 +366,23 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       COUT << "wn : " << width << '\n';
 #endif
       if (width < r.width()) {
-        int x = (r.xmin() + width / 2);
         int space = spacey(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1));
-        for (auto top : {true, false}) {
-          int y = (top ? r.ymax() : r.ymin());
-          int xn = x;
+        /*int xn = x;
           while (xn < r.xmax()) {
-            points.insert(std::make_pair(Geom::Point(xn,y), width));
-            xn += space;
-          }
-          xn = r.xcenter();
-          while (xn <= (r.xmax() - width/2)) {
-            points.insert(std::make_pair(Geom::Point(xn,y), width));
-            xn += space;
-          }
-          xn = r.xcenter();
-          while (xn >= (r.xmin() + width/2)) {
-            points.insert(std::make_pair(Geom::Point(xn,y), width));
-            xn -= space;
-          }
+          points.insert(std::make_pair(Geom::Point(xn,y), width));
+          xn += space;
+          }*/
+        int xn = r.xcenter();
+        while (xn <= (r.xmax() - width/2)) {
+          points.insert(std::make_pair(Geom::Point(xn,r.ymin()), width));
+          points.insert(std::make_pair(Geom::Point(xn,r.ymax()), width));
+          xn += space;
+        }
+        xn = r.xcenter();
+        while (xn >= (r.xmin() + width/2)) {
+          points.insert(std::make_pair(Geom::Point(xn,r.ymin()), width));
+          points.insert(std::make_pair(Geom::Point(xn,r.ymax()), width));
+          xn -= space;
         }
       } else if (width == r.width()) {
         points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymin()), width));
@@ -676,6 +685,7 @@ void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, 
 void Router::expandNode(const Node* n1)
 {
   auto n = const_cast<Node*>(n1);
+  if (n->closed()) return;
 #if DEBUG
   n->print("expanding node :");
 #endif
@@ -958,7 +968,7 @@ Geom::LayerRects Router::findSol()
     COUT << "num src : " << _sources.size() << " tgt : " << _targets.size() << std::endl;
     for (auto& s : _sources) {
       evalTCost(s);
-      insertToPQ(s);
+      if (!s->closed()) insertToPQ(s);
       _bbox.merge(s->x(), s->y(), s->x(), s->y());
 #if DEBUG
       COUT << "src : " << s->x() << ' ' << s->y() << ' ' << s->tcost() << ' ' << s->cost() << '\n';
@@ -1421,13 +1431,26 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
             && ittgt->second.size() == 1
             && itsrc->second.size() == 1) {
           auto z = itsrc->first;
-          if (_cf.isVert(z)) {
-            _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
-            _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
-          }
-          if (_cf.isHor(z)) {
-            _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
-            _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+          if ((itsrc->second.begin()->width() < 10 * itsrc->second.begin()->height()) 
+                && (itsrc->second.begin()->height() < 10 * itsrc->second.begin()->width())
+                && (ittgt->second.begin()->width() < 10 * ittgt->second.begin()->height())
+                && (ittgt->second.begin()->height() < 10 * ittgt->second.begin()->width())) {
+            if (_cf.isVert(z)) {
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
+            }
+            if (_cf.isHor(z)) {
+              _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
+              _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+            }
+          } else {
+            if (_cf.isVert(z) && _cf.isHor(z)) {
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->height());
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->height());
+              _ndrwidthx[z] = _ndrwidthy[z];
+            }
           }
         }
       }
@@ -1438,13 +1461,26 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
             && ittgt->second.size() == 1
             && itsrc->second.size() == 1) {
           auto z = ittgt->first;
-          if (_cf.isVert(z)) {
-            _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
-            _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
-          }
-          if (_cf.isHor(z)) {
-            _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
-            _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+          if ((itsrc->second.begin()->width() < 10 * itsrc->second.begin()->height()) 
+                && (itsrc->second.begin()->height() < 10 * itsrc->second.begin()->width())
+                && (ittgt->second.begin()->width() < 10 * ittgt->second.begin()->height())
+                && (ittgt->second.begin()->height() < 10 * ittgt->second.begin()->width())) {
+            if (_cf.isVert(z)) {
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
+            }
+            if (_cf.isHor(z)) {
+              _ndrwidthx[z] = std::min(_ndrwidthx[z], itsrc->second.begin()->height());
+              _ndrwidthx[z] = std::min(_ndrwidthx[z], ittgt->second.begin()->height());
+            }
+          } else {
+            if (_cf.isVert(z) && _cf.isHor(z)) {
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->height());
+              _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->height());
+              _ndrwidthx[z] = _ndrwidthy[z];
+            }
           }
         }
       }

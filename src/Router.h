@@ -126,6 +126,7 @@ class Node {
 #endif
     }
   public:
+    bool closed() const { return _expanddir.none(); }
     int x() const { return _x; }
     int y() const { return _y; }
     int z() const { return _z; }
@@ -189,7 +190,10 @@ struct NodeCostComp {
   {
     if (n1 != nullptr && n2 != nullptr) {
       if (n1->cost() == n2->cost()) {
-        return NodeComp()(n1, n2);
+        if (n1->fcost() == n2->fcost()) {
+          return NodeComp()(n1, n2);
+        }
+        return n1->fcost() > n2->fcost();
       }
       return n1->cost() < n2->cost();
     }
