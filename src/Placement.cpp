@@ -73,23 +73,37 @@ PinPairs Net::reorderPins() const
   std::vector<std::vector<double>> pinpairdist(pins.size(), std::vector<double>(pins.size(), 0));
   double mindist{DBLMAX};
   int idx1{-1}, idx2{-1};
+  Geom::Rect netbbox;
+  for (auto& p : pins) {
+    netbbox.merge(p->bbox());
+  }
+  double nethpwl{(netbbox.width() + netbbox.height())/2.};
   for (unsigned i = 0; i < pins.size(); ++i) {
     auto& p1 = pins[i];
     auto& s1 = p1->shapes();
     for (unsigned j = i + 1; j < pins.size(); ++j) {
       auto& p2 = pins[j];
-      double dist = Geom::Dist(p1->bbox(), p2->bbox()) / (1. * p1->bbox().halfpm() * p2->bbox().halfpm());
+      double dist{1.e30};// = Geom::Dist(p1->bbox(), p2->bbox()) / nethpwl;
       auto& s2 = p2->shapes();
-      for (auto& l : s1) {
-        auto its2 = s2.find(l.first);
-        if (its2 != s2.end()) {
-          for (auto& r1 : l.second) {
-            for (auto& r2 : its2->second) {
-              dist = std::min(Geom::Dist(r1, r2) / (1. * p1->bbox().halfpm() * p2->bbox().halfpm()), dist);
+      for (auto& l1 : s1) {
+        for (auto& r1 : l1.second) {
+          for (auto& l2 : s2) {
+            for (auto& r2 : l2.second) {
+              dist = std::min(Geom::Dist(r1, r2)/nethpwl + std::abs(l1.first - l2.first) * 0.1, dist);
             }
           }
         }
       }
+      /*for (auto& l1 : s1) {
+        auto its2 = s2.find(l1.first);
+        if (its2 != s2.end()) {
+          for (auto& r1 : l.second) {
+            for (auto& r2 : its2->second) {
+              dist = std::min(Geom::Dist(r1, r2)/nethpwl, dist);
+            }
+          }
+        }
+      }*/
       pinpairdist[i][j] = dist;
       pinpairdist[j][i] = dist;
       COUT << "pins dist : " << pins[i]->name() << ' ' << pins[j]->name() << ' ' << dist << '\n';
@@ -103,6 +117,7 @@ PinPairs Net::reorderPins() const
   std::vector<std::pair<int, int>> primorder;
   primorder.reserve(pins.size() - 1);
   primorder.push_back(std::make_pair(idx1, idx2));
+  COUT << "pins to route order : " << pins[idx1]->name() << ' ' << pins[idx2]->name() << '\n';
   std::vector<int> selected(pins.size(), 0);
   selected[idx1] = 1;
   selected[idx2] = 1;
@@ -344,10 +359,10 @@ void Module::route(Router::Router& router)
     std::set<std::string> _addednets;
     for (auto& p : _pins) {
       auto itn = _nets.find(p.first);
-      std::cout << "DEBUG pin name " << p.first << '\n';
+      //std::cout << "DEBUG pin name " << p.first << '\n';
       if (itn != _nets.end()) {
         _addednets.insert(itn->first);
-        std::cout << "DEBUG found net : " << itn->second.name() << ' ' << itn->second.routeShapes().size() << '\n';
+        //std::cout << "DEBUG found net : " << itn->second.name() << ' ' << itn->second.routeShapes().size() << '\n';
         p.second->copyRects(itn->second.routeShapes());
       }
     }

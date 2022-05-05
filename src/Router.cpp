@@ -294,9 +294,9 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         }
         if (vert) {
           int space = spacey(adj) + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1));
-          if (padbox.valid()) {
-            space = std::max(space, padbox.width());
-          }
+          //if (padbox.valid()) {
+          //  space = std::max(space, padbox.width());
+          //}
           int yn = r.ymax() - ((r.ymax() - y) % space);
           while (yn > r.ymin()) {
             points.insert(std::make_pair(Geom::Point(x,yn), widthy(z)));
@@ -304,9 +304,9 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }
         } else {
           int space = spacex(adj) + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1));
-          if (padbox.valid()) {
-            space = std::max(space, padbox.height());
-          }
+          //if (padbox.valid()) {
+          //  space = std::max(space, padbox.height());
+          //}
           int xn = r.xmax() - ((r.xmax() - x) % space);
           while (xn > r.xmin()) {
             points.insert(std::make_pair(Geom::Point(xn,y), widthx(z)));
@@ -322,7 +322,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
 #if DEBUG
       COUT << "we : " << width << '\n';
 #endif
-      if (width <= r.height()) {
+      if (width < r.height()) {
         int y = (r.ymin() + width / 2);
         int space = spacex(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1));
         for (auto right : {true, false}) {
@@ -332,7 +332,20 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
             points.insert(std::make_pair(Geom::Point(x,yn), width));
             yn += space;
           }
+          yn = r.ycenter();
+          while (yn <= (r.ymax() - width/2)) {
+            points.insert(std::make_pair(Geom::Point(x,yn), width));
+            yn += space;
+          }
+          yn = r.ycenter();
+          while (yn >= (r.ymin() + width/2)) {
+            points.insert(std::make_pair(Geom::Point(x,yn), width));
+            yn -= space;
+          }
         }
+      } else if (width == r.height()) {
+        points.insert(std::make_pair(Geom::Point(r.xmin(),r.ycenter()), width));
+        points.insert(std::make_pair(Geom::Point(r.xmax(),r.ycenter()), width));
       }
     }
   } else if (dir == NORTH || dir == SOUTH) {
@@ -341,7 +354,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
 #if DEBUG
       COUT << "wn : " << width << '\n';
 #endif
-      if (width <= r.width()) {
+      if (width < r.width()) {
         int x = (r.xmin() + width / 2);
         int space = spacey(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1));
         for (auto top : {true, false}) {
@@ -351,7 +364,20 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
             points.insert(std::make_pair(Geom::Point(xn,y), width));
             xn += space;
           }
+          xn = r.xcenter();
+          while (xn <= (r.xmax() - width/2)) {
+            points.insert(std::make_pair(Geom::Point(xn,y), width));
+            xn += space;
+          }
+          xn = r.xcenter();
+          while (xn >= (r.xmin() + width/2)) {
+            points.insert(std::make_pair(Geom::Point(xn,y), width));
+            xn -= space;
+          }
         }
+      } else if (width == r.width()) {
+        points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymin()), width));
+        points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymax()), width));
       }
     }
   }
@@ -401,6 +427,9 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
     }
   }
   if (!inserted) shapes[z].insert(r);
+#if DEBUG
+  COUT << "shape : " << r.str() << '\n';
+#endif
   for (auto dir : {UP, DOWN, EAST, NORTH}) {
     auto points = findValidPoints(r, z, dir);
     for (auto& pp : points) {
@@ -419,7 +448,6 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
         n->expand(SOUTH, true);
       }
 #if DEBUG
-      COUT << r.str() << '\n';
       n->print((src ? "src" : "tgt"));
 #endif
       dest.insert(n);
@@ -501,26 +529,22 @@ void Router::setexpand(Node* newn, const Node* parent) const
         }
       }
     }
-    if (newn->z() >= _maxLayer) newn->expand(UP, false);
+    if (newn->z() < parent->z() || newn->z() >= _maxLayer || newn->z() <_minLayer) newn->expand(UP, false);
     else {
-      if (newn->z() < parent->z() && newn->z() >= _minLayer) {
-        auto v = isViaValid(newn, true);
-        if (v) {
-          newn->upVia(v);
-        } else {
-          newn->expand(UP, false);
-        }
+      auto v = isViaValid(newn, true);
+      if (v) {
+        newn->upVia(v);
+      } else {
+        newn->expand(UP, false);
       }
     }
-    if (newn->z() <= _minLayer) newn->expand(DOWN, false);
+    if (newn->z() > parent->z() || newn->z() <= _minLayer || newn->z() > _maxLayer) newn->expand(DOWN, false);
     else {
-      if (newn->z() > parent->z() && newn->z() <= _maxLayer) {
-        auto v = isViaValid(newn, false);
-        if (v) {
-          newn->dnVia(v);
-        } else {
-          newn->expand(DOWN, false);
-        }
+      auto v = isViaValid(newn, false);
+      if (v) {
+        newn->dnVia(v);
+      } else {
+        newn->expand(DOWN, false);
       }
     }
   } else {
@@ -532,7 +556,7 @@ void Router::setexpand(Node* newn, const Node* parent) const
         newn->expand(UP, true);
       }
     }
-    if (newn->z() <= _maxLayer) {
+    if (newn->z() > _minLayer && newn->z() <= _maxLayer) {
       newn->expand(DOWN, false);
       auto v = isViaValid(newn, false);
       if (v) {
@@ -617,6 +641,21 @@ int Router::snap(const Node* n, const bool vert, const bool up) const
   return snapc;
 }
 
+void Router::getTargetGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc)
+{
+  for (auto& t : _targets) {
+    if (vert) {
+      auto maxc = std::max(n->y(), snapc);
+      auto minc = std::min(n->y(), snapc);
+      if (t->y() > minc && t->y() < maxc) s.insert(t->y());
+    } else {
+      auto maxc = std::max(n->x(), snapc);
+      auto minc = std::min(n->x(), snapc);
+      if (t->x() > minc && t->x() < maxc) s.insert(t->x());
+    }
+  }
+}
+
 void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc)
 {
   int adjLayer = (above ? (n->z() < _maxLayer ? n->z() + 1 : -1) : (n->z() > _minLayer ? n->z() - 1 : -1));
@@ -698,6 +737,7 @@ void Router::expandNode(const Node* n1)
     if (newn) checkAndInsert(newn, n);
     getAdjacentGrid(gridpos, n, true, false, snapc);
     getAdjacentGrid(gridpos, n, false, false, snapc);
+    getTargetGrid(gridpos, n, false, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -725,6 +765,7 @@ void Router::expandNode(const Node* n1)
     }
     getAdjacentGrid(gridpos, n, true, true, snapc);
     getAdjacentGrid(gridpos, n, false, true, snapc);
+    getTargetGrid(gridpos, n, false, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -736,7 +777,7 @@ void Router::expandNode(const Node* n1)
     }
     gridpos.clear();
   }
-  if (n->expandnorth()) {
+  if (n->expandsouth()) {
 #if DEBUG
     COUT << "\texpanding down\n";
 #endif
@@ -751,6 +792,7 @@ void Router::expandNode(const Node* n1)
     if (newn) checkAndInsert(newn, n);
     getAdjacentGrid(gridpos, n, true, false, snapc);
     getAdjacentGrid(gridpos, n, false, false, snapc);
+    getTargetGrid(gridpos, n, true, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -762,7 +804,7 @@ void Router::expandNode(const Node* n1)
     }
     gridpos.clear();
   }
-  if (n->expandsouth()) {
+  if (n->expandnorth()) {
 #if DEBUG
     COUT << "\texpanding up\n";
 #endif
@@ -778,6 +820,7 @@ void Router::expandNode(const Node* n1)
     if (newn) checkAndInsert(newn, n);
     getAdjacentGrid(gridpos, n, true, true, snapc);
     getAdjacentGrid(gridpos, n, false, true, snapc);
+    getTargetGrid(gridpos, n, true, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -918,7 +961,7 @@ Geom::LayerRects Router::findSol()
       insertToPQ(s);
       _bbox.merge(s->x(), s->y(), s->x(), s->y());
 #if DEBUG
-      COUT << "src : " << s->x() << ' ' << s->y() << '\n';
+      COUT << "src : " << s->x() << ' ' << s->y() << ' ' << s->tcost() << ' ' << s->cost() << '\n';
 #endif
     }
     for (auto& t : _targets) {
@@ -1538,6 +1581,7 @@ void Router::constructVias()
   _upVias.clear();
   _upVias.resize(_widthx.size());
   _dnVias.clear();
+  _vias.clear();
   _dnVias.resize(_widthx.size());
   for (auto &v : _lf.layers()) {
     if (v->isVia()) {

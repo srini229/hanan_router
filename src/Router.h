@@ -269,6 +269,7 @@ class Router {
     void generateHananGrid();
     void checkAndInsert(Node* newn, const Node* n);
     int snap(const Node* n, const bool vert, const bool up) const;
+    void getTargetGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc);
     void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);
     void flushNodes()
     {
