@@ -266,23 +266,30 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
         if (modit != _modules.end() && it != m.end()) {
           for (auto& netiter : *it) {
             auto itnetname = netiter.find("name");
-            const std::string wsd[] = {"widths", "spaces", "directions"};
-            for (auto iwsd : {0, 1, 2}) {
+            const std::string wsd[] = {"widths", "spaces", "directions", "preferred_layers"};
+            for (auto iwsd : {0, 1, 2, 3}) {
               auto itwsd = netiter.find(wsd[iwsd]);
               if (itnetname != netiter.end() && itwsd != netiter.end()) {
-                for (auto& el : (*itwsd).items()) {
-                  auto layer = lf.getLayerIndex(el.key());
-                  COUT << "ndr : " << wsd[iwsd] << ' ' << el.key() << ' ' << el.value() << '\n';
-                  if (layer >= 0) {
-                    switch (iwsd) {
-                      default:
-                      case 0: modit->second->addNDRWidth(*itnetname, layer, el.value());
-                              break;
-                      case 1: modit->second->addNDRSpace(*itnetname, layer, el.value());
-                              break;
-                      case 2: modit->second->addNDRDir(*itnetname, layer, el.value());
-                              break;
+                if (iwsd < 3) {
+                  for (auto& el : (*itwsd).items()) {
+                    auto layer = lf.getLayerIndex(el.key());
+                    COUT << "ndr : " << wsd[iwsd] << ' ' << el.key() << ' ' << el.value() << '\n';
+                    if (layer >= 0) {
+                      switch (iwsd) {
+                        default:
+                        case 0: modit->second->addNDRWidth(*itnetname, layer, el.value());
+                                break;
+                        case 1: modit->second->addNDRSpace(*itnetname, layer, el.value());
+                                break;
+                        case 2: modit->second->addNDRDir(*itnetname, layer, el.value());
+                                break;
+                      }
                     }
+                  }
+                } else {
+                  for (auto& el : (*itwsd)) {
+                    auto layer = lf.getLayerIndex(el);
+                    modit->second->addPrefLayer(*itnetname, layer);
                   }
                 }
               }

@@ -44,6 +44,7 @@ class Net {
     PinPairs reorderPins() const;
     std::map<int, int> _ndrwidths, _ndrspaces;
     std::map<int, DRC::Direction> _ndrdirs;
+    std::set<int> _preflayers;
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1} {}
     const std::set<const Pin*>& pins() const { return _pins; }
@@ -73,6 +74,7 @@ class Net {
       else if (dir == "H" || dir == "h") _ndrdirs[layer] = DRC::Direction::HORIZONTAL;
       else if (dir == "V" || dir == "v") _ndrdirs[layer] = DRC::Direction::VERTICAL;
     }
+    void addPrefLayer(const int layer) { _preflayers.insert(layer); }
 };
 typedef std::map<std::string, Net> Nets;
 typedef std::vector<Net*> NetsVec;
@@ -199,6 +201,11 @@ class Module {
     {
       auto it = _nets.find(net);
       if (it != _nets.end()) it->second.addNDRDir(layer, d);
+    }
+    void addPrefLayer(const std::string& net, const int layer)
+    {
+      auto it = _nets.find(net);
+      if (it != _nets.end()) it->second.addPrefLayer(layer);
     }
 
     void print() const;

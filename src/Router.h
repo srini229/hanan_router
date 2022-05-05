@@ -11,6 +11,8 @@
 #include "Geom.h"
 #include "Layer.h"
 
+#define COST_MAX 100000
+
 namespace Router {
 
 typedef long CostType;
@@ -62,8 +64,8 @@ class CostFn {
     bool isVert(const int l) const { return _layerVCost[l] <= _layerHCost[l]; }
     bool isHor(const int l) const { return _layerHCost[l] <= _layerVCost[l]; }
 
-    CostFn(const int numLayers = 0, const int minHLayer = 1, const int minVLayer = 0): _topRoutingLayer(numLayers - 1), _layerHCost(numLayers, 10000), _layerVCost(numLayers, 10000),
-    _layerPairCost(numLayers, std::vector<CostType>(numLayers, 10000))
+    CostFn(const int numLayers = 0, const int minHLayer = 1, const int minVLayer = 0): _topRoutingLayer(numLayers - 1), _layerHCost(numLayers, COST_MAX), _layerVCost(numLayers, COST_MAX),
+    _layerPairCost(numLayers, std::vector<CostType>(numLayers, COST_MAX))
     {
       for (int i = minHLayer; i < numLayers; i += 2) {
         _layerHCost[i] = 1;
@@ -79,7 +81,7 @@ class CostFn {
       //  COUT << "layer : " << i << " cost : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
       //}
     }
-    void updatendr(const std::map<int, DRC::Direction>& ndrdir);
+    void updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::set<int>& preflayers);
     void resetdirs() {
       if (!_savedLayerHCost.empty()) _layerHCost = _savedLayerHCost;
       if (!_savedLayerVCost.empty()) _layerVCost = _savedLayerVCost;
@@ -359,7 +361,9 @@ class Router {
     void addSource(const Geom::Rect& r, const int z) { addSourceTarget(r, z, true); }
     void addTarget(const Geom::Rect& r, const int z) { addSourceTarget(r, z, false); }
     const Via* isViaValid(const Node* n, const bool up) const;
-    void updatendr(const bool usendr, const std::map<int, int>& ndrwidths, const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs);
+    void updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
+        const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs,
+        const std::set<int>& preflayers);
     void setModName(const std::string& n) { _modname = n; }
     void setNetName(const std::string& n) { _netname = n; }
     void setuu(const int uu) { _uu = uu; }

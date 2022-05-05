@@ -86,8 +86,8 @@ void Via::addShapes(Geom::LayerRects& lr) const
 CostFn::CostFn(const DRC::LayerInfo& lf)
 {
   auto& layers = lf.layers();
-  _layerHCost.resize(layers.size(), 100000);
-  _layerVCost.resize(layers.size(), 100000);
+  _layerHCost.resize(layers.size(), COST_MAX);
+  _layerVCost.resize(layers.size(), COST_MAX);
   for (unsigned i = 0; i < layers.size(); ++i) {
     if (layers[i]->isMetal()) {
       auto r = std::max(1, static_cast<int>(layers[i]->meanR()));
@@ -100,7 +100,7 @@ CostFn::CostFn(const DRC::LayerInfo& lf)
       _topRoutingLayer = static_cast<int>(i);
     }
   }
-  _layerPairCost.resize(_layerHCost.size(), std::vector<CostType>(_layerHCost.size(), 100000));
+  _layerPairCost.resize(_layerHCost.size(), std::vector<CostType>(_layerHCost.size(), COST_MAX));
   for (unsigned i = 0; i < layers.size(); ++i) {
     if (layers[i]->isVia()) {
       auto l = lf.getLayers(static_cast<DRC::ViaLayer*>(layers[i]));
@@ -168,7 +168,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   return dc;
 }
 
-void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir)
+void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::set<int>& preflayers)
 {
   _savedLayerHCost = _layerHCost;
   _savedLayerVCost = _layerVCost;
@@ -186,6 +186,28 @@ void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir)
       _layerHCost[it.first] = mincost;
     }
     COUT << "ndr dir : " << it.first << ' ' << _layerVCost[it.first] << ' ' << _layerHCost[it.first] << '\n';
+  }
+  if (!preflayers.empty()) {
+    for (unsigned i = 0; i < _layerVCost.size(); ++i) {
+      if (preflayers.find(i) != preflayers.end()) {
+        if (_layerHCost[i] < _layerVCost[i]) {
+          _layerHCost[i] = std::max(static_cast<long>(1), _layerHCost[i]/10);
+        } else if (_layerVCost[i] < _layerHCost[i]) {
+          _layerVCost[i] = std::max(static_cast<long>(1), _layerVCost[i]/10);
+        } else {
+          _layerHCost[i] = std::max(static_cast<long>(1), _layerVCost[i]/10);
+          _layerVCost[i] = std::max(static_cast<long>(1), _layerVCost[i]/10);
+        }
+      } else {
+        _layerHCost[i] = std::min(static_cast<long>(COST_MAX), _layerHCost[i]*100);
+        _layerVCost[i] = std::min(static_cast<long>(COST_MAX), _layerVCost[i]*100);
+      }
+    }
+  }
+  if (!preflayers.empty() || !ndrdir.empty()) {
+    for (unsigned i = 0; i < _layerHCost.size(); ++i) {
+      COUT << "layer cost (" << i << ") : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
+    }
   }
 }
 
@@ -1396,7 +1418,9 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
   }
 }
 
-void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs)
+void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
+    const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs,
+    const std::set<int>& preflayers)
 {
   _ndrwidthx.clear(); _ndrwidthy.clear();
   _ndrspacex.clear(); _ndrspacey.clear();
@@ -1405,7 +1429,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths, c
   _ndrspacex.resize(_spacex.size(), INT_MAX);
   _ndrspacey.resize(_spacey.size(), INT_MAX);
   if (usendr) {
-    if (!ndrdirs.empty()) _cf.updatendr(ndrdirs);
+    if (!ndrdirs.empty() || !preflayers.empty()) _cf.updatendr(ndrdirs, preflayers);
     else _cf.resetdirs();
     if (!ndrspaces.empty()) {
       _ndrspacex = _spacex;
