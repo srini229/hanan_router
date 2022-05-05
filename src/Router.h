@@ -64,6 +64,8 @@ class CostFn {
     bool isVert(const int l) const { return _layerVCost[l] <= _layerHCost[l]; }
     bool isHor(const int l) const { return _layerHCost[l] <= _layerVCost[l]; }
 
+    CostType hcost(int i) const { return _layerHCost[i]; }
+    CostType vcost(int i) const { return _layerVCost[i]; }
     CostFn(const int numLayers = 0, const int minHLayer = 1, const int minVLayer = 0): _topRoutingLayer(numLayers - 1), _layerHCost(numLayers, COST_MAX), _layerVCost(numLayers, COST_MAX),
     _layerPairCost(numLayers, std::vector<CostType>(numLayers, COST_MAX))
     {

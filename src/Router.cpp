@@ -191,16 +191,16 @@ void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::s
     for (unsigned i = 0; i < _layerVCost.size(); ++i) {
       if (preflayers.find(i) != preflayers.end()) {
         if (_layerHCost[i] < _layerVCost[i]) {
-          _layerHCost[i] = std::max(static_cast<long>(1), _layerHCost[i]/10);
+          _layerHCost[i] = 1;
         } else if (_layerVCost[i] < _layerHCost[i]) {
-          _layerVCost[i] = std::max(static_cast<long>(1), _layerVCost[i]/10);
+          _layerVCost[i] = 1;
         } else {
-          _layerHCost[i] = std::max(static_cast<long>(1), _layerVCost[i]/10);
-          _layerVCost[i] = std::max(static_cast<long>(1), _layerVCost[i]/10);
+          _layerHCost[i] = 1;
+          _layerVCost[i] = 1;
         }
       } else {
-        _layerHCost[i] = std::min(static_cast<long>(COST_MAX), _layerHCost[i]*100);
-        _layerVCost[i] = std::min(static_cast<long>(COST_MAX), _layerVCost[i]*100);
+        _layerHCost[i] = static_cast<long>(COST_MAX);
+        _layerVCost[i] = static_cast<long>(COST_MAX);
       }
     }
   }
@@ -324,7 +324,8 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
             points.insert(std::make_pair(Geom::Point(x,yn), widthy(z)));
             yn -= space;
           }
-        } else {
+        }
+        if (hor) {
           int space = spacex(adj) + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1));
           //if (padbox.valid()) {
           //  space = std::max(space, padbox.height());
@@ -595,6 +596,12 @@ void Router::setexpand(Node* newn, const Node* parent) const
         newn->expand(DOWN, true);
       }
     }
+  }
+  if (_cf.hcost(newn->z()) == _cf.vcost(newn->z()) && _cf.hcost(newn->z()) == COST_MAX) {
+    newn->expand(NORTH, false);
+    newn->expand(SOUTH, false);
+    newn->expand(EAST, false);
+    newn->expand(WEST, false);
   }
 }
 
@@ -1446,7 +1453,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
         _ndrwidthx[it.first] = std::max(_ndrwidthx[it.first], it.second);
         _ndrwidthy[it.first] = std::max(_ndrwidthy[it.first], it.second);
       }
-    } else {
+    } else if (preflayers.empty()) {
       if (_sourceshapes.size() == 1) {
         auto itsrc = _sourceshapes.begin();
         auto ittgt = _targetshapes.find(itsrc->first);
@@ -1512,6 +1519,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
   }
 //#if DEBUG
   for (unsigned i = 0; i < _ndrwidthx.size(); ++i) {
+    COUT << "layer : " << i << " width : " << _ndrwidthx[i] << ' ' << _ndrwidthy[i] << ' ' << _widthx[i] << ' ' << _widthy[i] << '\n';
     if (_ndrwidthx[i] != INT_MAX) {
       COUT << "ndr widthx z : " << i << ' ' << _ndrwidthx[i] << '\n';
     }
