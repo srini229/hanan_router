@@ -5,9 +5,9 @@
 
 namespace Placement {
 
-void Pin::print() const
+void Port::print() const
 {
-  std::cout << "pin : " << _name << '\n';
+  std::cout << "port : " << _name << '\n';
   for (const auto& l : _shapes) {
     std::cout << "\tlayer : " << l.first << '\n';
     for (const auto& r : l.second) {
@@ -16,7 +16,7 @@ void Pin::print() const
   }
 }
 
-void Pin::addRect(const int layer, const Geom::Rect& r)
+void Port::addRect(const int layer, const Geom::Rect& r)
 {
   auto it = _shapes.find(layer);
   if (it != _shapes.end()) {
@@ -50,6 +50,25 @@ void Pin::addRect(const int layer, const Geom::Rect& r)
   _bbox.merge(r);
 }
 
+Port* Port::getTransformedPort(const Geom::Transform& tr) const
+{
+  Port* port = new Port(_name);
+  for (const auto& ls : _shapes) {
+    for (const auto& s : ls.second) {
+      port->_shapes[ls.first].push_back(tr.transform(s));
+    }
+  }
+  port->_bbox = tr.transform(_bbox);
+  return port;
+}
+
+void Pin::print() const
+{
+  std::cout << "pin : " << _name << '\n';
+  for (auto& p : _ports) p->print();
+}
+
+
 auto DBLMAX = std::numeric_limits<double>::max();
 inline void Net::print() const
 {
@@ -65,24 +84,29 @@ inline void Net::print() const
   }
 }
 
-PinPairs Net::reorderPins() const
+PortPairs Net::reorderPorts() const
 {
-  PinCVec pins(_pins.begin(), _pins.end());
-  std::sort(pins.begin(), pins.end(),
-      [](const Pin* p1, const Pin* p2) -> bool { return p1->bbox().halfpm() > p2->bbox().halfpm(); });
-  std::vector<std::vector<double>> pinpairdist(pins.size(), std::vector<double>(pins.size(), 0));
+  PortCVec ports;
+  for (auto& p : _pins) {
+    ports.insert(ports.end(), p->ports().begin(), p->ports().end());
+  }
+  PortPairs porder;
+  if (ports.empty()) return porder;
+  std::sort(ports.begin(), ports.end(),
+      [](const Port* p1, const Port* p2) -> bool { return p1->bbox().halfpm() > p2->bbox().halfpm(); });
+  std::vector<std::vector<double>> pinpairdist(ports.size(), std::vector<double>(ports.size(), 0));
   double mindist{DBLMAX};
   int idx1{-1}, idx2{-1};
   Geom::Rect netbbox;
-  for (auto& p : pins) {
+  for (auto& p : ports) {
     netbbox.merge(p->bbox());
   }
   double nethpwl{(netbbox.width() + netbbox.height())/2.};
-  for (unsigned i = 0; i < pins.size(); ++i) {
-    auto& p1 = pins[i];
+  for (unsigned i = 0; i < ports.size(); ++i) {
+    auto& p1 = ports[i];
     auto& s1 = p1->shapes();
-    for (unsigned j = i + 1; j < pins.size(); ++j) {
-      auto& p2 = pins[j];
+    for (unsigned j = i + 1; j < ports.size(); ++j) {
+      auto& p2 = ports[j];
       double dist{1.e30};// = Geom::Dist(p1->bbox(), p2->bbox()) / nethpwl;
       auto& s2 = p2->shapes();
       for (auto& l1 : s1) {
@@ -106,7 +130,7 @@ PinPairs Net::reorderPins() const
       }*/
       pinpairdist[i][j] = dist;
       pinpairdist[j][i] = dist;
-      COUT << "pins dist : " << pins[i]->name() << ' ' << pins[j]->name() << ' ' << dist << '\n';
+      COUT << "ports dist : " << ports[i]->name() << ' ' << ports[j]->name() << ' ' << dist << '\n';
       if (mindist > dist) {
         mindist = dist;
         idx1 = static_cast<int>(i);
@@ -115,18 +139,18 @@ PinPairs Net::reorderPins() const
     }
   }
   std::vector<std::pair<int, int>> primorder;
-  primorder.reserve(pins.size() - 1);
+  primorder.reserve(ports.size() - 1);
   primorder.push_back(std::make_pair(idx1, idx2));
-  COUT << "pins to route order : " << pins[idx1]->name() << ' ' << pins[idx2]->name() << '\n';
-  std::vector<int> selected(pins.size(), 0);
+  COUT << "ports to route order : " << ports[idx1]->name() << ' ' << ports[idx2]->name() << '\n';
+  std::vector<int> selected(ports.size(), 0);
   selected[idx1] = 1;
   selected[idx2] = 1;
-  while (primorder.size() < pins.size() - 1) {
+  while (primorder.size() < ports.size() - 1) {
     double mindist{DBLMAX};
     int minidx2 = -1, minidx1 = -1;
-    for (int i = 0; i < static_cast<int>(pins.size()); ++i) {
+    for (int i = 0; i < static_cast<int>(ports.size()); ++i) {
       if (!selected[i]) continue;
-      for (int j = 0; j < static_cast<int>(pins.size()); ++j) {
+      for (int j = 0; j < static_cast<int>(ports.size()); ++j) {
         if (!selected[j] && pinpairdist[i][j] < mindist) {
           mindist = pinpairdist[i][j];
           minidx1 = i;
@@ -136,7 +160,7 @@ PinPairs Net::reorderPins() const
     }
     if (minidx2 >= 0) {
       primorder.push_back(std::make_pair(minidx1, minidx2));
-      COUT << "pins to route order : " << pins[minidx1]->name() << ' ' << pins[minidx2]->name() << '\n';
+      COUT << "ports to route order : " << ports[minidx1]->name() << ' ' << ports[minidx2]->name() << '\n';
       selected[minidx2] = 1;
     }
   }
@@ -145,8 +169,7 @@ PinPairs Net::reorderPins() const
       { return pinpairdist[a.first][a.second] < pinpairdist[b.first][b.second]; });
 
   
-  PinPairs porder;
-  for (auto& pp : primorder) porder.emplace_back(pins[pp.first], pins[pp.second]);
+  for (auto& pp : primorder) porder.emplace_back(ports[pp.first], ports[pp.second]);
 
   return porder;
 }
@@ -158,8 +181,10 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   SaveRestoreStream src(_name + "_route.log");
 #endif
   _unroute = 0;
-  for (auto& p : _pins) {
-    Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
+  for (auto& pin : _pins) {
+    for (auto& p : pin->ports()) {
+      Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
+    }
   }
   if (_exclude) {
     COUT << "excluding net : " << _name << " from routing\n";
@@ -174,15 +199,15 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
     }*/
-    auto pinpairs = reorderPins();
-    for (auto& pp : pinpairs) {
-      const auto& pin1 = pp.first;
-      const auto& pin2 = pp.second;
+    auto PortPairs = reorderPorts();
+    for (auto& pp : PortPairs) {
+      const auto& port1 = pp.first;
+      const auto& port2 = pp.second;
       router.clearSourceTargets();
-      COUT << "routing pins : " << pin1->name() << ' ' << pin2->name() << '\n';
-      router.setName(_name + "__" + pin1->name() + "__" + pin2->name());
-      const auto& p1 = pin1->shapes();
-      const auto& p2 = pin2->shapes();
+      COUT << "routing pins : " << port1->name() << ' ' << port2->name() << '\n';
+      router.setName(_name + "__" + port1->name() + "__" + port2->name());
+      const auto& p1 = port1->shapes();
+      const auto& p2 = port2->shapes();
       for (auto src : {true, false}) {
         for (auto& l : (src ? p1 : p2)) {
           if (l.first > router.maxLayer() || l.first < router.minLayer()) continue;
@@ -237,14 +262,14 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       } else {
         _unroute = 1;
       }
-      //pin1->print();
-      std::cout << "Adding routes to " << pin1->name() << ' ' << sol.size() << std::endl;
-      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin1->shapes()), sol, &_bbox);
-      //pin1->print();
-      //pin2->print();
-      std::cout << "Adding routes to " << pin2->name() << ' ' << sol.size() << std::endl;
-      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(pin2->shapes()), sol, &_bbox);
-      //pin2->print();
+      //port1->print();
+      std::cout << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;
+      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), sol, &_bbox);
+      //port1->print();
+      //port2->print();
+      std::cout << "Adding routes to " << port2->name() << ' ' << sol.size() << std::endl;
+      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), sol, &_bbox);
+      //port2->print();
       router.clearObstacles(true);
     }
   }
@@ -263,13 +288,7 @@ Module::~Module()
 void Module::print() const
 {
   for (const auto& p : _pins) {
-    COUT << "\tpin : " << p.first << '\n';
-    for (const auto& l : p.second->shapes()) {
-      std::cout << "\t\tlayer : " << l.first << '\n';
-      for (const auto& r : l.second) {
-        std::cout << "\t\t\t" << r.str() << '\n';
-      }
-    }
+    p.second->print();
   }
   for (const auto& n : _nets) {
     COUT << "\tnet : " << n.first << " : {";
@@ -346,8 +365,10 @@ void Module::route(Router::Router& router)
     for (auto it = nets.begin(); it != nets.end(); ++it) {
       _netObstaclesUnrouted.clear();
       for (auto itn = std::next(it); itn != nets.end(); ++itn) {
-        for (auto& p : (*itn)->pins()) {
-          Geom::MergeLayerRects(_netObstaclesUnrouted, p->shapes());
+        for (auto& pin : (*itn)->pins()) {
+          for (auto& p : pin->ports()) {
+            Geom::MergeLayerRects(_netObstaclesUnrouted, p->shapes());
+          }
         }
       }
       /*if (_name == "mixer_first_rx_0") {
@@ -404,12 +425,14 @@ void Module::plot() const
       }
     }
     for (const auto& p : _pins) {
-      if (p.second->shapes().empty()) {
-        auto& b = p.second->bbox();
-        if (b.valid()) {
-          ofs << "set object " << cnt++ << " rect from ";
-          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillcolor 'black' fillstyle pattern " << ((cnt % 2) + 5) << " transparent behind\n";
-          ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
+      for (auto& port : p.second->ports()) {
+        if (port->shapes().empty()) {
+          auto& b = p.second->bbox();
+          if (b.valid()) {
+            ofs << "set object " << cnt++ << " rect from ";
+            ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillcolor 'black' fillstyle pattern " << ((cnt % 2) + 5) << " transparent behind\n";
+            ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
+          }
         }
       }
     }
@@ -596,20 +619,22 @@ void Module::writeLEF() const
     ofs << "  FOREIGN " << _name << ' '  << (1.*_bbox.xmin()/_uu) << ' ' << (1.*_bbox.ymin()/_uu) << " ;\n";
     ofs << "  SIZE "    << (1.*_bbox.width()/_uu) << " BY " << (1.* _bbox.height()/_uu) << " ;\n";
     if (!_pins.empty()) {
-      for (auto& p : _pins) {
-        ofs << "  PIN " << p.first << "\n    DIRECTION INOUT ;\n    USE SIGNAL ;\n";
-        auto& shapes = p.second->shapes();
-        if (!shapes.empty()) {
-          ofs << "    PORT\n";
-          for (auto& l : shapes) {
-            ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
-            for (auto& r : l.second) {
-              ofs << "        RECT " << (r.xmin()*1.0/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+      for (auto& pin : _pins) {
+        ofs << "  PIN " << pin.first << "\n    DIRECTION INOUT ;\n    USE SIGNAL ;\n";
+        for (auto& p : pin.second->ports()) {
+          const auto& shapes = p->shapes();
+          if (!shapes.empty()) {
+            ofs << "    PORT\n";
+            for (auto& l : shapes) {
+              ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+              for (auto& r : l.second) {
+                ofs << "        RECT " << (r.xmin()*1.0/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+              }
             }
+            ofs << "    END\n";
           }
-          ofs << "    END\n";
         }
-        ofs << "  END " << p.first << '\n';
+        ofs << "  END " << pin.first << '\n';
       }
     }
     if (!_obstacles.empty() || !_internalroutes.empty()) {
@@ -649,17 +674,15 @@ void Instance::build(const bool rebuild)
         auto it = _pins.find(p.second->name());
         if (it != _pins.end()) {
           ip = it->second;
-          const_cast<Geom::LayerRects&>(ip->shapes()).clear();
+          ip->clearPorts();
         }
       } else {
         ip = new Pin(_name + "+" + p.second->name());
         _pins[p.second->name()] = ip;
       }
       if (!ip) continue;
-      for (const auto& ls : p.second->shapes()) {
-        for (const auto& s : ls.second) {
-          ip->addRect(ls.first, _tr.transform(s));
-        }
+      for (auto& port : p.second->ports()) {
+        ip->addPort(port->getTransformedPort(_tr));
       }
     }
     _bbox = _tr.transform(_m->bbox());
@@ -673,10 +696,13 @@ void Instance::print(const std::string& prefix) const
   COUT << prefix << "\ttr : " << _tr.str() << '\n';
   for (const auto& p : _pins) {
     COUT << prefix << "\tpin : " << p.first << '\n';
-    for (const auto& l : p.second->shapes()) {
-      COUT << prefix << "\t\tlayer : " << l.first << '\n';
-      for (const auto& r : l.second) {
-        COUT << prefix << "\t\t\t" << r.str() << '\n';
+    for (const auto& port : p.second->ports()) {
+      COUT << prefix << "\tport : " << port->name() << '\n';
+      for (const auto& l : port->shapes()) {
+        COUT << prefix << "\t\t\tlayer : " << l.first << '\n';
+        for (const auto& r : l.second) {
+          COUT << prefix << "\t\t\t\t" << r.str() << '\n';
+        }
       }
     }
   }

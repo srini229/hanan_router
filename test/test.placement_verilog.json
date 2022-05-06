@@ -24,17 +24,17 @@
             { "actual": "X", "formal": "A" },
             { "actual": "Y", "formal": "B" }
           ],
-          "instance_name": "A_0",
+          "instance_name": "I_0",
           "transformation": { "oX": 0, "oY": 0, "sX": 1, "sY": 1 }
         },
         {
           "abstract_template_name": "BLOCK_A",
           "concrete_template_name": "BLOCK_A",
           "fa_map": [
-            { "actual": "X", "formal": "A" },
-            { "actual": "Y", "formal": "B" }
+            { "actual": "X", "formal": "B" },
+            { "actual": "Y", "formal": "X" }
           ],
-          "instance_name": "A_1",
+          "instance_name": "I_1",
           "transformation": { "oX": 900, "oY": 800, "sX": 1, "sY": 1 }
         }
       ],
@@ -55,7 +55,7 @@
             { "actual": "C", "formal": "X" },
             { "actual": "D", "formal": "Y" }
           ],
-          "instance_name": "X_0",
+          "instance_name": "J_0",
           "transformation": { "oX": 0, "oY": 0, "sX": 1, "sY": 1 }
         },
         {
@@ -65,7 +65,7 @@
             { "actual": "C", "formal": "X" },
             { "actual": "D", "formal": "Y" }
           ],
-          "instance_name": "X_1",
+          "instance_name": "J_1",
           "transformation": { "oX": 2000, "oY": 0, "sX": 1, "sY": 1 }
         }
       ],

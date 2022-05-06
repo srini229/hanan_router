@@ -143,6 +143,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
   bool inMacro{false}, inPin{false}, inObs{false}, inPort{false}, inUnits{false};
   Module* curr_module{nullptr};
   Pin* curr_pin{nullptr};
+  Port* curr_port{nullptr};
   std::string macroName, pinName;
   int layer{-1};
   double macroUnits{1.};
@@ -170,6 +171,8 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
       }
       if (inPort) {
         inPort = false;
+        if (curr_port) curr_pin->addPort(curr_port);
+        curr_port = nullptr;
       } else if (inPin) {
         if (line.find(pinName) != npos) {
           inPin = false;
@@ -207,6 +210,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     }
     if (inPin && curr_pin && line.find("PORT") != npos) {
       inPort = true;
+      curr_port = new Port();
       layer = -1;
       continue;
     }
@@ -214,7 +218,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
       inObs = true;
       continue;
     }
-    if (inPort && curr_pin) {
+    if (inPort && curr_port) {
       if (line.find("LAYER") != npos) {
         ss >> str >> str;
         layer = lf.getLayerIndex(str);
@@ -223,8 +227,8 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
       if (line.find("RECT") != npos) {
         double llx{0}, lly{0}, urx{0}, ury{0};
         ss >> str >> llx >> lly >> urx >> ury;
-        if (layer > 0) {
-          curr_pin->addRect(layer, Geom::Rect(llx * units, lly * units, urx * units, ury * units));
+        if (layer >= 0) {
+          curr_port->addRect(layer, Geom::Rect(llx * units, lly * units, urx * units, ury * units));
         }
         continue;
       }

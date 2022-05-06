@@ -13,14 +13,15 @@ class Instance;
 typedef std::vector<Instance*> Instances;
 typedef std::map<std::string, Module*> Modules;
 
-class Pin {
+class Port {
   private:
     std::string _name;
     Geom::LayerRects _shapes;
     Geom::Rect _bbox;
   public:
-    Pin(const std::string& name = "") : _name{name}, _bbox{} {}
+    Port(const std::string& name = "") : _name{name}, _bbox{} {}
     const std::string& name() const { return _name; }
+    void setName(const std::string& name) { _name = name; }
     void addRect(const int layer, const Geom::Rect& r);
     const Geom::LayerRects& shapes() const { return _shapes; }
     const Geom::Rect& bbox() const { return _bbox; }
@@ -28,11 +29,46 @@ class Pin {
     {
       Geom::MergeLayerRects(_shapes, lr, &_bbox);
     }
+    Port* getTransformedPort(const Geom::Transform& tr) const;
     void print() const;
 };
+typedef std::vector<Port*> Ports;
+typedef std::vector<const Port*> PortCVec;
+typedef std::vector<std::pair<const Port*, const Port*>> PortPairs;
+
+class Pin {
+  private:
+    std::string _name;
+    Ports _ports;
+    Geom::Rect _bbox;
+  public:
+    Pin(const std::string& name = "") : _name{name}, _bbox{} {}
+    const std::string& name() const { return _name; }
+    const Geom::Rect& bbox() const { return _bbox; }
+    void print() const;
+    void addPort(Port* p) 
+    {
+      if (p != nullptr)  {
+        p->setName(_name + "_" + std::to_string(_ports.size()));
+        _ports.push_back(p);
+        _bbox.merge(p->bbox());
+      }
+    }
+    void clearPorts() { for (auto& p : _ports) delete p; _ports.clear(); }
+    ~Pin() { clearPorts(); }
+    const Ports& ports() const { return _ports; }
+    void copyRects(const Geom::LayerRects& lr)
+    {
+      Port *port;
+      if (_ports.empty()) {
+        addPort(new Port());
+      }
+      port = _ports[0];
+      port->copyRects(lr);
+    }
+};
 typedef std::map<std::string, Pin*> Pins;
-typedef std::vector<const Pin*> PinCVec;
-typedef std::vector<std::pair<const Pin*, const Pin*>> PinPairs;
+
 class Net {
   private:
     std::string _name;
@@ -42,7 +78,7 @@ class Net {
     Geom::Rect _bbox;
     int _unroute : 1;
     int _exclude : 1;
-    PinPairs reorderPins() const;
+    PortPairs reorderPorts() const;
     std::map<int, int> _ndrwidths, _ndrspaces;
     std::map<int, DRC::Direction> _ndrdirs;
     std::set<int> _preflayers;
@@ -58,10 +94,12 @@ class Net {
     const bool open() const { return _unroute ? true : false; }
     void update()
     {
-      for (auto& p : _pins) {
-        for (auto& l : p->shapes()) {
-          for (auto& s : l.second) {
-            _bbox.merge(Geom::Rect(s.xcenter(), s.ycenter(), s.xcenter(), s.ycenter()));
+      for (auto& pin : _pins) {
+        for (auto& p : pin->ports()) {
+          for (auto& l : p->shapes()) {
+            for (auto& s : l.second) {
+              _bbox.merge(Geom::Rect(s.xcenter(), s.ycenter(), s.xcenter(), s.ycenter()));
+            }
           }
         }
       }

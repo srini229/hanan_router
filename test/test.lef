@@ -12,6 +12,10 @@ MACRO BLOCK_A
       LAYER M1 ;
         RECT 0 0 32 72 ;
     END
+    PORT
+      LAYER M3 ;
+        RECT 0 0 32 72 ;
+    END
   END A
   PIN B
     DIRECTION INOUT ;
