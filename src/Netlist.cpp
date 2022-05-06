@@ -262,37 +262,45 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
       auto it = m.find("module");
       if (it != m.end()) {
         auto modit = _modules.find(*it);
-        it = m.find("nets");
-        if (modit != _modules.end() && it != m.end()) {
-          for (auto& netiter : *it) {
-            auto itnetname = netiter.find("name");
-            const std::string wsd[] = {"widths", "spaces", "directions", "preferred_layers"};
-            for (auto iwsd : {0, 1, 2, 3}) {
-              auto itwsd = netiter.find(wsd[iwsd]);
-              if (itnetname != netiter.end() && itwsd != netiter.end()) {
-                if (iwsd < 3) {
-                  for (auto& el : (*itwsd).items()) {
-                    auto layer = lf.getLayerIndex(el.key());
-                    COUT << "ndr : " << wsd[iwsd] << ' ' << el.key() << ' ' << el.value() << '\n';
-                    if (layer >= 0) {
-                      switch (iwsd) {
-                        default:
-                        case 0: modit->second->addNDRWidth(*itnetname, layer, el.value());
-                                break;
-                        case 1: modit->second->addNDRSpace(*itnetname, layer, el.value());
-                                break;
-                        case 2: modit->second->addNDRDir(*itnetname, layer, el.value());
-                                break;
+        if (modit != _modules.end()) {
+          it = m.find("nets");
+          if (it != m.end()) {
+            for (auto& netiter : *it) {
+              auto itnetname = netiter.find("name");
+              const std::string wsd[] = {"widths", "spaces", "directions", "preferred_layers"};
+              for (auto iwsd : {0, 1, 2, 3}) {
+                auto itwsd = netiter.find(wsd[iwsd]);
+                if (itnetname != netiter.end() && itwsd != netiter.end()) {
+                  if (iwsd < 3) {
+                    for (auto& el : (*itwsd).items()) {
+                      auto layer = lf.getLayerIndex(el.key());
+                      COUT << "ndr : " << wsd[iwsd] << ' ' << el.key() << ' ' << el.value() << '\n';
+                      if (layer >= 0) {
+                        switch (iwsd) {
+                          default:
+                          case 0: modit->second->addNDRWidth(*itnetname, layer, el.value());
+                                  break;
+                          case 1: modit->second->addNDRSpace(*itnetname, layer, el.value());
+                                  break;
+                          case 2: modit->second->addNDRDir(*itnetname, layer, el.value());
+                                  break;
+                        }
                       }
                     }
-                  }
-                } else {
-                  for (auto& el : (*itwsd)) {
-                    auto layer = lf.getLayerIndex(el);
-                    modit->second->addPrefLayer(*itnetname, layer);
+                  } else {
+                    for (auto& el : (*itwsd)) {
+                      auto layer = lf.getLayerIndex(el);
+                      modit->second->addPrefLayer(*itnetname, layer);
+                    }
                   }
                 }
               }
+            }
+          }
+          it = m.find("do_not_route");
+          if (it != m.end()) {
+            for (auto& netiter : *it) {
+              modit->second->excludeNet(netiter);
             }
           }
         }

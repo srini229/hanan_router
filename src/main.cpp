@@ -19,16 +19,15 @@ int main(int argc, char* argv[])
   std::string leffile = parseArgs(argc, argv, "-l");
   const bool route = checkArg(argc, argv, "-r");
   const bool uuflayer = checkArg(argc, argv, "-s");
+  std::string ndrfile = parseArgs(argc, argv, "-ndr");
 
   int uu{2000};
   try {
     uu = std::stoi(parseArgs(argc, argv, "-uu"));
   } catch (const std::invalid_argument& ia) {}
   COUT << "Using options : -d " << layerJSONFile << " -p " << plfile << " -l " << leffile;
-  COUT << (route ? " -r " : "") << (uuflayer  ? " -s " : "") << " -uu " << uu << std::endl;
-
-  std::string ndrfile = parseArgs(argc, argv, "-ndr");
-
+  COUT << (route ? " -r " : "") << (uuflayer  ? " -s " : "") << " -uu " << uu;
+  COUT << (!ndrfile.empty() ? (" -ndr " + ndrfile) : "") << std::endl;
 
   DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 1));
   if (!linfo.populated())  {
