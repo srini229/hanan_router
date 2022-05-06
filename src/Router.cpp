@@ -4,6 +4,7 @@ namespace Router {
 #if DEBUG
 size_t Node::_nodectr = 0;
 #endif
+#define NUM_POINTS 100
 
 Via::Via(const Via& via, const Geom::Point& p) : _l{via._l}, _u{via._u}, _c{via._c}
 {
@@ -211,7 +212,7 @@ void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::s
   }
 }
 
-Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{100}, _maxLayer{0}, _maxRoutingLayer{0}, _name{}, _lf{lf}
+Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT_MAX}, _maxLayer{0}, _maxRoutingLayer{0}, _name{}, _lf{lf}
 {
   auto& layers = lf.layers();
   _widthx.reserve(layers.size());
@@ -315,7 +316,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           padbox = _dnVias[z][0]->lpad();
         }
         if (vert) {
-          int space = spacey(adj) + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1));
+          int space = std::max(spacey(adj) + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1)), r.height()/NUM_POINTS);
           //if (padbox.valid()) {
           //  space = std::max(space, padbox.width());
           //}
@@ -326,7 +327,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }
         }
         if (hor) {
-          int space = spacex(adj) + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1));
+          int space = std::max(spacex(adj) + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1)), r.width()/NUM_POINTS);
           //if (padbox.valid()) {
           //  space = std::max(space, padbox.height());
           //}
@@ -346,7 +347,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       COUT << "we : " << width << '\n';
 #endif
       if (width < r.height()) {
-        int space = spacex(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1));
+        int space = std::max(spacex(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1)), r.height()/NUM_POINTS);
         /* for (auto right : {true, false}) {
           int x = (right ? r.xmax() : r.xmin());
           int yn = y;
@@ -389,7 +390,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       COUT << "wn : " << width << '\n';
 #endif
       if (width < r.width()) {
-        int space = spacey(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1));
+        int space = std::max(spacey(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1)), r.width() / NUM_POINTS);
         /*int xn = x;
           while (xn < r.xmax()) {
           points.insert(std::make_pair(Geom::Point(xn,y), width));
@@ -460,7 +461,7 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
   }
   if (!inserted) shapes[z].insert(r);
 #if DEBUG
-  COUT << "shape : " << r.str() << '\n';
+  COUT << "shape : " << r.str() << " z : " << z << '\n';
 #endif
   for (auto dir : {UP, DOWN, EAST, NORTH}) {
     auto points = findValidPoints(r, z, dir);
