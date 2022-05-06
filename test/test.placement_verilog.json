@@ -13,9 +13,9 @@
   ],
   "modules": [
     {
-      "abstract_name": "test",
+      "abstract_name": "test_inter",
       "bbox": [ 0, 0, 1000, 1000 ],
-      "concrete_name": "test_0",
+      "concrete_name": "test_inter_0",
       "instances": [
         {
           "abstract_template_name": "BLOCK_A",
@@ -41,6 +41,37 @@
       "parameters": [
         "X",
         "Y"
+      ]
+    },
+    {
+      "abstract_name": "test",
+      "bbox": [ 0, 0, 1000, 1000 ],
+      "concrete_name": "test_0",
+      "instances": [
+        {
+          "abstract_template_name": "test_inter",
+          "concrete_template_name": "test_inter_0",
+          "fa_map": [
+            { "actual": "C", "formal": "X" },
+            { "actual": "D", "formal": "Y" }
+          ],
+          "instance_name": "X_0",
+          "transformation": { "oX": 0, "oY": 0, "sX": 1, "sY": 1 }
+        },
+        {
+          "abstract_template_name": "test_inter",
+          "concrete_template_name": "test_inter_0",
+          "fa_map": [
+            { "actual": "C", "formal": "X" },
+            { "actual": "D", "formal": "Y" }
+          ],
+          "instance_name": "X_1",
+          "transformation": { "oX": 2000, "oY": 0, "sX": 1, "sY": 1 }
+        }
+      ],
+      "parameters": [
+        "C",
+        "D"
       ]
     }
   ]

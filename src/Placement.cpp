@@ -158,12 +158,12 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   SaveRestoreStream src(_name + "_route.log");
 #endif
   _unroute = 0;
+  for (auto& p : _pins) {
+    Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
+  }
   if (_exclude) {
     COUT << "excluding net : " << _name << " from routing\n";
     return;
-  }
-  for (auto& p : _pins) {
-    Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
   }
   if (_pins.size() > 1) {
     COUT << "routing net : " << _name << ' ' << halfpm() << '\n';
