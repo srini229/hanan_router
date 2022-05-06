@@ -307,6 +307,16 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
               modit->second->excludeNet(netiter);
             }
           }
+          it = m.find("clock_nets");
+          if (it != m.end()) {
+            for (auto& netiter : *it) {
+              auto itnetname = netiter.find("name");
+              auto itdriver = netiter.find("driver");
+              if (itnetname != netiter.end() && itdriver != netiter.end()) {
+                modit->second->setClockDriver(*itnetname, *itdriver);
+              }
+            }
+          }
         }
       }
     }

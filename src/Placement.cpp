@@ -199,8 +199,33 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
     }*/
-    auto PortPairs = reorderPorts();
-    for (auto& pp : PortPairs) {
+    PortPairs portpairs;
+    if (!_driver.empty()) {
+      COUT << "clock net : " << _name << " with driver : " << _driver << '\n';
+      const Pin* driver {nullptr};
+      for (auto& p : _pins) {
+        if (p->name() == _driver) {
+          driver = p;
+          break;
+        }
+      }
+      if (driver != nullptr && !driver->ports().empty()) {
+        for (unsigned j = 1; j < driver->ports().size(); ++j) {
+          portpairs.push_back(std::make_pair(driver->ports()[0], driver->ports()[j]));
+        }
+        for (auto& p : _pins) {
+          if (p == driver) continue;
+          else {
+            for (auto& port : p->ports()) {
+              portpairs.push_back(std::make_pair(driver->ports()[0], port));
+            }
+          }
+        }
+      }
+    } else {
+      portpairs = reorderPorts();
+    }
+    for (auto& pp : portpairs) {
       const auto& port1 = pp.first;
       const auto& port2 = pp.second;
       router.clearSourceTargets();

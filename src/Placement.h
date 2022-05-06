@@ -82,8 +82,9 @@ class Net {
     std::map<int, int> _ndrwidths, _ndrspaces;
     std::map<int, DRC::Direction> _ndrdirs;
     std::set<int> _preflayers;
+    std::string _driver;
   public:
-    Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0} {}
+    Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0}, _driver{} {}
     const std::set<const Pin*>& pins() const { return _pins; }
     void addPin(const Pin* p) { _pins.insert(p); }
     void print() const;
@@ -115,6 +116,7 @@ class Net {
     }
     void addPrefLayer(const int layer) { _preflayers.insert(layer); }
     void exclude() { _exclude = 1; }
+    void setClockDriver(const std::string& driver) { _driver = driver; }
 };
 typedef std::map<std::string, Net> Nets;
 typedef std::vector<Net*> NetsVec;
@@ -252,6 +254,12 @@ class Module {
     {
       auto it = _nets.find(net);
       if (it != _nets.end()) it->second.exclude();
+    }
+
+    void setClockDriver(const std::string& net, const std::string& driver)
+    {
+      auto it = _nets.find(net);
+      if (it != _nets.end()) it->second.setClockDriver(driver);
     }
 
     void print() const;
