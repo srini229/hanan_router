@@ -47,8 +47,6 @@ class Via {
       addShapes(lr);
       return lr;
     }
-
-
 };
 typedef std::vector<std::shared_ptr<Via>> Vias;
 

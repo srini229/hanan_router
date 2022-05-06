@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
   const bool route = checkArg(argc, argv, "-r");
   const bool uuflayer = checkArg(argc, argv, "-s");
 
-  int uu{1000};
+  int uu{2000};
   try {
     uu = std::stoi(parseArgs(argc, argv, "-uu"));
   } catch (const std::invalid_argument& ia) {}
