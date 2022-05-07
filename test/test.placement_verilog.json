@@ -32,7 +32,7 @@
           "concrete_template_name": "BLOCK_A",
           "fa_map": [
             { "actual": "X", "formal": "B" },
-            { "actual": "Y", "formal": "X" }
+            { "actual": "Y", "formal": "A" }
           ],
           "instance_name": "I_1",
           "transformation": { "oX": 900, "oY": 800, "sX": 1, "sY": 1 }

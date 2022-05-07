@@ -34,7 +34,8 @@ class Port {
 };
 typedef std::vector<Port*> Ports;
 typedef std::vector<const Port*> PortCVec;
-typedef std::vector<std::pair<const Port*, const Port*>> PortPairs;
+typedef std::pair<const Port*, const Port*> PortPair;
+typedef std::vector<PortPair> PortPairs;
 
 class Pin {
   private:
@@ -57,13 +58,13 @@ class Pin {
     void clearPorts() { for (auto& p : _ports) delete p; _ports.clear(); }
     ~Pin() { clearPorts(); }
     const Ports& ports() const { return _ports; }
-    void copyRects(const Geom::LayerRects& lr)
+    void copyRects(const Geom::LayerRects& lr, bool newport = false)
     {
       Port *port;
-      if (_ports.empty()) {
+      if (_ports.empty() || newport) {
         addPort(new Port());
       }
-      port = _ports[0];
+      port = _ports.back();
       port->copyRects(lr);
     }
 };
@@ -79,6 +80,7 @@ class Net {
     int _unroute : 1;
     int _exclude : 1;
     PortPairs reorderPorts() const;
+    PortPairs clockRouteOrder() const;
     std::map<int, int> _ndrwidths, _ndrspaces;
     std::map<int, DRC::Direction> _ndrdirs;
     std::set<int> _preflayers;
@@ -116,6 +118,7 @@ class Net {
     }
     void addPrefLayer(const int layer) { _preflayers.insert(layer); }
     void exclude() { _exclude = 1; }
+    bool excluded() const { return _exclude ? true : false; }
     void setClockDriver(const std::string& driver) { _driver = driver; }
 };
 typedef std::map<std::string, Net> Nets;

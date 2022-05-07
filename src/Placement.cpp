@@ -68,239 +68,6 @@ void Pin::print() const
   for (auto& p : _ports) p->print();
 }
 
-
-auto DBLMAX = std::numeric_limits<double>::max();
-inline void Net::print() const
-{
-  COUT << "pins :";
-  for (const auto& p : _pins) {
-    std::cout << " " << p->name();
-  }
-  if (!_ndrwidths.empty()) {
-    COUT << " ndr :";
-    for (const auto& lw : _ndrwidths) {
-      COUT << "(layer : " << lw.first << " width : " << lw.second << ") ";
-    }
-  }
-}
-
-PortPairs Net::reorderPorts() const
-{
-  PortCVec ports;
-  for (auto& p : _pins) {
-    ports.insert(ports.end(), p->ports().begin(), p->ports().end());
-  }
-  PortPairs porder;
-  if (ports.empty()) return porder;
-  std::sort(ports.begin(), ports.end(),
-      [](const Port* p1, const Port* p2) -> bool { return p1->bbox().halfpm() > p2->bbox().halfpm(); });
-  std::vector<std::vector<double>> pinpairdist(ports.size(), std::vector<double>(ports.size(), 0));
-  double mindist{DBLMAX};
-  int idx1{-1}, idx2{-1};
-  Geom::Rect netbbox;
-  for (auto& p : ports) {
-    netbbox.merge(p->bbox());
-  }
-  double nethpwl{(netbbox.width() + netbbox.height())/2.};
-  for (unsigned i = 0; i < ports.size(); ++i) {
-    auto& p1 = ports[i];
-    auto& s1 = p1->shapes();
-    for (unsigned j = i + 1; j < ports.size(); ++j) {
-      auto& p2 = ports[j];
-      double dist{1.e30};// = Geom::Dist(p1->bbox(), p2->bbox()) / nethpwl;
-      auto& s2 = p2->shapes();
-      for (auto& l1 : s1) {
-        for (auto& r1 : l1.second) {
-          for (auto& l2 : s2) {
-            for (auto& r2 : l2.second) {
-              dist = std::min(Geom::Dist(r1, r2)/nethpwl + std::abs(l1.first - l2.first) * 0.1, dist);
-            }
-          }
-        }
-      }
-      /*for (auto& l1 : s1) {
-        auto its2 = s2.find(l1.first);
-        if (its2 != s2.end()) {
-          for (auto& r1 : l.second) {
-            for (auto& r2 : its2->second) {
-              dist = std::min(Geom::Dist(r1, r2)/nethpwl, dist);
-            }
-          }
-        }
-      }*/
-      pinpairdist[i][j] = dist;
-      pinpairdist[j][i] = dist;
-      COUT << "ports dist : " << ports[i]->name() << ' ' << ports[j]->name() << ' ' << dist << '\n';
-      if (mindist > dist) {
-        mindist = dist;
-        idx1 = static_cast<int>(i);
-        idx2 = static_cast<int>(j);
-      }
-    }
-  }
-  std::vector<std::pair<int, int>> primorder;
-  primorder.reserve(ports.size() - 1);
-  primorder.push_back(std::make_pair(idx1, idx2));
-  COUT << "ports to route order : " << ports[idx1]->name() << ' ' << ports[idx2]->name() << '\n';
-  std::vector<int> selected(ports.size(), 0);
-  selected[idx1] = 1;
-  selected[idx2] = 1;
-  while (primorder.size() < ports.size() - 1) {
-    double mindist{DBLMAX};
-    int minidx2 = -1, minidx1 = -1;
-    for (int i = 0; i < static_cast<int>(ports.size()); ++i) {
-      if (!selected[i]) continue;
-      for (int j = 0; j < static_cast<int>(ports.size()); ++j) {
-        if (!selected[j] && pinpairdist[i][j] < mindist) {
-          mindist = pinpairdist[i][j];
-          minidx1 = i;
-          minidx2 = j;
-        }
-      }
-    }
-    if (minidx2 >= 0) {
-      primorder.push_back(std::make_pair(minidx1, minidx2));
-      COUT << "ports to route order : " << ports[minidx1]->name() << ' ' << ports[minidx2]->name() << '\n';
-      selected[minidx2] = 1;
-    }
-  }
-
-  std::sort(primorder.begin(), primorder.end(), [pinpairdist](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool
-      { return pinpairdist[a.first][a.second] < pinpairdist[b.first][b.second]; });
-
-  
-  for (auto& pp : primorder) porder.emplace_back(ports[pp.first], ports[pp.second]);
-
-  return porder;
-}
-
-void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update)
-{
-  //TIME_M();
-#if DEBUG
-  SaveRestoreStream src(_name + "_route.log");
-#endif
-  _unroute = 0;
-  for (auto& pin : _pins) {
-    for (auto& p : pin->ports()) {
-      Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
-    }
-  }
-  if (_exclude) {
-    COUT << "excluding net : " << _name << " from routing\n";
-    return;
-  }
-  if (_pins.size() > 1) {
-    COUT << "routing net : " << _name << ' ' << halfpm() << '\n';
-    /*for (int i : {0, 1}) {
-      for (auto& l : (i ? l1 : l2)) {
-        for (auto& o : l.second) {
-          COUT << "obs : " << l.first << ' ' << o.str() << '\n';
-        }
-      }
-    }*/
-    PortPairs portpairs;
-    if (!_driver.empty()) {
-      COUT << "clock net : " << _name << " with driver : " << _driver << '\n';
-      const Pin* driver {nullptr};
-      for (auto& p : _pins) {
-        if (p->name() == _driver) {
-          driver = p;
-          break;
-        }
-      }
-      if (driver != nullptr && !driver->ports().empty()) {
-        for (unsigned j = 1; j < driver->ports().size(); ++j) {
-          portpairs.push_back(std::make_pair(driver->ports()[0], driver->ports()[j]));
-        }
-        for (auto& p : _pins) {
-          if (p == driver) continue;
-          else {
-            for (auto& port : p->ports()) {
-              portpairs.push_back(std::make_pair(driver->ports()[0], port));
-            }
-          }
-        }
-      }
-    } else {
-      portpairs = reorderPorts();
-    }
-    for (auto& pp : portpairs) {
-      const auto& port1 = pp.first;
-      const auto& port2 = pp.second;
-      router.clearSourceTargets();
-      COUT << "routing pins : " << port1->name() << ' ' << port2->name() << '\n';
-      router.setName(_name + "__" + port1->name() + "__" + port2->name());
-      const auto& p1 = port1->shapes();
-      const auto& p2 = port2->shapes();
-      for (auto src : {true, false}) {
-        for (auto& l : (src ? p1 : p2)) {
-          if (l.first > router.maxLayer() || l.first < router.minLayer()) continue;
-          for (auto& s : l.second) {
-            if (src) {
-              router.addSourceShapes(s, l.first);
-            } else {
-              router.addTargetShapes(s, l.first);
-            }
-          }
-        }
-      }
-      router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers);
-#if DEBUG
-      COUT << "adding line of sight nodes if they exist\n";
-#endif
-      for (auto& l : p1) {
-        auto it = p2.find(l.first);
-        if (it != p2.end()) {
-          for (auto& s1 : l.second) {
-            for (auto& s2 : it->second) {
-              if (s1.xmin() < s2.xmax() && s1.xmax() > s2.xmin()) {
-                int xmin(std::max(s1.xmin(), s2.xmin())), xmax(std::min(s1.xmax(), s2.xmax()));
-                if (xmax - xmin >= router.widthy(l.first)) {
-                  router.addSource(Geom::Rect(xmin, s1.ymin(), xmax, s1.ymax()), l.first);
-                  router.addTarget(Geom::Rect(xmin, s2.ymin(), xmax, s2.ymax()), l.first);
-                }
-              } else if (s1.ymin() < s2.ymax() && s1.ymax() > s2.ymin()) {
-                int ymin(std::max(s1.ymin(), s2.ymin())), ymax(std::min(s1.ymax(), s2.ymax()));
-                if (ymax - ymin >= router.widthx(l.first)) {
-                  router.addSource(Geom::Rect(s1.xmin(), ymin, s1.xmax(), ymax), l.first);
-                  router.addTarget(Geom::Rect(s2.xmin(), ymin, s2.xmax(), ymax), l.first);
-                }
-              }
-            }
-          }
-        }
-      }
-      router.addObstacles(l1, true);
-      router.addObstacles(l2, true);
-      router.addObstacles(l3, true);
-      auto sol = router.findSol();
-      if (!sol.empty()) {
-#if DEBUG
-        for (auto& l : sol) {
-          for (auto& s : l.second) {
-            COUT << "sol : " << l.first << ' ' << s.str() << ' ' << s.width() << ' ' << s.height() << '\n';
-          }
-        }
-#endif
-        Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
-      } else {
-        _unroute = 1;
-      }
-      //port1->print();
-      std::cout << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;
-      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), sol, &_bbox);
-      //port1->print();
-      //port2->print();
-      std::cout << "Adding routes to " << port2->name() << ' ' << sol.size() << std::endl;
-      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), sol, &_bbox);
-      //port2->print();
-      router.clearObstacles(true);
-    }
-  }
-}
-
-
 Module::~Module()
 {
   for (auto& p : _pins) delete p.second;
@@ -308,7 +75,6 @@ Module::~Module()
   _pins.clear();
   _instances.clear();
 }
-
 
 void Module::print() const
 {
@@ -413,13 +179,23 @@ void Module::route(Router::Router& router)
       if (itn != _nets.end()) {
         _addednets.insert(itn->first);
         //std::cout << "DEBUG found net : " << itn->second.name() << ' ' << itn->second.routeShapes().size() << '\n';
-        p.second->copyRects(itn->second.routeShapes());
+        if (!itn->second.excluded()) p.second->copyRects(itn->second.routeShapes());
+        else {
+          COUT << "excluded : " << itn->second.name() << "\n";
+          for (auto& pin : itn->second.pins()) {
+            COUT << "pin : " << pin->name() << '\n';
+            for (auto& port : pin->ports()) {
+              COUT << "port : " << port->name() << '\n';
+              p.second->copyRects(port->shapes(), true);
+            }
+          }
+        }
       }
     }
     writeDEF();
     for (auto& n : _nets) {
       if (_addednets.find(n.first) == _addednets.end()) {
-        std::cout << "unadded net : " << n.first << '\n';
+        //std::cout << "unadded net : " << n.first << '\n';
         Geom::MergeLayerRects(_internalroutes, n.second.routeShapes());
       }
     }
@@ -430,7 +206,6 @@ void Module::route(Router::Router& router)
   _routed = 1;
   checkShort();
 }
-
 
 void Module::plot() const
 {
@@ -526,7 +301,6 @@ void Module::plot() const
   }
   ofs.close();
 }
-
 
 void Module::checkShort() const
 {
@@ -682,61 +456,4 @@ void Module::writeLEF() const
   }
 }
 
-
-Instance::~Instance()
-{
-  for (auto& p : _pins) delete p.second;
-  _pins.clear();
-}
-
-
-void Instance::build(const bool rebuild)
-{
-  if (_m) {
-    for (auto& p : _m->pins()) {
-      Pin* ip{nullptr};
-      if (rebuild) {
-        auto it = _pins.find(p.second->name());
-        if (it != _pins.end()) {
-          ip = it->second;
-          ip->clearPorts();
-        }
-      } else {
-        ip = new Pin(_name + "+" + p.second->name());
-        _pins[p.second->name()] = ip;
-      }
-      if (!ip) continue;
-      for (auto& port : p.second->ports()) {
-        ip->addPort(port->getTransformedPort(_tr));
-      }
-    }
-    _bbox = _tr.transform(_m->bbox());
-  }
-}
-
-
-void Instance::print(const std::string& prefix) const
-{
-  COUT << prefix << "name : " << _name << " module : " << _modname << '\n';
-  COUT << prefix << "\ttr : " << _tr.str() << '\n';
-  for (const auto& p : _pins) {
-    COUT << prefix << "\tpin : " << p.first << '\n';
-    for (const auto& port : p.second->ports()) {
-      COUT << prefix << "\tport : " << port->name() << '\n';
-      for (const auto& l : port->shapes()) {
-        COUT << prefix << "\t\t\tlayer : " << l.first << '\n';
-        for (const auto& r : l.second) {
-          COUT << prefix << "\t\t\t\t" << r.str() << '\n';
-        }
-      }
-    }
-  }
-}
-
-
-void Instance::setModule(const Module* m)
-{
-  _m = m;
-  _bbox = _tr.transform(m->bbox());
-}
 }
