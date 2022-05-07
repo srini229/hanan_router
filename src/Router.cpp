@@ -4,7 +4,7 @@ namespace Router {
 #if DEBUG
 size_t Node::_nodectr = 0;
 #endif
-#define NUM_POINTS 100
+#define NUM_POINTS 25
 
 Via::Via(const Via& via, const Geom::Point& p) : _l{via._l}, _u{via._u}, _c{via._c}
 {

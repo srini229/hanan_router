@@ -197,8 +197,8 @@ if args.deff:
                     layer = s[index + 1]
                     rect = [float(s[index + 3])/sca, float(s[index + 4])/sca, float(s[index + 7])/sca, float(s[index + 8])/sca]
                     l = layers[layer]
-                    print(rect)
                     if args.top_cell in modules:
+                        print(rect)
                         modules[args.top_cell]._cell.add(gdspy.Rectangle((rect[0], rect[1]), (rect[2], rect[3]), layer=l[0], datatype=l[1]))
             
 
