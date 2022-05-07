@@ -564,20 +564,24 @@ void Router::setexpand(Node* newn, const Node* parent) const
     }
     if (newn->z() < parent->z() || newn->z() >= _maxLayer || newn->z() <_minLayer) newn->expand(UP, false);
     else {
-      auto v = isViaValid(newn, true);
-      if (v) {
-        newn->upVia(v);
-      } else {
-        newn->expand(UP, false);
+      if (newn->upVia() == nullptr) {
+        auto v = isViaValid(newn, true);
+        if (v) {
+          newn->upVia(v);
+        } else {
+          newn->expand(UP, false);
+        }
       }
     }
     if (newn->z() > parent->z() || newn->z() <= _minLayer || newn->z() > _maxLayer) newn->expand(DOWN, false);
     else {
-      auto v = isViaValid(newn, false);
-      if (v) {
-        newn->dnVia(v);
-      } else {
-        newn->expand(DOWN, false);
+      if (newn->dnVia() == nullptr) {
+        auto v = isViaValid(newn, false);
+        if (v) {
+          newn->dnVia(v);
+        } else {
+          newn->expand(DOWN, false);
+        }
       }
     }
   } else {
@@ -1596,6 +1600,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
               if (via == nullptr) break;
             }
           }
+          if (via != nullptr) break;
         }
       }
     }
@@ -1638,6 +1643,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
               if (via == nullptr) break;
             }
           }
+          if (via != nullptr) break;
         }
       }
     }
