@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
   const bool route = checkArg(argc, argv, "-r");
   const bool uuflayer = checkArg(argc, argv, "-s");
   std::string ndrfile = parseArgs(argc, argv, "-ndr");
-  SEPARATOR = parseArgs(argc, argv, "-sep", "+");
+  SEPARATOR = parseArgs(argc, argv, "-sep", SEPARATOR);
 
   int uu{2000};
   try {
