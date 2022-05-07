@@ -6,6 +6,6 @@
   },
   {
     "module": "test_0",
-    "clock_nets":[{"name":"D", "driver":"J_1+Y"}]
+    "clock_nets":[{"name":"D", "driver":"J_1/Y"}]
   }
 ]

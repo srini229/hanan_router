@@ -44,7 +44,7 @@ int main(int argc, char* argv[])
       netlist.writeDEF();
     }
     netlist.print();
-    netlist.plot();
+    //netlist.plot();
     netlist.checkShort();
   }
 
