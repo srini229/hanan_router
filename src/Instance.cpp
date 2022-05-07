@@ -23,7 +23,7 @@ void Instance::build(const bool rebuild)
           ip->clearPorts();
         }
       } else {
-        ip = new Pin(_name + "+" + p.second->name());
+        ip = new Pin(_name + SEPARATOR + p.second->name());
         _pins[p.second->name()] = ip;
       }
       if (!ip) continue;

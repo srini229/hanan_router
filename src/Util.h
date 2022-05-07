@@ -68,5 +68,6 @@ std::string parseArgs(const int argc, char* const argv[], const std::string& arg
 bool checkArg(const int argc, char* const argv[], const std::string& arg);
 
 extern std::vector<std::string> LAYER_NAMES;
+extern std::string SEPARATOR;
 
 #endif
