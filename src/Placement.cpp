@@ -452,7 +452,7 @@ void Module::writeLEF() const
       }
       ofs << "    END\n";
     }
-    ofs << "END " << _name << "\nEND LIBRARY\n";
+    ofs << "END " << _name << "\n";
   }
 }
 

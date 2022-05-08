@@ -135,7 +135,7 @@ PortPairs Net::clockRouteOrder() const
   }
   std::sort(porder.begin(), porder.end(),
       [](const PortPair& p1, const PortPair& p2) -> bool
-      { return Geom::Dist(p1.first->bbox(), p1.second->bbox()) < Geom::Dist(p1.first->bbox(), p1.second->bbox()); }
+      { return Geom::Dist(p1.first->bbox(), p1.second->bbox()) > Geom::Dist(p1.first->bbox(), p1.second->bbox()); }
       );
   for (auto& p : porder) {
     COUT << "ports to route order : " << p.first->name() << ' ' << p.second->name() << ' ' << Geom::Dist(p.first->bbox(), p.second->bbox()) << '\n';

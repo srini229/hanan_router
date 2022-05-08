@@ -21,6 +21,10 @@ int main(int argc, char* argv[])
   const bool uuflayer = checkArg(argc, argv, "-s");
   std::string ndrfile = parseArgs(argc, argv, "-ndr");
   SEPARATOR = parseArgs(argc, argv, "-sep", SEPARATOR);
+  std::string interlefdir = parseArgs(argc, argv, "-uil");
+  if (!interlefdir.empty() && interlefdir.back() != '/') {
+    interlefdir += '/';
+  }
 
   int uu{2000};
   try {
@@ -37,7 +41,7 @@ int main(int argc, char* argv[])
   }
   Router::Router hrdb{linfo};
   if (!plfile.empty() && !leffile.empty()) {
-    Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile);
+    Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile, interlefdir);
     if (route) {
       netlist.route(hrdb);
     } else {

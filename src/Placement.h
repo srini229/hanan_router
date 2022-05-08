@@ -156,7 +156,7 @@ class Instance {
 class Module {
   friend class Netlist;
   private:
-    std::string _name;
+    std::string _name, _absname;
     int _leaf : 1;
     int _routed : 1;
     Nets _nets;
@@ -170,7 +170,7 @@ class Module {
 
     void build();
   public:
-    Module(const std::string& name, const int leaf, const int uu) : _name(name), _leaf(leaf), _routed{leaf}, _bbox{}, _uu{uu} {_instances.reserve(64);}
+    Module(const std::string& name, const std::string& absname, const int leaf, const int uu) : _name(name), _absname{absname}, _leaf(leaf), _routed{leaf}, _bbox{}, _uu{uu} {_instances.reserve(64);}
     ~Module();
     Instance* addInstance(const std::string& name, const std::string& mname, const Geom::Transform& tr)
     {
@@ -178,6 +178,7 @@ class Module {
       return _instances.back();
     }
     bool routed() const { return (_routed ? true : false); }
+    const std::string& absname() const { return _absname; }
     const std::string& name() const { return _name; }
     const Instances& instances() const { return _instances; }
     Instances& instances() { return _instances; }
@@ -293,9 +294,10 @@ class Netlist {
     void build();
     void loadLEF(const std::string& leffile, const DRC::LayerInfo& lf);
     void readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf);
+    std::set<std::string> _loadedMacros;
 
   public:
-    Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile);
+    Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile, const std::string& ildir);
     ~Netlist();
     void print() const;
     void route(Router::Router& r)

@@ -8,7 +8,7 @@ using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
 const auto& npos = std::string::npos;
 
-Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile) : _uu(uu), _valid{1}
+Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile, const std::string& ildir) : _uu(uu), _valid{1}
 {
   if (plfile.empty()) {
     CERR<< "missing placement file" <<std::endl;
@@ -28,8 +28,9 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
     for (auto& l : *it) {
       auto lname = l.find("concrete_name");
       if (_modules.find(*lname) != _modules.end()) continue;
+      auto aname = l.find("abstract_name");
       if (lname != l.end()) {
-        auto modu = new Module(*lname, 1, _uu);
+        auto modu = new Module(*lname, (aname != l.end() ? *aname : *lname), 1, _uu);
         COUT << "adding leaf : " << *lname << '\n';
         auto terms = l.find("terminals");
         if (terms != l.end()) {
@@ -49,7 +50,8 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
       auto mname = m.find("concrete_name");
       if (mname != m.end()) {
         if (_modules.find(*mname) != _modules.end()) continue;
-        auto modu = new Module(*mname, 0, _uu);
+        auto aname = m.find("abstract_name");
+        auto modu = new Module(*mname, (aname != m.end() ? *aname : *mname), 0, _uu);
         auto params = m.find("parameters");
         if (params != m.end()) {
           for (auto& p : *params) {
@@ -90,7 +92,21 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
       }
     }
   }
+  if (!ildir.empty()) {
+    for (auto& it : _modules) {
+      std::string modlef{ildir + it.first + "_interim_hier.lef"};
+      std::ifstream ifs(modlef);
+      if (ifs.good()) {
+        ifs.close();
+        loadLEF(modlef, lf);
+        if (_loadedMacros.find(it.first) != _loadedMacros.end()) {
+          it.second->setRouted();
+        }
+      }
+    }
+  }
   loadLEF(leffile, lf);
+  _loadedMacros.clear();
   build();
   readNDR(ndrfile, lf);
 }
@@ -139,6 +155,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     _valid = 0;
     return;
   }
+  COUT << "Reading LEF file " << leffile << '\n';
   std::string line;
   bool inMacro{false}, inPin{false}, inObs{false}, inPort{false}, inUnits{false};
   Module* curr_module{nullptr};
@@ -154,10 +171,16 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     if (line.find("MACRO") != npos) {
       ss >> str >> macroName;
       COUT << "macro " << macroName << '\n';
+      if (_loadedMacros.find(macroName) != _loadedMacros.end()) {
+        while (std::getline(ifs, line)) {
+          if (line.find("END") != npos && line.find(macroName) != npos) break;
+        }
+      }
       auto it = _modules.find(macroName);
       if (it != _modules.end()) {
         curr_module =  it->second;
         COUT << "loading macro " << macroName << '\n';
+        _loadedMacros.insert(macroName);
       }
       inMacro = true;
       continue;

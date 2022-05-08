@@ -998,222 +998,221 @@ Geom::LayerRects Router::findSol()
   static std::string debugplot{getenv("HANAN_DEBUG_WIRE") ? getenv("HANAN_DEBUG_WIRE") : ""};
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
-    if (_targets.size() < _sources.size()) std::swap(_sources,_targets);
-    COUT << "num src : " << _sources.size() << " tgt : " << _targets.size() << std::endl;
-    for (auto& s : _sources) {
-      evalTCost(s);
-      if (!s->closed()) insertToPQ(s);
-      _bbox.merge(s->x(), s->y(), s->x(), s->y());
-#if DEBUG
-      COUT << "src : " << s->x() << ' ' << s->y() << ' ' << s->tcost() << ' ' << s->cost() << '\n';
-#endif
-    }
-    for (auto& t : _targets) {
-      _bbox.merge(t->x(), t->y(), t->x(), t->y());
-#if DEBUG
-      COUT << "tgt : " << t->x() << ' ' << t->y() << '\n';
-#endif
-    }
-    _bbox.bloat(100);
-
-    /*for (auto& l : _tobstacles) {
-      COUT << "layer before : " << l.first << '\n';
-      for (auto& o : l.second) {
-        COUT << "o : " << o.str() << '\n';
+    for (auto attempt : {0, 1}) {
+      if (_targets.size() < _sources.size()) std::swap(_sources,_targets);
+      if (attempt == 1) {
+        std::swap(_sources,_targets);
       }
-    }*/
-    Geom::MergeLayerRects(_tobstacles, _obstacles);
+      COUT << "num src : " << _sources.size() << " tgt : " << _targets.size() << std::endl;
+      for (auto& s : _sources) {
+        evalTCost(s);
+        if (!s->closed()) insertToPQ(s);
+        _bbox.merge(s->x(), s->y(), s->x(), s->y());
+#if DEBUG
+        COUT << "src : " << s->x() << ' ' << s->y() << ' ' << s->tcost() << ' ' << s->cost() << '\n';
+#endif
+      }
+      for (auto& t : _targets) {
+        _bbox.merge(t->x(), t->y(), t->x(), t->y());
+#if DEBUG
+        COUT << "tgt : " << t->x() << ' ' << t->y() << '\n';
+#endif
+      }
+      _bbox.bloat(100);
+
+      /*for (auto& l : _tobstacles) {
+        COUT << "layer before : " << l.first << '\n';
+        for (auto& o : l.second) {
+        COUT << "o : " << o.str() << '\n';
+        }
+        }*/
+      Geom::MergeLayerRects(_tobstacles, _obstacles);
 #if DEBUG
 #else
-    if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) 
+      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) 
 #endif
-      writeSTO();
-    /*for (auto& l : _tobstacles) {
-      COUT << "layer after : " << l.first << '\n';
-      for (auto& o : l.second) {
+        writeSTO();
+      /*for (auto& l : _tobstacles) {
+        COUT << "layer after : " << l.first << '\n';
+        for (auto& o : l.second) {
         COUT << "o : " << o.str() << '\n';
-      }
-    }*/
-    generateHananGrid();
+        }
+        }*/
+      generateHananGrid();
 #if DEBUG
 #else
-    if (!debugplot.empty() && (debugplot == "1" || debugplot == _name))
+      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name))
 #endif
-      writeLEF();
+        writeLEF();
 
 #if DEBUG
-    for (unsigned l = 0; l < _hanangridh.size(); ++l) {
-      COUT << "layerh : " << l << '\n';
-      for (auto& pos : _hanangridh[l]) {
-        COUT << "pos : " << pos.first << " : ";
-        for (auto& r : pos.second) {
-          std::cout << "[" << r.first << ',' << r.second << "] ";
+      for (unsigned l = 0; l < _hanangridh.size(); ++l) {
+        COUT << "layerh : " << l << '\n';
+        for (auto& pos : _hanangridh[l]) {
+          COUT << "pos : " << pos.first << " : ";
+          for (auto& r : pos.second) {
+            std::cout << "[" << r.first << ',' << r.second << "] ";
+          }
+          std::cout << '\n';
         }
-        std::cout << '\n';
       }
-    }
-    for (unsigned l = 0; l < _hanangridv.size(); ++l) {
-      COUT << "layerv : " << l << '\n';
-      for (auto& pos : _hanangridv[l]) {
-        COUT << "pos : " << pos.first << " : ";
-        for (auto& r : pos.second) {
-          std::cout << "[" << r.first << ',' << r.second << "] ";
+      for (unsigned l = 0; l < _hanangridv.size(); ++l) {
+        COUT << "layerv : " << l << '\n';
+        for (auto& pos : _hanangridv[l]) {
+          COUT << "pos : " << pos.first << " : ";
+          for (auto& r : pos.second) {
+            std::cout << "[" << r.first << ',' << r.second << "] ";
+          }
+          std::cout << '\n';
         }
-        std::cout << '\n';
       }
-    }
 #endif
 
-    std::vector<unsigned> layerExpansions(_maxLayer + 1, 0);
-    while (!_pq.empty()) {
-      auto t = const_cast<Node*>(*_pq.begin());
-      if (_targets.find(t) != _targets.end()) {
-        _sol = t;
-        COUT << "sol found with " << _expansions << " expansions!" << std::endl;
+      std::vector<unsigned> layerExpansions(_maxLayer + 1, 0);
+      while (!_pq.empty()) {
+        auto t = const_cast<Node*>(*_pq.begin());
+        if (_targets.find(t) != _targets.end()) {
+          _sol = t;
+          COUT << "sol found with " << _expansions << " expansions!" << std::endl;
+          for (unsigned i = 0; i < layerExpansions.size(); ++i) {
+            COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
+          }
+          break;
+        }
+        _pq.erase(_pq.begin());
+        ++layerExpansions[t->z()];
+        expandNode(t);
+        ++_expansions;
+        if (_expansions >= _maxExpansions) break;
+      }
+      if (!_sol) {
+        COUT << "sol not found for " << _name << "after " << _expansions << " expansions!\n";
         for (unsigned i = 0; i < layerExpansions.size(); ++i) {
           COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
         }
-        break;
       }
-      _pq.erase(_pq.begin());
-      ++layerExpansions[t->z()];
-      expandNode(t);
-      ++_expansions;
-      if (_expansions >= _maxExpansions) break;
-    }
-    if (!_sol) {
-      COUT << "sol not found for " << _name << "after " << _expansions << " expansions!\n";
-      for (unsigned i = 0; i < layerExpansions.size(); ++i) {
-        COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
-      }
-    }
-    _pq.clear();
-    _hanangridv.clear();
-    _hanangridh.clear();
-    _expansions = 0;
-    if (_sol) {
-      const Node* n = _sol;
-      while (n) {
-        auto parent = n->parent();
-        if (parent) {
-          if (parent->z() == n->z()) {
-            const bool vert = (n->x() == parent->x());
-            while (true) {
-              auto p = parent->parent();
-              const bool pv = (p ? p->x() == parent->x() : !vert);
-              if (p && p->z() == parent->z() && pv == vert) {
-                parent = p;
-              } else {
-                break;
-              }
-            }
-            auto hwx = (n->hwx() == 0 ? widthx(n->z())/2 : n->hwx());
-            auto hwy = (n->hwy() == 0 ? widthy(n->z())/2 : n->hwy());
-            auto extnx1 = hwx;
-            auto extnx2 = hwx;
-            auto extny1 = hwy;
-            auto extny2 = hwy;
-            if (n->y() > parent->y()) {
-              extnx1 = hwy;
-              extnx2 = hwy;
-              if (isTarget(n)) extny2 = 0;
-              else {
-                auto it = _endextnymax.find(n);
-                if (it != _endextnymax.end()) {
-                  extny2 = it->second;
+      _pq.clear();
+      _hanangridv.clear();
+      _hanangridh.clear();
+      _expansions = 0;
+      if (_sol) {
+        const Node* n = _sol;
+        while (n) {
+          auto parent = n->parent();
+          if (parent) {
+            if (parent->z() == n->z()) {
+              const bool vert = (n->x() == parent->x());
+              while (true) {
+                auto p = parent->parent();
+                const bool pv = (p ? p->x() == parent->x() : !vert);
+                if (p && p->z() == parent->z() && pv == vert) {
+                  parent = p;
+                } else {
+                  break;
                 }
               }
-              if (isSource(parent)) extny1 = 0;
-              else {auto it = _endextnymin.find(parent);
-                if (it != _endextnymin.end()) {
-                  extny1 = it->second;
+              auto hwx = (n->hwx() == 0 ? widthx(n->z())/2 : n->hwx());
+              auto hwy = (n->hwy() == 0 ? widthy(n->z())/2 : n->hwy());
+              auto extnx1 = hwx;
+              auto extnx2 = hwx;
+              auto extny1 = hwy;
+              auto extny2 = hwy;
+              if (n->y() > parent->y()) {
+                extnx1 = hwy;
+                extnx2 = hwy;
+                if (isTarget(n)) extny2 = 0;
+                else {
+                  auto it = _endextnymax.find(n);
+                  if (it != _endextnymax.end()) {
+                    extny2 = it->second;
+                  }
+                }
+                if (isSource(parent)) extny1 = 0;
+                else {auto it = _endextnymin.find(parent);
+                  if (it != _endextnymin.end()) {
+                    extny1 = it->second;
+                  }
+                }
+              } else if (n->y() < parent->y()) {
+                extnx1 = hwy;
+                extnx2 = hwy;
+                if (isSource(parent)) extny2 = 0;
+                else {
+                  auto it = _endextnymax.find(n);
+                  if (it != _endextnymax.end()) {
+                    extny2 = it->second;
+                  }
+                }
+                if (isTarget(n)) extny1 = 0;
+                else {
+                  auto it = _endextnymin.find(parent);
+                  if (it != _endextnymin.end()) {
+                    extny1 = it->second;
+                  }
                 }
               }
-            } else if (n->y() < parent->y()) {
-              extnx1 = hwy;
-              extnx2 = hwy;
-              if (isSource(parent)) extny2 = 0;
-              else {
-                auto it = _endextnymax.find(n);
-                if (it != _endextnymax.end()) {
-                  extny2 = it->second;
+              if (n->x() > parent->x()) {
+                extny1 = hwx;
+                extny2 = hwx;
+                if (isTarget(n)) extnx2 = 0;
+                else {auto it = _endextnxmax.find(n);
+                  if (it != _endextnxmax.end()) {
+                    extnx2 = it->second;
+                  }
+                }
+                if (isSource(parent)) extnx1 = 0;
+                else {
+                  auto it = _endextnxmin.find(parent);
+                  if (it != _endextnxmin.end()) {
+                    extnx1 = it->second;
+                  }
+                }
+              } else if (n->x() < parent->x()) {
+                extny1 = hwx;
+                extny2 = hwx;
+                if (isSource(parent)) extnx2 = 0;
+                else {
+                  auto it = _endextnxmax.find(parent);
+                  if (it != _endextnxmax.end()) {
+                    extnx2 = it->second;
+                  }
+                }
+                if (isTarget(n)) extnx1 = 0;
+                else {
+                  auto it = _endextnxmin.find(n);
+                  if (it!= _endextnxmin.end()) {
+                    extnx1 = it->second;
+                  }
                 }
               }
-              if (isTarget(n)) extny1 = 0;
-              else {
-                auto it = _endextnymin.find(parent);
-                if (it != _endextnymin.end()) {
-                  extny1 = it->second;
-                }
-              }
-            }
-            if (n->x() > parent->x()) {
-              extny1 = hwx;
-              extny2 = hwx;
-              if (isTarget(n)) extnx2 = 0;
-              else {auto it = _endextnxmax.find(n);
-                if (it != _endextnxmax.end()) {
-                  extnx2 = it->second;
-                }
-              }
-              if (isSource(parent)) extnx1 = 0;
-              else {
-                auto it = _endextnxmin.find(parent);
-                if (it != _endextnxmin.end()) {
-                  extnx1 = it->second;
-                }
-              }
-            } else if (n->x() < parent->x()) {
-              extny1 = hwx;
-              extny2 = hwx;
-              if (isSource(parent)) extnx2 = 0;
-              else {
-                auto it = _endextnxmax.find(parent);
-                if (it != _endextnxmax.end()) {
-                  extnx2 = it->second;
-                }
-              }
-              if (isTarget(n)) extnx1 = 0;
-              else {
-                auto it = _endextnxmin.find(n);
-                if (it!= _endextnxmin.end()) {
-                  extnx1 = it->second;
-                }
-              }
-            }
-            sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
+              sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
 #if DEBUG
-            COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
-            COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
+              COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
+              COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
 #endif
-          } else {
-            if (parent->z() < n->z() && n->dnVia()) {
-              n->dnVia()->addShapes(sol);
-            } else if (parent->z() > n->z() && n->upVia()) {
-              n->upVia()->addShapes(sol);
             } else {
-              if (parent->z() < n->z()) {
-                if (!_dnVias[n->z()].empty()) {
-                  Via v(*(_dnVias[n->z()][0]), Geom::Point(n->x(), n->y()));
-                  v.addShapes(sol);
-                }
-              } else if (parent->z() > n->z()) {
-                if (!_upVias[n->z()].empty()) {
-                  Via v(*(_upVias[n->z()][0]), Geom::Point(n->x(), n->y()));
-                  v.addShapes(sol);
+              if (parent->z() < n->z() && n->dnVia()) {
+                n->dnVia()->addShapes(sol);
+              } else if (parent->z() > n->z() && n->upVia()) {
+                n->upVia()->addShapes(sol);
+              } else {
+                if (parent->z() < n->z()) {
+                  if (!_dnVias[n->z()].empty()) {
+                    Via v(*(_dnVias[n->z()][0]), Geom::Point(n->x(), n->y()));
+                    v.addShapes(sol);
+                  }
+                } else if (parent->z() > n->z()) {
+                  if (!_upVias[n->z()].empty()) {
+                    Via v(*(_upVias[n->z()][0]), Geom::Point(n->x(), n->y()));
+                    v.addShapes(sol);
+                  }
                 }
               }
-/*              auto adjLayer = (parent->z() < n->z()) ? _belowViaLayer[n->z()] : _aboveViaLayer[n->z()];
-              if (adjLayer >= 0) {
-                sol[adjLayer].push_back(Geom::Rect(n->x(), n->y(), n->x(), n->y()).bloatby(_widthx[adjLayer]/2, _widthy[adjLayer]/2));
-#if DEBUG
-                COUT << "sol : " << adjLayer << ' ' << sol[adjLayer].back().str() << '\n';
-#endif
-              }*/
             }
           }
+          n = parent;
         }
-        n = parent;
+        break;
       }
     }
   } else {
