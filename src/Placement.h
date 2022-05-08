@@ -87,7 +87,7 @@ class Net {
     std::set<int> _preflayers;
     std::string _driver;
   public:
-    Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0}, _driver{} {}
+    Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0}, _detour{0}, _driver{} {}
     const std::set<const Pin*>& pins() const { return _pins; }
     void addPin(const Pin* p) { _pins.insert(p); }
     void print() const;

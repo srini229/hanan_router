@@ -237,12 +237,13 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
       if (line.find("LAYER") != npos) {
         ss >> str >> str;
         layer = lf.getLayerIndex(str);
+        if (str[0] != 'M' && str[0] != 'V') layer = -1;
         continue;
       }
       if (line.find("RECT") != npos) {
         double llx{0}, lly{0}, urx{0}, ury{0};
         ss >> str >> llx >> lly >> urx >> ury;
-        if (layer > 0) {
+        if (layer >= 0) {
           curr_module->addObstacle(layer, Geom::Rect(llx * units, lly * units, urx * units, ury * units));
         }
         continue;
@@ -282,7 +283,6 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                   if (iwsd < 3) {
                     for (auto& el : (*itwsd).items()) {
                       auto layer = lf.getLayerIndex(el.key());
-                      COUT << "ndr : " << wsd[iwsd] << ' ' << el.key() << ' ' << el.value() << '\n';
                       if (layer >= 0) {
                         switch (iwsd) {
                           default:
