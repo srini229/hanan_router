@@ -5,7 +5,7 @@ ifeq (,$(findstring darwin,$(GCC_TARGET)))
     MARCH += -march=native -fopenmp
 endif
 #CCFLAGS = -Wall -g -std=c++14 -D_GLIBCXX_PARALLEL -march=native -funroll-loops -fopenmp
-CCFLAGS = -Wall -g -std=c++14 -D_GLIBCXX_PARALLEL $(MARCH) -funroll-loops
+CCFLAGS = -Wall -g -std=c++14 
 INCLUDES = ./include
 LFLAGS = 
 DEBUG = 0
@@ -19,7 +19,7 @@ DEPFLAGS = -MMD -MP
 
 MAIN = hanan_router
 
-OPTFLAGS = -Ofast
+OPTFLAGS = -O3
 #OPTFLAGS = 
 ifeq ($(DEBUG), 1)
 OPTFLAGS = 

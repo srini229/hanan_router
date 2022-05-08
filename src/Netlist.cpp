@@ -271,6 +271,10 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
           if (it != m.end()) {
             for (auto& netiter : *it) {
               auto itnetname = netiter.find("name");
+              auto itdetour = netiter.find("large_detour");
+              if (itdetour != netiter.end() && *itdetour == "allowed") {
+                modit->second->allowDetour(*itnetname);
+              }
               const std::string wsd[] = {"widths", "spaces", "directions", "preferred_layers"};
               for (auto iwsd : {0, 1, 2, 3}) {
                 auto itwsd = netiter.find(wsd[iwsd]);

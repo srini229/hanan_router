@@ -215,6 +215,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
+      if (_detour) router.allowDetour();
       router.addObstacles(l1, true);
       router.addObstacles(l2, true);
       router.addObstacles(l3, true);

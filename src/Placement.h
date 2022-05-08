@@ -79,6 +79,7 @@ class Net {
     Geom::Rect _bbox;
     int _unroute : 1;
     int _exclude : 1;
+    int _detour : 1;
     PortPairs reorderPorts() const;
     PortPairs clockRouteOrder() const;
     std::map<int, int> _ndrwidths, _ndrspaces;
@@ -118,6 +119,7 @@ class Net {
     }
     void addPrefLayer(const int layer) { _preflayers.insert(layer); }
     void exclude() { _exclude = 1; }
+    void allowDetour() { _detour = 1; }
     bool excluded() const { return _exclude ? true : false; }
     void setClockDriver(const std::string& driver) { _driver = driver; }
 };
@@ -251,6 +253,11 @@ class Module {
     {
       auto it = _nets.find(net);
       if (it != _nets.end()) it->second.addPrefLayer(layer);
+    }
+    void allowDetour(const std::string& net)
+    {
+      auto it = _nets.find(net);
+      if (it != _nets.end()) it->second.allowDetour();
     }
 
     void excludeNet(const std::string& net)

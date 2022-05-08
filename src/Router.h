@@ -367,6 +367,7 @@ class Router {
     void setModName(const std::string& n) { _modname = n; }
     void setNetName(const std::string& n) { _netname = n; }
     void setuu(const int uu) { _uu = uu; }
+    void allowDetour() { _bbox.bloat(std::max(_bbox.width(), _bbox.height() * 10)); }
     void writeLEF() const;
 };
 
