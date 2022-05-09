@@ -100,7 +100,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
         ifs.close();
         loadLEF(modlef, lf);
         if (_loadedMacros.find(it.first) != _loadedMacros.end()) {
-          it.second->setRouted();
+          it.second->setLeaf();
         }
       }
     }

@@ -32,7 +32,8 @@ int main(int argc, char* argv[])
   } catch (const std::invalid_argument& ia) {}
   COUT << "Using options : -d " << layerJSONFile << " -p " << plfile << " -l " << leffile;
   COUT << (route ? " -r " : "") << (uuflayer  ? " -s " : "") << " -uu " << uu;
-  COUT << (!ndrfile.empty() ? (" -ndr " + ndrfile) : "") << std::endl;
+  COUT << (!ndrfile.empty() ? (" -ndr " + ndrfile) : "") ;
+  COUT << (!interlefdir.empty() ? (" -uil " + interlefdir) : "") << std::endl;
 
   DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 1));
   if (!linfo.populated())  {

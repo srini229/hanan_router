@@ -185,11 +185,11 @@ class Module {
     const Geom::LayerRects& obstacles() const { return _obstacles; }
     const Geom::LayerRects& internalroutes() const { return _internalroutes; }
     bool isLeaf() const { return _leaf ? true : false; }
+    void setLeaf() { _leaf = 1; _routed = 1; }
     const Nets& nets() const { return _nets; }
     const Pins& pins() const { return _pins; }
 
     void setBBox(const Geom::Rect& b) { _bbox = b; }
-    void setRouted() { _routed = 1; }
     Pin* addPin(const std::string& name)
     {
       Pin* p{nullptr};
