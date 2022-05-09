@@ -243,6 +243,7 @@ class Router {
     std::map<int, std::set<Geom::Rect>> _sourceshapes, _targetshapes;
     std::string _modname, _netname;
     int _uu;
+    Geom::LayerTree _ltree;
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -351,6 +352,7 @@ class Router {
     {
       if(temp) _tobstacles.clear();
       else _obstacles.clear();
+      _ltree.clear();
     }
     void addObstacles(const Geom::LayerRects& lr, const bool temp = false);
 

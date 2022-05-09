@@ -1027,6 +1027,9 @@ Geom::LayerRects Router::findSol()
         }
         }*/
       Geom::MergeLayerRects(_tobstacles, _obstacles);
+      for (auto& it: _tobstacles) {
+        _ltree.emplace(it.first, Geom::RTree2D(it.second));
+      }
 #if DEBUG
 #else
       if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) 
@@ -1350,8 +1353,8 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
     for (auto& r : l.second) {
       int sx{0}, sy{0};
       if (layer < static_cast<int>(_widthx.size())) {
-        sx = spacex(layer) + ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1));
-        sy = spacey(layer) + ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1));
+        sx = spacex(layer) + (layer <= _maxLayer ? ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1)) : 0);
+        sy = spacey(layer) + (layer <= _maxLayer ? ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1)) : 0);
       }
 #if DEBUG
       COUT << "layer : " << layer << " obs : " << sx << ' ' << sy << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
@@ -1567,9 +1570,11 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
         for (auto& v : _upVias[n->z()]) {
           delete via;
           via = new Via(*v, Geom::Point(n->x(), n->y()));
-          auto it = _tobstacles.find(aboveLayer);
-          if (it != _tobstacles.end()) {
-            for (auto& o : it->second) {
+          auto it = _ltree.find(aboveLayer);
+          if (it != _ltree.end()) {
+            Geom::Rects nbrs;
+            it->second.search(nbrs, via->bbox().bloatby(spacex(aboveLayer), spacey(aboveLayer)));
+            for (auto& o : nbrs) {
               for (auto& c : via->cuts()) {
                 if (o.overlaps(c, false)) {
                   delete via;
@@ -1583,11 +1588,13 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
           if (via) {
             for (bool lower : {true, false}) {
               auto l = (lower ? via->l() : via->u());
-              it = _tobstacles.find(l);
-              if (it != _tobstacles.end()) {
+              it = _ltree.find(l);
+              if (it != _ltree.end()) {
                 Geom::Rect p = (lower ? via->lpad() : via->upad());
+                Geom::Rects nbrs;
+                it->second.search(nbrs, p.bloatby(spacex(l), spacey(l)));
                 p.bloat(-std::min(widthy(l), p.width())/2, -std::min(widthx(l), p.height())/2);
-                for (auto& o : it->second) {
+                for (auto& o : nbrs) {
                   if (o.overlaps(p, true)) {
                     //COUT << "obs viapad up : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;

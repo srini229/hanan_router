@@ -239,16 +239,23 @@ class RTree2D {
   private:
     const Rects& _rects;
     void* _rtree;
+    unsigned* _copies;
   public:
     void insert(const Rect& r, const int i);
     RTree2D(const Rects& rects) : _rects{rects}, _rtree{nullptr}
     {
       for (unsigned i = 0; i < rects.size(); ++i) insert(rects[i], i);
+      _copies = new unsigned(0);
+    }
+    RTree2D(const RTree2D& r) : _rects{r._rects}, _rtree{r._rtree}, _copies{r._copies}
+    {
+      ++(*_copies);
     }
     ~RTree2D();
     void remove(const Rect& r, const int i);
     int search(Rects& s, const Rect& r) const;
 };
+typedef map<int, RTree2D> LayerTree;
 
 }
 #endif

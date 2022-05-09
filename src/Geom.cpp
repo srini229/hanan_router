@@ -78,13 +78,23 @@ typedef RTree<int, int, 2, double, 16> Tree;
 
 RTree2D::~RTree2D()
 {
-  delete static_cast<Tree*>(_rtree);
-  _rtree = nullptr;
+  if (nullptr != _rtree) {
+    if (_copies) { 
+      if (*_copies == 0) {
+        delete static_cast<Tree*>(_rtree);
+        delete _copies;
+      } else {
+        --(*_copies);
+      }
+    }
+    _copies = nullptr;
+    _rtree = nullptr;
+  }
 }
 
 void RTree2D::insert(const Rect& r, const int i)
 {
-  if (nullptr == _rtree) _rtree = new Tree;
+  if (nullptr == _rtree) _rtree = static_cast<void*>(new Tree);
   const int ll[] = {r.xmin(), r.ymin()};
   const int ur[] = {r.xmax(), r.ymax()};
   static_cast<Tree*>(_rtree)->Insert(ll, ur, i);
