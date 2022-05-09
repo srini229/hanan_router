@@ -1,5 +1,6 @@
 #include "Geom.h"
 #include <cmath>
+#include "RTree.h"
 
 namespace Geom {
 
@@ -71,5 +72,48 @@ void MergeLayerRects(Geom::LayerRects& l1, const Geom::LayerRects& l2, Geom::Rec
       }
     }
   }
+}
+
+typedef RTree<int, int, 2, double, 16> Tree;
+
+RTree2D::~RTree2D()
+{
+  delete static_cast<Tree*>(_rtree);
+  _rtree = nullptr;
+}
+
+void RTree2D::insert(const Rect& r, const int i)
+{
+  if (nullptr == _rtree) _rtree = new Tree;
+  const int ll[] = {r.xmin(), r.ymin()};
+  const int ur[] = {r.xmax(), r.ymax()};
+  static_cast<Tree*>(_rtree)->Insert(ll, ur, i);
+}
+
+void RTree2D::remove(const Rect& r, const int i)
+{
+  if (_rtree) {
+    const int ll[] = {r.xmin(), r.ymin()};
+    const int ur[] = {r.xmax(), r.ymax()};
+    static_cast<Tree*>(_rtree)->Remove(ll, ur, i);
+  }
+}
+
+static bool callback(int i, void *arg)
+{
+  auto larg = static_cast<Rects**>(arg);
+  larg[0]->push_back((*larg[1])[i]);
+  return true;
+}
+
+int RTree2D::search(Rects& s, const Rect&r) const
+{
+  if (_rtree) {
+    const int ll[] = {r.xmin(), r.ymin()};
+    const int ur[] = {r.xmax(), r.ymax()};
+    Rects* context[] = {&s, const_cast<Rects*>(&_rects)};
+    return const_cast<Tree&>(*static_cast<Tree*>(_rtree)).Search(ll, ur, callback, static_cast<void*>(context));
+  }
+  return 0;
 }
 }

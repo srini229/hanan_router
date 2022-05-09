@@ -234,5 +234,21 @@ class Transform {
 
 double Dist(const Geom::Rect& r1, const Geom::Rect& r2, const bool manh = true);
 void MergeLayerRects(Geom::LayerRects& l1, const Geom::LayerRects& l2, Geom::Rect* b = nullptr);
+
+class RTree2D {
+  private:
+    const Rects& _rects;
+    void* _rtree;
+  public:
+    void insert(const Rect& r, const int i);
+    RTree2D(const Rects& rects) : _rects{rects}, _rtree{nullptr}
+    {
+      for (unsigned i = 0; i < rects.size(); ++i) insert(rects[i], i);
+    }
+    ~RTree2D();
+    void remove(const Rect& r, const int i);
+    int search(Rects& s, const Rect& r) const;
+};
+
 }
 #endif
