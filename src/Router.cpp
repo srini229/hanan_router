@@ -112,14 +112,14 @@ CostFn::CostFn(const DRC::LayerInfo& lf)
       }
     }
   }
-  for (unsigned i = 0; i < _layerHCost.size(); ++i) {
+  for (int i = 0; i <= _topRoutingLayer; ++i) {
     COUT << "layer : " << i << " cost : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
   }
-  for (unsigned i = 0; i < _layerHCost.size(); ++i) {
+  for (int i = 0; i <= _topRoutingLayer; ++i) {
     if (i > 0) {
       COUT << "layerPairCost : " << i << ' ' << i - 1 << ' ' << _layerPairCost[i][i-1] << '\n';
     }
-    if (i < _layerHCost.size() - 1) {
+    if (i < _topRoutingLayer) {
       COUT << "layerPairCost : " << i << ' ' << i + 1 << ' ' << _layerPairCost[i][i+1] << '\n';
     }
   }
@@ -130,40 +130,110 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   CostType dc = 0;
 
   if (n1.z() == n2.z()) {
-    if (n1.x() == n2.x() && _layerVCost[n1.z()] < 1000) {
+    if (n1.x() == n2.x() && _layerVCost[n1.z()] < COST_MAX) {
       return (_layerVCost[n1.z()] * std::abs(n1.y() - n2.y()));
     }
-    if (n1.y() == n2.y() && _layerHCost[n1.z()] < 1000) {
+    if (n1.y() == n2.y() && _layerHCost[n1.z()] < COST_MAX) {
       return (_layerHCost[n1.z()] * std::abs(n1.x() - n2.x()));
     }
   }
   if (n1.x() == n2.x() && n1.y() == n2.y()) {
-    if (n2.z() - n1.z() == 1) {
+    if (abs(n2.z() - n1.z()) == 1) {
       return _layerPairCost[n1.z()][n2.z()];
-    } else if (n1.z() - n2.z() == 1) {
-      return _layerPairCost[n2.z()][n1.z()];
     }
   }
   auto minz = std::min(n1.z(), n2.z());
   auto maxz = std::max(n1.z(), n2.z());
-  CostType minHCost(20000), minVCost(20000);
-  if (_layerHCost[minz] != _layerVCost[minz]) {
-    if (minz < _topRoutingLayer) maxz = minz + 1;
-    else minz -= 1;
-  }
-  for (int i = minz; i <= maxz; ++i) {
-    minHCost = std::min(minHCost, _layerHCost[i]);
-    minVCost = std::min(minVCost, _layerVCost[i]);
-  }
-  dc += (minHCost * std::abs(n1.x() - n2.x())) + (minVCost * std::abs(n1.y() - n2.y()));
-  for (int i = std::min(n1.z(), minz); i < std::max(n1.z(), minz); ++i) {
-    dc += _layerPairCost[i][i+1];
-  }
-  for (int i = minz; i < maxz; ++i) {
-    dc += _layerPairCost[i][i+1];
-  }
-  for (int i = std::min(n2.z(), maxz); i < std::max(n2.z(), maxz); ++i) {
-    dc += _layerPairCost[i][i+1];
+  CostType minHCost(COST_MAX), minVCost(COST_MAX);
+  std::set<int> minHCostLayers, minVCostLayers;
+  if (_preflayers.empty()) {
+    if (_layerHCost[minz] != _layerVCost[minz]) {
+      if (minz < _topRoutingLayer) maxz = minz + 1;
+      else minz -= 1;
+    }
+    for (int i = minz; i <= maxz; ++i) {
+      minHCost = std::min(minHCost, _layerHCost[i]);
+      minVCost = std::min(minVCost, _layerVCost[i]);
+    }
+    dc += (minHCost * std::abs(n1.x() - n2.x())) + (minVCost * std::abs(n1.y() - n2.y()));
+    for (int i = std::min(n1.z(), minz); i < std::max(n1.z(), minz); ++i) {
+      dc += _layerPairCost[i][i+1];
+    }
+    for (int i = minz; i < maxz; ++i) {
+      dc += _layerPairCost[i][i+1];
+    }
+    for (int i = std::min(n2.z(), maxz); i < std::max(n2.z(), maxz); ++i) {
+      dc += _layerPairCost[i][i+1];
+    }
+  } else {
+    for (int i = 0; i <= _topRoutingLayer; ++i) {
+      if (_layerHCost[i] == minHCost) minHCostLayers.insert(i);
+      if (_layerVCost[i] == minVCost) minVCostLayers.insert(i);
+    }
+    for (int i = 0; i <= _topRoutingLayer; ++i) {
+      minHCost = std::min(minHCost, _layerHCost[i]);
+      minVCost = std::min(minVCost, _layerVCost[i]);
+    }
+    auto hit{std::lower_bound(minHCostLayers.begin(), minHCostLayers.end(), minz - 1)};
+    auto vit{std::lower_bound(minVCostLayers.begin(), minVCostLayers.end(), minz - 1)};
+    bool hinbetween{hit != minHCostLayers.end() && *hit <= maxz};
+    bool vinbetween{hit != minVCostLayers.end() && *vit <= maxz};
+    dc += (minHCost * std::abs(n1.x() - n2.x())) + (minVCost * std::abs(n1.y() - n2.y()));
+    //case : minz <= minHCostLayers, minVCostLayers <= maxz
+    for (int i = minz; i < maxz; ++i) {
+      dc += _layerPairCost[i][i+1];
+    }
+    if (hinbetween && !vinbetween) {
+      if (!minVCostLayers.empty()) {
+        if (*minVCostLayers.rbegin() < minz) {
+          for (int i = *minVCostLayers.rbegin(); i < minz; ++i) {
+            dc += 2 * _layerPairCost[i][i+1];
+          }
+        } else if (*minVCostLayers.begin() > maxz) {
+          for (int i = maxz; i < *minVCostLayers.begin(); ++i) {
+            dc += 2 * _layerPairCost[i][i+1];
+          }
+        }
+      }
+    } else if (!hinbetween && vinbetween) {
+      if (!minHCostLayers.empty()) {
+        if (*minHCostLayers.rbegin() < minz) {
+          for (int i = *minHCostLayers.rbegin(); i < minz; ++i) {
+            dc += 2 * _layerPairCost[i][i+1];
+          }
+        } else if (*minHCostLayers.begin() > maxz) {
+          for (int i = maxz; i < *minHCostLayers.begin(); ++i) {
+            dc += 2 * _layerPairCost[i][i+1];
+          }
+        }
+      }
+    } else if (!hinbetween && !vinbetween) {
+      if (!minHCostLayers.empty() && !minVCostLayers.empty()) {
+        if (*minVCostLayers.rbegin() < minz && *minHCostLayers.rbegin() < minz) {
+          for (int i = std::min(*minVCostLayers.rbegin(), *minHCostLayers.rbegin()); i < minz; ++i) {
+            dc += 2 * _layerPairCost[i][i+1];
+          }
+        } else if (*minVCostLayers.rbegin() < minz && *minHCostLayers.begin() > maxz) {
+          for (int i = *minVCostLayers.rbegin(); i < minz; ++i) {
+            dc += 2 * _layerPairCost[i][i+1];
+          }
+          for (int i = maxz; i < *minHCostLayers.begin(); ++i) {
+            dc += 2 * _layerPairCost[i][i+1];
+          }
+        } else if (*minHCostLayers.rbegin() < minz && *minVCostLayers.begin() > maxz) {
+          for (int i = *minHCostLayers.rbegin(); i < minz; ++i) {
+            dc += 2 * _layerPairCost[i][i+1];
+          }
+          for (int i = maxz; i < *minVCostLayers.begin(); ++i) {
+            dc += 2 * _layerPairCost[i][i+1];
+          }
+        } else if (*minHCostLayers.begin() > maxz && *minVCostLayers.begin() > maxz) {
+          for (int i = maxz; i < std::max(*minHCostLayers.begin(), *minVCostLayers.begin()); ++i) {
+            dc += 2 * _layerPairCost[i][i+1];
+          }
+        }
+      }
+    }
   }
 
   return dc;
@@ -173,6 +243,7 @@ void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::s
 {
   _savedLayerHCost = _layerHCost;
   _savedLayerVCost = _layerVCost;
+  _preflayers = preflayers;
   for (auto& it : ndrdir) {
     auto mincost{std::min(_layerHCost[it.first], _layerVCost[it.first])};
     auto maxcost{std::max(_layerHCost[it.first], _layerVCost[it.first])};
@@ -189,7 +260,7 @@ void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::s
     COUT << "ndr dir : " << it.first << ' ' << _layerVCost[it.first] << ' ' << _layerHCost[it.first] << '\n';
   }
   if (!preflayers.empty()) {
-    for (unsigned i = 0; i < _layerVCost.size(); ++i) {
+    for (int i = 0; i <= _topRoutingLayer; ++i) {
       if (preflayers.find(i) != preflayers.end()) {
         if (_layerHCost[i] < _layerVCost[i]) {
           _layerHCost[i] = 1;
@@ -206,7 +277,7 @@ void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::s
     }
   }
   if (!preflayers.empty() || !ndrdir.empty()) {
-    for (unsigned i = 0; i < _layerHCost.size(); ++i) {
+    for (int i = 0; i <= _topRoutingLayer; ++i) {
       COUT << "layer cost (" << i << ") : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
     }
   }
@@ -998,7 +1069,7 @@ Geom::LayerRects Router::findSol()
   static std::string debugplot{getenv("HANAN_DEBUG_WIRE") ? getenv("HANAN_DEBUG_WIRE") : ""};
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
-    for (auto attempt : {0, 1}) {
+    for (auto attempt : {0}) {
       if (_targets.size() < _sources.size()) std::swap(_sources,_targets);
       if (attempt == 1) {
         std::swap(_sources,_targets);
@@ -1442,6 +1513,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
   _ndrwidthy.resize(_widthy.size(), INT_MAX);
   _ndrspacex.resize(_spacex.size(), INT_MAX);
   _ndrspacey.resize(_spacey.size(), INT_MAX);
+  _preflayers = preflayers;
   if (usendr) {
     if (!ndrdirs.empty() || !preflayers.empty()) _cf.updatendr(ndrdirs, preflayers);
     else _cf.resetdirs();
@@ -1526,13 +1598,14 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
   }
 //#if DEBUG
   for (unsigned i = 0; i < _ndrwidthx.size(); ++i) {
-    COUT << "layer : " << i << " width : " << _ndrwidthx[i] << ' ' << _ndrwidthy[i] << ' ' << _widthx[i] << ' ' << _widthy[i] << '\n';
+    COUT << "layer : " << i << " width : " << _widthx[i] << ' ' << _widthy[i];
     if (_ndrwidthx[i] != INT_MAX) {
-      COUT << "ndr widthx z : " << i << ' ' << _ndrwidthx[i] << '\n';
+      COUT << " ndr widthx : " << _ndrwidthx[i] ;
     }
     if (_ndrwidthy[i] != INT_MAX) {
-      COUT << "ndr widthy z : " << i << ' ' << _ndrwidthy[i] << '\n';
+      COUT << " ndr widthyz : " << _ndrwidthy[i];
     }
+    COUT << '\n';
   }
 //#endif
   /*if (_targetshapes.size() == 1) {

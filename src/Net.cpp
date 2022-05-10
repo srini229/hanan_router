@@ -29,7 +29,7 @@ PortPairs Net::reorderPorts() const
   if (ports.empty()) return porder;
   std::sort(ports.begin(), ports.end(),
       [](const Port* p1, const Port* p2) -> bool { return p1->bbox().halfpm() > p2->bbox().halfpm(); });
-  std::vector<std::vector<double>> pinpairdist(ports.size(), std::vector<double>(ports.size(), 0));
+  std::vector< std::vector<double> > portpairdist(ports.size(), std::vector<double>(ports.size(), 0));
   double mindist{1e30};
   int idx1{-1}, idx2{-1};
   Geom::Rect netbbox;
@@ -63,8 +63,8 @@ PortPairs Net::reorderPorts() const
           }
         }
       }*/
-      pinpairdist[i][j] = dist;
-      pinpairdist[j][i] = dist;
+      portpairdist[i][j] = dist;
+      portpairdist[j][i] = dist;
       COUT << "ports dist : " << ports[i]->name() << ' ' << ports[j]->name() << ' ' << dist << '\n';
       if (mindist > dist) {
         mindist = dist;
@@ -86,8 +86,8 @@ PortPairs Net::reorderPorts() const
     for (int i = 0; i < static_cast<int>(ports.size()); ++i) {
       if (!selected[i]) continue;
       for (int j = 0; j < static_cast<int>(ports.size()); ++j) {
-        if (!selected[j] && pinpairdist[i][j] < mindist) {
-          mindist = pinpairdist[i][j];
+        if (!selected[j] && portpairdist[i][j] < mindist) {
+          mindist = portpairdist[i][j];
           minidx1 = i;
           minidx2 = j;
         }
@@ -100,8 +100,8 @@ PortPairs Net::reorderPorts() const
     }
   }
 
-  std::sort(primorder.begin(), primorder.end(), [pinpairdist](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool
-      { return pinpairdist[a.first][a.second] < pinpairdist[b.first][b.second]; });
+  std::sort(primorder.begin(), primorder.end(), [portpairdist](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool
+      { return portpairdist[a.first][a.second] < portpairdist[b.first][b.second]; });
 
   
   for (auto& pp : primorder) porder.emplace_back(ports[pp.first], ports[pp.second]);
@@ -135,7 +135,7 @@ PortPairs Net::clockRouteOrder() const
   }
   std::sort(porder.begin(), porder.end(),
       [](const PortPair& p1, const PortPair& p2) -> bool
-      { return Geom::Dist(p1.first->bbox(), p1.second->bbox()) > Geom::Dist(p1.first->bbox(), p1.second->bbox()); }
+      { return Geom::Dist(p1.first->bbox(), p1.second->bbox()) > Geom::Dist(p2.first->bbox(), p2.second->bbox()); }
       );
   for (auto& p : porder) {
     COUT << "ports to route order : " << p.first->name() << ' ' << p.second->name() << ' ' << Geom::Dist(p.first->bbox(), p.second->bbox()) << '\n';
@@ -177,9 +177,23 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.setName(_name + "__" + port1->name() + "__" + port2->name());
       const auto& p1 = port1->shapes();
       const auto& p2 = port2->shapes();
+      bool preflayersrctgt{true};
       for (auto src : {true, false}) {
+        bool preflayer{false};
+        for (auto& l : _preflayers) {
+          const auto& p = (src ? p1 : p2);
+          auto it = p.find(l);
+          if (it != p.end() && !it->second.empty()) {
+            preflayer = true;
+            break;
+          }
+        }
+        preflayersrctgt &= preflayer;
+        COUT << "pref layer pin" << (preflayer ? "" : " not") << " found for " << (src ? port1->name() : port2->name()) << '\n';
         for (auto& l : (src ? p1 : p2)) {
           if (l.first > router.maxLayer() || l.first < router.minLayer()) continue;
+          if (preflayer && _preflayers.find(l.first) == _preflayers.end()) continue;
+          //COUT << "port : " << (src ? port1->name() : port2->name()) << " layer " << l.first << '\n';
           for (auto& s : l.second) {
             if (src) {
               router.addSourceShapes(s, l.first);
@@ -195,6 +209,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
 #endif
       for (auto& l : p1) {
         auto it = p2.find(l.first);
+        if (preflayersrctgt && _preflayers.find(l.first) == _preflayers.end()) continue;
         if (it != p2.end()) {
           for (auto& s1 : l.second) {
             for (auto& s2 : it->second) {

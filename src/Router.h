@@ -56,6 +56,7 @@ class CostFn {
     std::vector<CostType> _layerHCost, _layerVCost;
     std::vector<CostType> _savedLayerHCost, _savedLayerVCost;
     std::vector<std::vector<CostType>> _layerPairCost;
+    std::set<int> _preflayers;
   public:
     CostType deltaCost(const Node& n1, const Node& n2) const;
     CostFn(const DRC::LayerInfo& lf);
@@ -85,6 +86,7 @@ class CostFn {
     void resetdirs() {
       if (!_savedLayerHCost.empty()) _layerHCost = _savedLayerHCost;
       if (!_savedLayerVCost.empty()) _layerVCost = _savedLayerVCost;
+      _preflayers.clear();
     }
 };
 
@@ -244,6 +246,7 @@ class Router {
     std::string _modname, _netname;
     int _uu;
     Geom::LayerTree _ltree;
+    std::set<int> _preflayers;
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -332,6 +335,7 @@ class Router {
     int spacey(const int z) const { return (_ndrspacey[z] != INT_MAX ? std::max(_ndrspacey[z], _spacey[z]) : _spacey[z]); }
 
     void clearSourceTargets() {
+      _cf.resetdirs();
       _sources.clear();
       _targets.clear();
       _sourceshapes.clear();
@@ -343,6 +347,7 @@ class Router {
       _sol = nullptr;
       flushNodes();
       _bbox = Geom::Rect();
+      _preflayers.clear();
     }
     Geom::LayerRects findSol();
     void printSol() const;
