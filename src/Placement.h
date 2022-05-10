@@ -18,8 +18,9 @@ class Port {
     std::string _name;
     Geom::LayerRects _shapes;
     Geom::Rect _bbox;
+    int _virtual : 1;
   public:
-    Port(const std::string& name = "") : _name{name}, _bbox{} {}
+    Port(const std::string& name = "", const bool virt = false) : _name{name}, _bbox{}, _virtual{virt ? 1 : 0} {}
     const std::string& name() const { return _name; }
     void setName(const std::string& name) { _name = name; }
     void addRect(const int layer, const Geom::Rect& r);
@@ -31,6 +32,7 @@ class Port {
     }
     Port* getTransformedPort(const Geom::Transform& tr) const;
     void print() const;
+    bool isVirtualPort() const { return _virtual ? true : false; }
 };
 typedef std::vector<Port*> Ports;
 typedef std::vector<const Port*> PortCVec;
@@ -42,10 +44,12 @@ class Pin {
     std::string _name;
     Ports _ports;
     Geom::Rect _bbox;
+    int _virtual : 1;
   public:
-    Pin(const std::string& name = "") : _name{name}, _bbox{} {}
+    Pin(const std::string& name = "", const bool virt = false) : _name{name}, _bbox{}, _virtual{virt ? 1 : 0} {}
     const std::string& name() const { return _name; }
     const Geom::Rect& bbox() const { return _bbox; }
+    bool isVirtualPin() const { return _virtual ? true : false; }
     void print() const;
     void addPort(Port* p) 
     {
@@ -62,7 +66,7 @@ class Pin {
     {
       Port *port;
       if (_ports.empty() || newport) {
-        addPort(new Port());
+        addPort(new Port("", isVirtualPin()));
       }
       port = _ports.back();
       port->copyRects(lr);
@@ -94,10 +98,11 @@ class Net {
       _vpins.clear();
     }
     const std::set<const Pin*>& pins() const { return _pins; }
+    const std::set<const Pin*>& virtualpins() const { return _vpins; }
     void addPin(const Pin* p) { _pins.insert(p); }
     void addVirtualPin(const Geom::LayerRects& r)
     {
-      Pin *npin = new Pin(_name + "_vp_" + std::to_string(_vpins.size()));
+      Pin *npin = new Pin(_name + "_vp_" + std::to_string(_vpins.size()), true);
       npin->copyRects(r);
       _vpins.insert(npin);
       COUT << "Net : " << _name << " : added virtual pin : ";

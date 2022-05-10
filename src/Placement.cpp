@@ -156,9 +156,12 @@ void Module::route(Router::Router& router)
     for (auto it = nets.begin(); it != nets.end(); ++it) {
       _netObstaclesUnrouted.clear();
       for (auto itn = std::next(it); itn != nets.end(); ++itn) {
-        for (auto& pin : (*itn)->pins()) {
-          for (auto& p : pin->ports()) {
-            Geom::MergeLayerRects(_netObstaclesUnrouted, p->shapes());
+        for (auto vert : {true, false}) {
+          const auto& pins = vert ? (*itn)->virtualpins() : (*itn)->pins();
+          for (auto& pin : pins) {
+            for (auto& p : pin->ports()) {
+              Geom::MergeLayerRects(_netObstaclesUnrouted, p->shapes());
+            }
           }
         }
       }

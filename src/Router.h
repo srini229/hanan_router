@@ -62,6 +62,7 @@ class CostFn {
     CostFn(const DRC::LayerInfo& lf);
     bool isVert(const int l) const { return _layerVCost[l] <= _layerHCost[l]; }
     bool isHor(const int l) const { return _layerHCost[l] <= _layerVCost[l]; }
+    int topRoutingLayer() const { return _topRoutingLayer; }
 
     CostType hcost(int i) const { return _layerHCost[i]; }
     CostType vcost(int i) const { return _layerVCost[i]; }

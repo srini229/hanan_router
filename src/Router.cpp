@@ -683,6 +683,12 @@ void Router::setexpand(Node* newn, const Node* parent) const
 
 void Router::checkAndInsert(Node* newn, const Node* n)
 {
+  if (_sources.find(newn) != _sources.end()) {
+#if DEBUG
+    newn->print("trying to add source node : ");
+#endif
+    return;
+  }
 #if DEBUG
   newn->print("newn bef :");
   if (newn->parent()) {
@@ -1419,8 +1425,64 @@ void Router::writeSTO() const
 
 void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 {
+  std::set<int> uselayers;
+  bool srcInPref{false}, tgtInPref{false};
+  if (!_preflayers.empty()) {
+    for (auto& l : _sourceshapes) {
+      if (_preflayers.find(l.first) != _preflayers.end()) {
+        srcInPref = true;
+        break;
+      }
+    }
+    for (auto& l : _targetshapes) {
+      if (_preflayers.find(l.first) != _preflayers.end()) {
+        tgtInPref = true;
+        break;
+      }
+    }
+    if (srcInPref && tgtInPref) {
+      for (auto& l : _preflayers) {
+        uselayers.insert(l);
+        if (l >= 0 && l <= _cf.topRoutingLayer()) {
+          if (l == *_preflayers.begin()) {
+            uselayers.insert(_aboveViaLayer[l]);
+          } else if (l == *_preflayers.rbegin()) {
+            uselayers.insert(_belowViaLayer[l]);
+          } else {
+            uselayers.insert(_aboveViaLayer[l]);
+            uselayers.insert(_belowViaLayer[l]);
+          }
+        }
+      }
+    }
+  }
+  if (_preflayers.empty() || !srcInPref || !tgtInPref) {
+    int minLayer{_cf.topRoutingLayer()}, maxLayer{0};
+    for (auto src : {true, false}) {
+      for (auto& l : (src ? _sourceshapes : _targetshapes)) {
+        minLayer = std::min(minLayer, l.first);
+        maxLayer = std::max(maxLayer, l.first);
+      }
+    }
+    if (!_preflayers.empty()) {
+      minLayer = std::min(minLayer, *_preflayers.begin());
+      maxLayer = std::max(maxLayer, *_preflayers.rbegin());
+    }
+    for (int l = minLayer; l <= maxLayer; ++l) {
+      uselayers.insert(l);
+      if (l == minLayer) {
+        uselayers.insert(_aboveViaLayer[l]);
+      } else if (l == maxLayer) {
+        uselayers.insert(_belowViaLayer[l]);
+      } else {
+        uselayers.insert(_aboveViaLayer[l]);
+        uselayers.insert(_belowViaLayer[l]);
+      }
+    }
+  }
   for (auto& l : lr) {
     const auto& layer = l.first;
+    if (!uselayers.empty() && uselayers.find(l.first) == uselayers.end()) continue;
     for (auto& r : l.second) {
       int sx{0}, sy{0};
       if (layer < static_cast<int>(_widthx.size())) {
@@ -1432,12 +1494,14 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 #endif
       auto obs = r.bloatby(sx, sy);
       int x1 = sx, x2 = sx, y1 = sy, y2 = sy;
+      bool olsrcortgt{false};
       for (auto src : {true, false}) {
         const auto it = src ? _sourceshapes.find(l.first) : _targetshapes.find(l.first);
         const auto itend = src ? _sourceshapes.end() : _targetshapes.end();
         const auto& nodes = src ? _sources : _targets;
         if (it != itend) {
           for (const auto& s : it->second) {
+            if (r.overlaps(s)) olsrcortgt = true;
             if (_cf.isVert(l.first)) {
 #if DEBUG
               COUT << "source/target shape : " << s.str() << '\n';
@@ -1469,6 +1533,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
             if (_cf.isHor(l.first)) {
               if (obs.xmin() <= s.xmin() && obs.xmax() >= s.xmax() &&
                   obs.ymin() <= s.ymax() && obs.ymax() >= s.ymin() ) {
+                olsrcortgt = true;
                 if (r.xmin() >= s.xmax()) {
                   for (auto& n : nodes) {
                     if (n->z() == l.first && obs.contains(n->x(), n->y())) {
@@ -1489,14 +1554,15 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
           }
         }
       }
+      if (olsrcortgt) continue;
       obs = r.bloatby(x1, y1, x2, y2);
       if (_bbox.overlaps(obs)) {
         if (temp) {
           _tobstacles[layer].push_back(obs);
-          //COUT << "tobs : " << _tobstacles[layer].back().str() << '\n';
+          //COUT << "tobs : " << layer << ' ' << _tobstacles[layer].back().str() << '\n';
         } else {
           _obstacles[layer].push_back(obs);
-          //COUT << "obs : " << _obstacles[layer].back().str() << '\n';
+          //COUT << "obs : " << layer << ' ' << _obstacles[layer].back().str() << '\n';
         }
       }
     }

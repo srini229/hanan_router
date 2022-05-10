@@ -66,6 +66,7 @@ PortPairs Net::reorderPorts() const
           }
         }
       }*/
+      if (ports[i]->isVirtualPort() || ports[j]->isVirtualPort()) dist /= 10;
       portpairdist[i][j] = dist;
       portpairdist[j][i] = dist;
       COUT << "ports dist : " << ports[i]->name() << ' ' << ports[j]->name() << ' ' << dist << '\n';
@@ -253,14 +254,14 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       } else {
         _unroute = 1;
       }
-      //port1->print();
-      std::cout << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;
-      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), sol, &_bbox);
-      //port1->print();
-      //port2->print();
-      std::cout << "Adding routes to " << port2->name() << ' ' << sol.size() << std::endl;
-      Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), sol, &_bbox);
-      //port2->print();
+      if (!port1->isVirtualPort() || !_driver.empty()) {
+        std::cout << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;
+        Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), sol, &_bbox);
+      }
+      if (!port2->isVirtualPort() || !_driver.empty()) {
+        std::cout << "Adding routes to " << port2->name() << ' ' << sol.size() << std::endl;
+        Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), sol, &_bbox);
+      }
       router.clearObstacles(true);
     }
   }
