@@ -22,8 +22,11 @@ void Net::print() const
 PortPairs Net::reorderPorts() const
 {
   PortCVec ports;
-  for (auto& p : _pins) {
-    ports.insert(ports.end(), p->ports().begin(), p->ports().end());
+  for (auto virt : {true, false}) {
+    auto& pins = virt ? _vpins : _pins;
+    for (auto& p : pins) {
+      ports.insert(ports.end(), p->ports().begin(), p->ports().end());
+    }
   }
   PortPairs porder;
   if (ports.empty()) return porder;
@@ -124,11 +127,14 @@ PortPairs Net::clockRouteOrder() const
     for (unsigned j = 1; j < driver->ports().size(); ++j) {
       porder.push_back(std::make_pair(driver->ports()[0], driver->ports()[j]));
     }
-    for (auto& p : _pins) {
-      if (p == driver) continue;
-      else {
-        for (auto& port : p->ports()) {
-          porder.push_back(std::make_pair(driver->ports()[0], port));
+    for (auto virt : {true, false}) {
+      auto& pins = virt ? _vpins : _pins;
+      for (auto& p : pins) {
+        if (p == driver) continue;
+        else {
+          for (auto& port : p->ports()) {
+            porder.push_back(std::make_pair(driver->ports()[0], port));
+          }
         }
       }
     }

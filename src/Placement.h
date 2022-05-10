@@ -50,7 +50,7 @@ class Pin {
     void addPort(Port* p) 
     {
       if (p != nullptr)  {
-        p->setName(_name + "_" + std::to_string(_ports.size()));
+        p->setName(_name + "_port_" + std::to_string(_ports.size()));
         _ports.push_back(p);
         _bbox.merge(p->bbox());
       }
@@ -73,7 +73,7 @@ typedef std::map<std::string, Pin*> Pins;
 class Net {
   private:
     std::string _name;
-    std::set<const Pin*> _pins;
+    std::set<const Pin*> _pins, _vpins;
     Geom::LayerRects _routeshapes;
     Router::Vias _vias;
     Geom::Rect _bbox;
@@ -88,8 +88,21 @@ class Net {
     std::string _driver;
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0}, _detour{0}, _driver{} {}
+    ~Net()
+    {
+      for (auto& vp : _vpins) delete vp;
+      _vpins.clear();
+    }
     const std::set<const Pin*>& pins() const { return _pins; }
     void addPin(const Pin* p) { _pins.insert(p); }
+    void addVirtualPin(const Geom::LayerRects& r)
+    {
+      Pin *npin = new Pin(_name + "_vp_" + std::to_string(_vpins.size()));
+      npin->copyRects(r);
+      _vpins.insert(npin);
+      COUT << "Net : " << _name << " : added virtual pin : ";
+      npin->print();
+    }
     void print() const;
     const std::string& name() const { return _name; }
     void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update);
@@ -98,11 +111,14 @@ class Net {
     const bool open() const { return _unroute ? true : false; }
     void update()
     {
-      for (auto& pin : _pins) {
-        for (auto& p : pin->ports()) {
-          for (auto& l : p->shapes()) {
-            for (auto& s : l.second) {
-              _bbox.merge(Geom::Rect(s.xcenter(), s.ycenter(), s.xcenter(), s.ycenter()));
+      for (auto virt : {true, false}) {
+        auto& pins = virt ? _vpins : _pins;
+        for (auto& pin : pins) {
+          for (auto& p : pin->ports()) {
+            for (auto& l : p->shapes()) {
+              for (auto& s : l.second) {
+                _bbox.merge(Geom::Rect(s.xcenter(), s.ycenter(), s.xcenter(), s.ycenter()));
+              }
             }
           }
         }
@@ -271,6 +287,12 @@ class Module {
     {
       auto it = _nets.find(net);
       if (it != _nets.end()) it->second.setClockDriver(driver);
+    }
+
+    void addVirtualPin(const std::string& net, const Geom::LayerRects& r)
+    {
+      auto it = _nets.find(net);
+      if (it != _nets.end()) it->second.addVirtualPin(r);
     }
 
     void print() const;

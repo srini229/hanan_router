@@ -295,34 +295,54 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
           if (it != m.end()) {
             for (auto& netiter : *it) {
               auto itnetname = netiter.find("name");
-              auto itdetour = netiter.find("large_detour");
-              if (itdetour != netiter.end() && *itdetour == "allowed") {
-                modit->second->allowDetour(*itnetname);
-              }
-              const std::string wsd[] = {"widths", "spaces", "directions", "preferred_layers"};
-              for (auto iwsd : {0, 1, 2, 3}) {
-                auto itwsd = netiter.find(wsd[iwsd]);
-                if (itnetname != netiter.end() && itwsd != netiter.end()) {
-                  if (iwsd < 3) {
-                    for (auto& el : (*itwsd).items()) {
-                      auto layer = lf.getLayerIndex(el.key());
-                      if (layer >= 0) {
-                        switch (iwsd) {
-                          default:
-                          case 0: modit->second->addNDRWidth(*itnetname, layer, el.value());
-                                  break;
-                          case 1: modit->second->addNDRSpace(*itnetname, layer, el.value());
-                                  break;
-                          case 2: modit->second->addNDRDir(*itnetname, layer, el.value());
-                                  break;
+              if (itnetname != netiter.end()) {
+                auto itdetour = netiter.find("large_detour");
+                if (itdetour != netiter.end() && *itdetour == "allowed") {
+                  modit->second->allowDetour(*itnetname);
+                }
+                const std::string wsd[] = {"widths", "spaces", "directions", "preferred_layers"};
+                for (auto iwsd : {0, 1, 2, 3}) {
+                  auto itwsd = netiter.find(wsd[iwsd]);
+                  if (itwsd != netiter.end()) {
+                    if (iwsd < 3) {
+                      for (auto& el : (*itwsd).items()) {
+                        auto layer = lf.getLayerIndex(el.key());
+                        if (layer >= 0) {
+                          switch (iwsd) {
+                            default:
+                            case 0: modit->second->addNDRWidth(*itnetname, layer, el.value());
+                                    break;
+                            case 1: modit->second->addNDRSpace(*itnetname, layer, el.value());
+                                    break;
+                            case 2: modit->second->addNDRDir(*itnetname, layer, el.value());
+                                    break;
+                          }
                         }
                       }
+                    } else {
+                      for (auto& el : (*itwsd)) {
+                        auto layer = lf.getLayerIndex(el);
+                        modit->second->addPrefLayer(*itnetname, layer);
+                      }
                     }
-                  } else {
-                    for (auto& el : (*itwsd)) {
-                      auto layer = lf.getLayerIndex(el);
-                      modit->second->addPrefLayer(*itnetname, layer);
+                  }
+                }
+              }
+              auto itvpin = netiter.find("virtual_pins");
+              if (itvpin != netiter.end()) {
+                for (auto& vp : *itvpin) {
+                  Geom::LayerRects lr;
+                  for (auto& l : vp.items()) {
+                    auto layer = lf.getLayerIndex(l.key());
+                    if (layer >= 0) {
+                      for (auto& r : l.value()) {
+                        if (r.size() == 4) lr[layer].emplace_back(static_cast<double>(r[0]) * _uu, static_cast<double>(r[1]) * _uu,
+                            static_cast<double>(r[2]) * _uu, static_cast<double>(r[3]) * _uu);
+                      }
                     }
+                  }
+                  if (!lr.empty()) {
+                    modit->second->addVirtualPin(*itnetname, lr);
                   }
                 }
               }

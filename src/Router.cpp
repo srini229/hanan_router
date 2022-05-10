@@ -146,7 +146,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   auto maxz = std::max(n1.z(), n2.z());
   CostType minHCost(COST_MAX), minVCost(COST_MAX);
   std::set<int> minHCostLayers, minVCostLayers;
-  if (_preflayers.empty()) {
+  if (true) {
     if (_layerHCost[minz] != _layerVCost[minz]) {
       if (minz < _topRoutingLayer) maxz = minz + 1;
       else minz -= 1;

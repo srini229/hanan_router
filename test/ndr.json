@@ -8,7 +8,7 @@
     "module": "test_0",
     "nets": [
     {"name": "D", "preferred_layers":["M3", "M4"]},
-    {"name": "C", "preferred_layers":["M3", "M4"]}
+    {"name": "C", "preferred_layers":["M3", "M4"], "virtual_pins":[{"M3":[[1250,190,1282,222]]}]}
     ],
     "clock_nets":[{"name":"D", "driver":"J_1/Y"}]
   }
