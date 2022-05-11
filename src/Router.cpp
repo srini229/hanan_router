@@ -251,10 +251,10 @@ void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::s
       _layerVCost[it.first] = mincost;
       _layerHCost[it.first] = mincost;
     } else if (it.second == DRC::Direction::VERTICAL) {
-      _layerVCost[it.first] = mincost;
+      _layerVCost[it.first] = COST_MAX;
       _layerHCost[it.first] = maxcost;
     } else if (it.second == DRC::Direction::HORIZONTAL) {
-      _layerVCost[it.first] = maxcost;
+      _layerVCost[it.first] = COST_MAX;
       _layerHCost[it.first] = mincost;
     }
     COUT << "ndr dir : " << it.first << ' ' << _layerVCost[it.first] << ' ' << _layerHCost[it.first] << '\n';

@@ -251,6 +251,27 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
 #endif
+        if (port1->isVirtualPort() || port2->isVirtualPort()) {
+          for (auto& l : sol) {
+            for (auto& r : l.second) {
+              for (auto i : {true, false}) {
+                auto& port = i ? port1 : port2;
+                auto& shapes = port->shapes();
+                auto it = shapes.find(l.first);
+                if (it != shapes.end()) {
+                  for (auto& rp : it->second) {
+                    if (rp.overlaps(r)) {
+                      if ((rp.ymin() >= r.ymin() && rp.ymax() <= r.ymax())
+                          || (rp.xmin() >= r.xmin() && rp.xmax() <= r.xmax())) {
+                        r.merge(rp);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
         Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
       } else {
         _unroute = 1;
