@@ -147,9 +147,14 @@ void Module::route(Router::Router& router)
     }
     updateNets();
     NetsVec nets;
-    for (auto &n : _nets) nets.push_back(&n.second);
+    for (auto &n : _nets) {
+      if (std::find(_routeorder.begin(), _routeorder.end(), &n.second) == _routeorder.end()) {
+        nets.push_back(&n.second);
+      }
+    }
     std::sort(nets.begin(), nets.end(), [](const Net* a, const Net* b) -> bool
         { return a->halfpm() < b->halfpm(); });
+    nets.insert(nets.begin(), _routeorder.begin(), _routeorder.end());
     COUT << " routing : " << _name << "; num nets : " << nets.size() << '\n';
     //router.addObstacles(_obstacles);
     Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;

@@ -1,0 +1,16 @@
+[
+  {
+    "module": "test_inter_0",
+    "nets": [{"name": "X", "widths": {"M1": 34, "M2": 36}, "spaces": {"M1":31, "M2":31}, "preferred_layers":["M1", "M2"]}],
+    "do_not_route":["Y"]
+  },
+  {
+    "module": "test_0",
+    "nets": [
+    {"name": "D", "preferred_layers":["M3", "M4"]},
+    {"name": "C", "preferred_layers":["M3", "M4"]}
+    ],
+    "clock_nets":[{"name":"D", "driver":"J_1/Y"}],
+    "obstacles":[{"shapes":{"M1":[[2434,6,2674,200]], "M2":[[2434,6,2674,200]], "M3":[[2434,6,2674,200]], "M4":[[2434,6,2674,200]]}, "nets":["D"]}] 
+  }
+]

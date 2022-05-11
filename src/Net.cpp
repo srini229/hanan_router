@@ -241,6 +241,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.addObstacles(l1, true);
       router.addObstacles(l2, true);
       router.addObstacles(l3, true);
+      router.addObstacles(_obstacles, true);
       auto sol = router.findSol();
       if (!sol.empty()) {
 #if DEBUG

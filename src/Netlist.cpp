@@ -364,6 +364,47 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
               }
             }
           }
+          it = m.find("routing_order");
+          if (it != m.end()) {
+            for (auto& netiter : *it) {
+              modit->second->addNetToOrder(netiter);
+            }
+          }
+          it = m.find("obstacles");
+          if (it != m.end()) {
+            for (auto& obsiter : *it) {
+              auto itnets = obsiter.find("nets");
+              auto itshapes = obsiter.find("shapes");
+              if (itshapes != obsiter.end()) {
+                if (itnets == obsiter.end()) {
+                  for (auto& l : (*itshapes).items()) {
+                    auto layer = lf.getLayerIndex(l.key());
+                    if (layer >= 0) {
+                      for (auto& r : l.value()) {
+                        if (r.size() == 4) {
+                          COUT << "Adding obstacle to module " << modit->second->name() << " layer : " << l.key() << " : [" << r[0] << ' ' << r[1] << ' ' << r[2] << ' ' << r[3] << "]\n";
+                          modit->second->addObstacle(layer, Geom::Rect(static_cast<double>(r[0]) * _uu, static_cast<double>(r[1]) * _uu,
+                                static_cast<double>(r[2]) * _uu, static_cast<double>(r[3]) * _uu)); 
+                        }
+                      }
+                    }
+                  }
+                } else {
+                  for (auto& n : *itnets) {
+                    for (auto& l : (*itshapes).items()) {
+                      auto layer = lf.getLayerIndex(l.key());
+                      if (layer >= 0) {
+                        for (auto& r : l.value()) {
+                          if (r.size() == 4) modit->second->addNetObstacle(n, layer, Geom::Rect(static_cast<double>(r[0]) * _uu, static_cast<double>(r[1]) * _uu,
+                                static_cast<double>(r[2]) * _uu, static_cast<double>(r[3]) * _uu));
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }

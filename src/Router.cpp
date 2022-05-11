@@ -1166,7 +1166,7 @@ Geom::LayerRects Router::findSol()
         if (_expansions >= _maxExpansions) break;
       }
       if (!_sol) {
-        COUT << "sol not found for " << _name << "after " << _expansions << " expansions!\n";
+        COUT << "sol not found for " << _name << " after " << _expansions << " expansions!\n";
         for (unsigned i = 0; i < layerExpansions.size(); ++i) {
           COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
         }

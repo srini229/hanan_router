@@ -78,7 +78,7 @@ class Net {
   private:
     std::string _name;
     std::set<const Pin*> _pins, _vpins;
-    Geom::LayerRects _routeshapes;
+    Geom::LayerRects _routeshapes, _obstacles;
     Router::Vias _vias;
     Geom::Rect _bbox;
     int _unroute : 1;
@@ -143,6 +143,10 @@ class Net {
     void allowDetour() { _detour = 1; }
     bool excluded() const { return _exclude ? true : false; }
     void setClockDriver(const std::string& driver) { _driver = driver; }
+    void addObstacle(const int layer, const Geom::Rect& r) {
+      COUT << "Adding obstacle to net : " << _name << " layer : " << layer << ' ' << r.str() << '\n';
+      _obstacles[layer].push_back(r);
+    }
 };
 typedef std::map<std::string, Net> Nets;
 typedef std::vector<Net*> NetsVec;
@@ -188,6 +192,7 @@ class Module {
     Geom::LayerRects _obstacles, _internalroutes;
     Geom::Rect _bbox;
     const int _uu;
+    NetsVec _routeorder;
 
     void build();
   public:
@@ -234,8 +239,7 @@ class Module {
     Net* net(const std::string& name)
     {
       auto it = _nets.find(name);
-      if (it != _nets.end()) return &(it->second);
-      return nullptr;
+      return (it != _nets.end()) ? &(it->second) : nullptr;
     }
     void addTmpPin(const Net* n, Instance* inst, const std::string& pname)
     {
@@ -246,58 +250,67 @@ class Module {
       auto it = _pins.find(pn);
       return ((it != _pins.end()) ? it->second : nullptr);
     }
-    void addObstacle(const int layer, const Geom::Rect& r)
-    {
-      _obstacles[layer].push_back(r);
-    }
+    void addObstacle(const int layer, const Geom::Rect& r) { _obstacles[layer].push_back(r); }
     void updateNets()
     {
       for (auto& n : _nets) {
         n.second.update();
       }
     }
-    void addNDRWidth(const std::string& net, const int layer, const int ws)
+    void addNDRWidth(const std::string& netName, const int layer, const int ws)
     {
-      auto it = _nets.find(net);
-      if (it != _nets.end()) it->second.addNDRWidth(layer, ws);
+      auto n = net(netName);
+      if (n) n->addNDRWidth(layer, ws);
     }
-    void addNDRSpace(const std::string& net, const int layer, const int ws)
+    void addNDRSpace(const std::string& netName, const int layer, const int ws)
     {
-      auto it = _nets.find(net);
-      if (it != _nets.end()) it->second.addNDRSpace(layer, ws);
+      auto n = net(netName);
+      if (n) n->addNDRSpace(layer, ws);
     }
-    void addNDRDir(const std::string& net, const int layer, const std::string& d)
+    void addNDRDir(const std::string& netName, const int layer, const std::string& d)
     {
-      auto it = _nets.find(net);
-      if (it != _nets.end()) it->second.addNDRDir(layer, d);
+      auto n = net(netName);
+      if (n) n->addNDRDir(layer, d);
     }
-    void addPrefLayer(const std::string& net, const int layer)
+    void addPrefLayer(const std::string& netName, const int layer)
     {
-      auto it = _nets.find(net);
-      if (it != _nets.end()) it->second.addPrefLayer(layer);
+      auto n = net(netName);
+      if (n) n->addPrefLayer(layer);
     }
-    void allowDetour(const std::string& net)
+    void allowDetour(const std::string& netName)
     {
-      auto it = _nets.find(net);
-      if (it != _nets.end()) it->second.allowDetour();
-    }
-
-    void excludeNet(const std::string& net)
-    {
-      auto it = _nets.find(net);
-      if (it != _nets.end()) it->second.exclude();
+      auto n = net(netName);
+      if (n) n->allowDetour();
     }
 
-    void setClockDriver(const std::string& net, const std::string& driver)
+    void excludeNet(const std::string& netName)
     {
-      auto it = _nets.find(net);
-      if (it != _nets.end()) it->second.setClockDriver(driver);
+      auto n = net(netName);
+      if (n) n->exclude();
     }
 
-    void addVirtualPin(const std::string& net, const Geom::LayerRects& r)
+    void setClockDriver(const std::string& netName, const std::string& driver)
     {
-      auto it = _nets.find(net);
-      if (it != _nets.end()) it->second.addVirtualPin(r);
+      auto n = net(netName);
+      if (n) n->setClockDriver(driver);
+    }
+
+    void addVirtualPin(const std::string& netName, const Geom::LayerRects& r)
+    {
+      auto n = net(netName);
+      if (n) n->addVirtualPin(r);
+    }
+
+    void addNetToOrder(const std::string& netName)
+    {
+      auto n = net(netName);
+      if (nullptr != n) _routeorder.push_back(n);
+    }
+
+    void addNetObstacle(const std::string& netName, const int layer, const Geom::Rect& r)
+    {
+      auto n = net(netName);
+      if (nullptr != n) n->addObstacle(layer, r);
     }
 
     void print() const;
