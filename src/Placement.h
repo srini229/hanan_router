@@ -314,14 +314,14 @@ class Module {
     }
 
     void print() const;
-    void route(Router::Router& r);
+    void route(Router::Router& r, const std::string& outdir);
     void plot() const;
 
     const Geom::Rect& bbox() const { return _bbox; }
     void checkShort() const;
 
-    void writeDEF(const std::string& nstr = "", const std::string& netname = "") const;
-    void writeLEF() const;
+    void writeDEF(const std::string& outdir, const std::string& nstr = "", const std::string& netname = "") const;
+    void writeLEF(const std::string& outdir) const;
 
 };
 
@@ -340,10 +340,10 @@ class Netlist {
     Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile, const std::string& ildir);
     ~Netlist();
     void print() const;
-    void route(Router::Router& r)
+    void route(Router::Router& r, const std::string& outdir)
     {
       if (!_valid) return;
-      for (auto& m : _modules) m.second->route(r);
+      for (auto& m : _modules) m.second->route(r, outdir);
     }
     void plot() const
     {
@@ -354,10 +354,10 @@ class Netlist {
       if (!_valid) return;
       for (auto& m : _modules) m.second->checkShort();
     }
-    void writeDEF() const
+    void writeDEF(const std::string& outdir) const
     {
       if (!_valid) return;
-      for (auto& m : _modules) if (!m.second->isLeaf()) m.second->writeDEF();
+      for (auto& m : _modules) if (!m.second->isLeaf()) m.second->writeDEF(outdir);
     }
 };
 

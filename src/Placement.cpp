@@ -118,7 +118,7 @@ void Module::build()
   _tmpnetpins.clear();
 }
 
-void Module::route(Router::Router& router)
+void Module::route(Router::Router& router, const std::string& outdir)
 {
   TIME_M();
   if (!_routed) {
@@ -130,7 +130,7 @@ void Module::route(Router::Router& router)
     for (auto& inst : _instances) {
       auto m = inst->module();
       if (!m->routed()) {
-        const_cast<Module*>(m)->route(router);
+        const_cast<Module*>(m)->route(router, outdir);
       }
       inst->build(true);
       for (const auto& l : m->obstacles()) {
@@ -212,7 +212,7 @@ void Module::route(Router::Router& router)
         }
       }
     }
-    writeDEF();
+    writeDEF(outdir);
     for (auto& n : _nets) {
       if (_addednets.find(n.first) == _addednets.end()) {
         //std::cout << "unadded net : " << n.first << '\n';
@@ -221,7 +221,7 @@ void Module::route(Router::Router& router)
     }
   }
   if (!_leaf) {
-    writeLEF();
+    writeLEF(outdir);
   }
   _routed = 1;
   checkShort();
@@ -361,9 +361,9 @@ void Module::checkShort() const
   }
 }
 
-void Module::writeDEF(const std::string& nstr, const std::string& netname) const
+void Module::writeDEF(const std::string& outdir, const std::string& nstr, const std::string& netname) const
 {
-  std::ofstream ofs(_name + nstr + ".def");
+  std::ofstream ofs(outdir + _name + nstr + ".def");
   if (ofs.is_open()) {
     ofs << "VERSION 5.8 ;\nDIVIDERCHAR \"/\" ;\nBUSBITCHARS \"[]\" ;\nDESIGN " << _name << " ;\n";
     ofs << "UNITS DISTANCE MICRONS " << _uu << " ;\n";
@@ -428,9 +428,9 @@ void Module::writeDEF(const std::string& nstr, const std::string& netname) const
   }
 }
 
-void Module::writeLEF() const
+void Module::writeLEF(const std::string& outdir) const
 {
-  std::ofstream ofs(_name + "_interim_hier.lef");
+  std::ofstream ofs(outdir + _name + "_interim_hier.lef");
   if (ofs.is_open()) {
     ofs << "MACRO " << _name << "\n";
     ofs << "  UNITS\n    DISTANCE MICRONS " << _uu << ";\n  END UNITS\n";
