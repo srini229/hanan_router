@@ -130,11 +130,22 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   CostType dc = 0;
 
   if (n1.z() == n2.z()) {
+    CostType bendCost{0};
+    if (n1.parent() == &n2 && n2.parent() && n2.parent()->z() == n2.z()) {
+      if ((n1.x() == n2.x() && n2.parent()->x() != n1.x())
+          || (n1.y() == n2.y() && n2.parent()->y() != n1.y())){
+        bendCost = (n1.z() < _topRoutingLayer) ? _layerPairCost[n1.z()][n1.z() + 1] / 2 : _layerPairCost[n1.z()][n1.z() - 1] / 2;
+        /*COUT << "bend cost : " << bendCost << ' ' << std::min(_layerVCost[n1.z()], _layerHCost[n1.z()]) << '\n' ;
+        n1.print("bend1 : ");
+        n2.print("bend2 : ");
+        n2.parent()->print("bend3 : ");*/
+      }
+    }
     if (n1.x() == n2.x() && _layerVCost[n1.z()] < COST_MAX) {
-      return (_layerVCost[n1.z()] * std::abs(n1.y() - n2.y()));
+      return (bendCost + _layerVCost[n1.z()] * std::abs(n1.y() - n2.y()));
     }
     if (n1.y() == n2.y() && _layerHCost[n1.z()] < COST_MAX) {
-      return (_layerHCost[n1.z()] * std::abs(n1.x() - n2.x()));
+      return (bendCost + _layerHCost[n1.z()] * std::abs(n1.x() - n2.x()));
     }
   }
   if (n1.x() == n2.x() && n1.y() == n2.y()) {
@@ -145,7 +156,6 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   auto minz = std::min(n1.z(), n2.z());
   auto maxz = std::max(n1.z(), n2.z());
   CostType minHCost(COST_MAX), minVCost(COST_MAX);
-  std::set<int> minHCostLayers, minVCostLayers;
   if (true) {
     if (_layerHCost[minz] != _layerVCost[minz]) {
       if (minz < _topRoutingLayer) maxz = minz + 1;
@@ -156,6 +166,14 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
       minVCost = std::min(minVCost, _layerVCost[i]);
     }
     dc += (minHCost * std::abs(n1.x() - n2.x())) + (minVCost * std::abs(n1.y() - n2.y()));
+    if (std::abs(n1.x() - n2.x()) && std::abs(n1.y() - n2.y())) {
+      for (int i = minz; i <= maxz; ++i) {
+        if (_layerHCost[i] == minHCost && minHCost == minVCost && _layerVCost[i] == _layerHCost[i]) {
+          dc += (i < _topRoutingLayer) ? _layerPairCost[i][i + 1] / 2 : _layerPairCost[i][i - 1] / 2;
+          break;
+        }
+      }
+    }
     for (int i = std::min(n1.z(), minz); i < std::max(n1.z(), minz); ++i) {
       dc += _layerPairCost[i][i+1];
     }
@@ -166,6 +184,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
       dc += _layerPairCost[i][i+1];
     }
   } else {
+    std::set<int> minHCostLayers, minVCostLayers;
     for (int i = 0; i <= _topRoutingLayer; ++i) {
       if (_layerHCost[i] == minHCost) minHCostLayers.insert(i);
       if (_layerVCost[i] == minVCost) minVCostLayers.insert(i);
@@ -606,12 +625,12 @@ void Router::readDataFile(const std::string& ifile)
 
 void Router::insertToPQ(const Node* n)
 {
-#if DEBUG
-  n->print("adding to pq :");
-  if (n->parent()) n->parent()->print("\tparent:");
-#endif
   setexpand(const_cast<Node*>(n), n->parent());
   _pq.insert(n);
+#if DEBUG
+  n->print("\tadding to pq :");
+  if (n->parent()) n->parent()->print("\t\tparent:");
+#endif
 }
 
 void Router::setexpand(Node* newn, const Node* parent) const
@@ -1456,7 +1475,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
       }
     }
   }
-  if (_preflayers.empty() || !srcInPref || !tgtInPref) {
+  /*if (_preflayers.empty() || !srcInPref || !tgtInPref) {
     int minLayer{_cf.topRoutingLayer()}, maxLayer{0};
     for (auto src : {true, false}) {
       for (auto& l : (src ? _sourceshapes : _targetshapes)) {
@@ -1479,7 +1498,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         uselayers.insert(_belowViaLayer[l]);
       }
     }
-  }
+  }*/
   for (auto& l : lr) {
     const auto& layer = l.first;
     if (!uselayers.empty() && uselayers.find(l.first) == uselayers.end()) continue;
@@ -1494,14 +1513,12 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 #endif
       auto obs = r.bloatby(sx, sy);
       int x1 = sx, x2 = sx, y1 = sy, y2 = sy;
-      bool olsrcortgt{false};
       for (auto src : {true, false}) {
         const auto it = src ? _sourceshapes.find(l.first) : _targetshapes.find(l.first);
         const auto itend = src ? _sourceshapes.end() : _targetshapes.end();
         const auto& nodes = src ? _sources : _targets;
         if (it != itend) {
           for (const auto& s : it->second) {
-            if (r.overlaps(s)) olsrcortgt = true;
             if (_cf.isVert(l.first)) {
 #if DEBUG
               COUT << "source/target shape : " << s.str() << '\n';
@@ -1533,7 +1550,6 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
             if (_cf.isHor(l.first)) {
               if (obs.xmin() <= s.xmin() && obs.xmax() >= s.xmax() &&
                   obs.ymin() <= s.ymax() && obs.ymax() >= s.ymin() ) {
-                olsrcortgt = true;
                 if (r.xmin() >= s.xmax()) {
                   for (auto& n : nodes) {
                     if (n->z() == l.first && obs.contains(n->x(), n->y())) {
@@ -1554,9 +1570,22 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
           }
         }
       }
-      if (olsrcortgt) continue;
+      bool olsrcortgt{false};
       obs = r.bloatby(x1, y1, x2, y2);
-      if (_bbox.overlaps(obs)) {
+      for (auto src : {true, false}) {
+        const auto& shapes = src ? _sourceshapes : _targetshapes;
+        const auto it = shapes.find(l.first);
+        if (it != shapes.end()) {
+          for (auto& sr : it->second) {
+            if (sr.overlaps(r)) {
+              olsrcortgt = true;
+              break;
+            }
+          }
+        }
+        if (olsrcortgt) break;
+      }
+      if (!olsrcortgt && _bbox.overlaps(obs)) {
         if (temp) {
           _tobstacles[layer].push_back(obs);
           //COUT << "tobs : " << layer << ' ' << _tobstacles[layer].back().str() << '\n';
@@ -1689,11 +1718,13 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
   constructVias();
   for (const auto& l : _sourceshapes) {
     for (auto& r : l.second) {
+      //COUT << "source : " << l.first << ' ' << r.str() << '\n';
       addSource(r, l.first);
     }
   }
   for (const auto& l : _targetshapes) {
     for (auto& r : l.second) {
+      //COUT << "target : " << l.first << ' ' << r.str() << '\n';
       addTarget(r, l.first);
     }
   }

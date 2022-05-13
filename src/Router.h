@@ -15,8 +15,8 @@
 
 namespace Router {
 
-typedef long CostType;
-const auto CostMax = std::numeric_limits<CostType>::max();
+typedef double CostType;
+const auto CostTypeMax = std::numeric_limits<CostType>::max();
 class Node;
 
 class Via {
@@ -165,7 +165,7 @@ class Node {
     void setParent(const Node* n) { _parent = n; }
     void print(const std::string& s) const
     {
-      COUT << s << ' ' << _x << ' ' << _y << ' ' << _z << ' ' << _fcost << ' ' << _tcost <<  ' ' << cost();
+      COUT << s << "(" << _x << ',' << _y << ',' << _z << ") cost : (" << _fcost << ',' << _tcost <<  ',' << cost() << ") ";
       if (_expanddir.test(NORTH)) COUT << " N";
       if (_expanddir.test(SOUTH)) COUT << " S";
       if (_expanddir.test(EAST))  COUT << " E";
@@ -263,7 +263,7 @@ class Router {
 
     void evalTCost(Node* n)
     {
-      CostType tcost = CostMax;
+      CostType tcost = CostTypeMax;
       for (auto& t : _targets) {
         tcost = std::min(tcost, _cf.deltaCost(*n, *t));
       }

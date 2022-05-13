@@ -157,15 +157,27 @@ void Module::route(Router::Router& router)
     nets.insert(nets.begin(), _routeorder.begin(), _routeorder.end());
     COUT << " routing : " << _name << "; num nets : " << nets.size() << '\n';
     //router.addObstacles(_obstacles);
-    Geom::LayerRects _netObstaclesRouted, _netObstaclesUnrouted;
+    Geom::LayerRects netObstaclesRouted, netObstaclesUnrouted;
     for (auto it = nets.begin(); it != nets.end(); ++it) {
-      _netObstaclesUnrouted.clear();
+      netObstaclesUnrouted.clear();
+      for (auto itn = nets.begin(); itn != it; ++itn) {
+        if ((*itn)->excluded()) {
+          for (auto virt : {true, false}) {
+            const auto& pins = virt ? (*itn)->virtualpins() : (*itn)->pins();
+            for (auto& pin : pins) {
+              for (auto& p : pin->ports()) {
+                Geom::MergeLayerRects(netObstaclesUnrouted, p->shapes());
+              }
+            }
+          }
+        }
+      }
       for (auto itn = std::next(it); itn != nets.end(); ++itn) {
-        for (auto vert : {true, false}) {
-          const auto& pins = vert ? (*itn)->virtualpins() : (*itn)->pins();
+        for (auto virt : {true, false}) {
+          const auto& pins = virt ? (*itn)->virtualpins() : (*itn)->pins();
           for (auto& pin : pins) {
             for (auto& p : pin->ports()) {
-              Geom::MergeLayerRects(_netObstaclesUnrouted, p->shapes());
+              Geom::MergeLayerRects(netObstaclesUnrouted, p->shapes());
             }
           }
         }
@@ -175,9 +187,9 @@ void Module::route(Router::Router& router)
         if ((*it)->name().find("VCMBIAS") == std::string::npos)  continue;
       }*/
       router.setNetName((*it)->name());
-      (*it)->route(router, _netObstaclesRouted, _netObstaclesUnrouted, _obstacles, true);
+      (*it)->route(router, netObstaclesRouted, netObstaclesUnrouted, _obstacles, true);
       //writeDEF("_" + (*it)->name(), (*it)->name());
-      Geom::MergeLayerRects(_netObstaclesRouted, (*it)->routeShapes());
+      Geom::MergeLayerRects(netObstaclesRouted, (*it)->routeShapes());
     }
     router.clearObstacles();
     std::set<std::string> _addednets;
