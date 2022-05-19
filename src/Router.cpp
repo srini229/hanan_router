@@ -265,13 +265,12 @@ void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::s
   _preflayers = preflayers;
   for (auto& it : ndrdir) {
     auto mincost{std::min(_layerHCost[it.first], _layerVCost[it.first])};
-    auto maxcost{std::max(_layerHCost[it.first], _layerVCost[it.first])};
     if (it.second == DRC::Direction::ORTHOGONAL) {
       _layerVCost[it.first] = mincost;
       _layerHCost[it.first] = mincost;
     } else if (it.second == DRC::Direction::VERTICAL) {
-      _layerVCost[it.first] = COST_MAX;
-      _layerHCost[it.first] = maxcost;
+      _layerHCost[it.first] = COST_MAX;
+      _layerVCost[it.first] = mincost;
     } else if (it.second == DRC::Direction::HORIZONTAL) {
       _layerVCost[it.first] = COST_MAX;
       _layerHCost[it.first] = mincost;
@@ -1716,13 +1715,33 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
     }
   }*/
   constructVias();
+  bool prefLayerShape{false};
+  if (!_preflayers.empty()) {
+    for (const auto& l : _sourceshapes) {
+      if (_preflayers.find(l.first) != _preflayers.end()) {
+        prefLayerShape = true;
+        break;
+      }
+    }
+  }
   for (const auto& l : _sourceshapes) {
+    if (prefLayerShape && _preflayers.find(l.first) == _preflayers.end()) continue;
     for (auto& r : l.second) {
       //COUT << "source : " << l.first << ' ' << r.str() << '\n';
       addSource(r, l.first);
     }
   }
+  prefLayerShape = false;
+  if (!_preflayers.empty()) {
+    for (const auto& l : _targetshapes) {
+      if (_preflayers.find(l.first) != _preflayers.end()) {
+        prefLayerShape = true;
+        break;
+      }
+    }
+  }
   for (const auto& l : _targetshapes) {
+    if (prefLayerShape && _preflayers.find(l.first) == _preflayers.end()) continue;
     for (auto& r : l.second) {
       //COUT << "target : " << l.first << ' ' << r.str() << '\n';
       addTarget(r, l.first);

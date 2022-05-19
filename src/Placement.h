@@ -286,6 +286,7 @@ class Module {
     void excludeNet(const std::string& netName)
     {
       auto n = net(netName);
+      if (n) COUT << "excluding net : " << n->name() << " from routing\n";
       if (n) n->exclude();
     }
 
