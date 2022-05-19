@@ -134,7 +134,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
     if (n1.parent() == &n2 && n2.parent() && n2.parent()->z() == n2.z()) {
       if ((n1.x() == n2.x() && n2.parent()->x() != n1.x())
           || (n1.y() == n2.y() && n2.parent()->y() != n1.y())){
-        bendCost = (n1.z() < _topRoutingLayer) ? _layerPairCost[n1.z()][n1.z() + 1] / 2 : _layerPairCost[n1.z()][n1.z() - 1] / 2;
+        bendCost = (n1.z() < _topRoutingLayer) ? _layerPairCost[n1.z()][n1.z() + 1] * 10 : _layerPairCost[n1.z()][n1.z() - 1] * 10;
         /*COUT << "bend cost : " << bendCost << ' ' << std::min(_layerVCost[n1.z()], _layerHCost[n1.z()]) << '\n' ;
         n1.print("bend1 : ");
         n2.print("bend2 : ");

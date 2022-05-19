@@ -286,10 +286,18 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       if (!port1->isVirtualPort() || !_driver.empty()) {
         std::cout << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;
         Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), sol, &_bbox);
+        if (port2->isVirtualPort()) {
+          Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), port2->shapes(), &_bbox);
+          Geom::MergeLayerRects(_routeshapes, port2->shapes(), &_bbox);
+        }
       }
       if (!port2->isVirtualPort() || !_driver.empty()) {
         std::cout << "Adding routes to " << port2->name() << ' ' << sol.size() << std::endl;
         Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), sol, &_bbox);
+        if (port1->isVirtualPort()) {
+          Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), port1->shapes(), &_bbox);
+          Geom::MergeLayerRects(_routeshapes, port1->shapes(), &_bbox);
+        }
       }
       router.clearObstacles(true);
     }

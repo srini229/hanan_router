@@ -212,13 +212,13 @@ void Module::route(Router::Router& router, const std::string& outdir)
         }
       }
     }
-    writeDEF(outdir);
     for (auto& n : _nets) {
       if (_addednets.find(n.first) == _addednets.end()) {
         //std::cout << "unadded net : " << n.first << '\n';
         Geom::MergeLayerRects(_internalroutes, n.second.routeShapes());
       }
     }
+    writeDEF(outdir);
   }
   if (!_leaf) {
     writeLEF(outdir);
