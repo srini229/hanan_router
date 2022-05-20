@@ -17,6 +17,12 @@ void Net::print() const
       COUT << "(layer : " << lw.first << " width : " << lw.second << ") ";
     }
   }
+  if (!_ndrvias.empty()) {
+    COUT << " ndr via :";
+    for (const auto& lv : _ndrvias) {
+      COUT << "(layer : " << lv.first << " width : " << lv.second.str() << ") ";
+    }
+  }
 }
 
 PortPairs Net::reorderPorts() const
@@ -210,7 +216,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
-      router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers);
+      router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers, _ndrvias);
 #if DEBUG
       COUT << "adding line of sight nodes if they exist\n";
 #endif

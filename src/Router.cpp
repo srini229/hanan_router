@@ -1599,7 +1599,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 
 void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
     const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs,
-    const std::set<int>& preflayers)
+    const std::set<int>& preflayers, const std::map<int, DRC::ViaArray>& ndrvias)
 {
   _ndrwidthx.clear(); _ndrwidthy.clear();
   _ndrspacex.clear(); _ndrspacey.clear();
@@ -1714,7 +1714,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
       }
     }
   }*/
-  constructVias();
+  constructVias(&ndrvias);
   bool prefLayerShape{false};
   if (!_preflayers.empty()) {
     for (const auto& l : _sourceshapes) {
@@ -1846,7 +1846,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
   return via;
 }
 
-void Router::constructVias()
+void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
 {
   _upVias.clear();
   _upVias.resize(_widthx.size());
@@ -1858,45 +1858,72 @@ void Router::constructVias()
       auto vl = static_cast<DRC::ViaLayer*>(v);
       auto lp = vl->layers();
       if (lp.first && lp.second) {
-        auto vas = vl->viaArray();
-        if (vas.empty()) {
+        if (ndrvias && ndrvias->find(v->index()) != ndrvias->end()) {
+          const auto& va = ndrvias->find(v->index())->second;
           auto via = std::make_shared<Via>(lp.first->index(), lp.second->index(), v->index());
-          auto wx = vl->widthx(), wy = vl->widthy();
-          auto lx = wx + 2 * vl->coverlx();
-          auto ly = wy + 2 * vl->coverly();
-          auto ux = wx + 2 * vl->coverux();
-          auto uy = wy + 2 * vl->coveruy();
+          const auto& wx = va._sw._width.first;
+          const auto& wy = va._sw._width.second;
+          const auto& sx = va._sw._space.first;
+          const auto& sy = va._sw._space.second;
+          Geom::Point c(-wx/2, -wy/2);
+          if (va._nx > 1) {
+            c.x() = -((va._nx - 1) * (wx + sx) + wx)/2;
+          }
+          if (va._ny > 1) {
+            c.y() = -((va._ny - 1) * (wy + sy) + wy)/2;
+          }
+          via->addCuts(c, wx, wy, va._nx, va._ny, sx, sy);
+          Geom::Rect cbbox = via->bbox();
+          auto lx = cbbox.width() + 2 * vl->coverlx();
+          auto ly = cbbox.height() + 2 * vl->coverly();
+          auto ux = cbbox.width() + 2 * vl->coverux();
+          auto uy = cbbox.height() + 2 * vl->coveruy();
           via->setLB(Geom::Rect(-lx/2, -ly/2, lx/2, ly/2));
           via->setUB(Geom::Rect(-ux/2, -uy/2, ux/2, uy/2));
-          via->addCuts(Geom::Point(-wx/2, -wy/2), wx, wy);
           _vias.push_back(via);
           _upVias[lp.first->index()].push_back(via);
           _dnVias[lp.second->index()].push_back(via);
-        } else {
-          for (auto& va : vas) {
+        } {
+          auto vas = vl->viaArray();
+          if (vas.empty()) {
             auto via = std::make_shared<Via>(lp.first->index(), lp.second->index(), v->index());
-            const auto& wx = va._sw._width.first;
-            const auto& wy = va._sw._width.second;
-            const auto& sx = va._sw._space.first;
-            const auto& sy = va._sw._space.second;
-            Geom::Point c(-wx/2, -wy/2);
-            if (va._nx > 1) {
-              c.x() = -((va._nx - 1) * (wx + sx) + wx)/2;
-            }
-            if (va._ny > 1) {
-              c.y() = -((va._ny - 1) * (wy + sy) + wy)/2;
-            }
-            via->addCuts(c, wx, wy, va._nx, va._ny, sx, sy);
-            Geom::Rect cbbox = via->bbox();
-            auto lx = cbbox.width() + 2 * vl->coverlx();
-            auto ly = cbbox.height() + 2 * vl->coverly();
-            auto ux = cbbox.width() + 2 * vl->coverux();
-            auto uy = cbbox.height() + 2 * vl->coveruy();
+            auto wx = vl->widthx(), wy = vl->widthy();
+            auto lx = wx + 2 * vl->coverlx();
+            auto ly = wy + 2 * vl->coverly();
+            auto ux = wx + 2 * vl->coverux();
+            auto uy = wy + 2 * vl->coveruy();
             via->setLB(Geom::Rect(-lx/2, -ly/2, lx/2, ly/2));
             via->setUB(Geom::Rect(-ux/2, -uy/2, ux/2, uy/2));
+            via->addCuts(Geom::Point(-wx/2, -wy/2), wx, wy);
             _vias.push_back(via);
             _upVias[lp.first->index()].push_back(via);
             _dnVias[lp.second->index()].push_back(via);
+          } else {
+            for (auto& va : vas) {
+              auto via = std::make_shared<Via>(lp.first->index(), lp.second->index(), v->index());
+              const auto& wx = va._sw._width.first;
+              const auto& wy = va._sw._width.second;
+              const auto& sx = va._sw._space.first;
+              const auto& sy = va._sw._space.second;
+              Geom::Point c(-wx/2, -wy/2);
+              if (va._nx > 1) {
+                c.x() = -((va._nx - 1) * (wx + sx) + wx)/2;
+              }
+              if (va._ny > 1) {
+                c.y() = -((va._ny - 1) * (wy + sy) + wy)/2;
+              }
+              via->addCuts(c, wx, wy, va._nx, va._ny, sx, sy);
+              Geom::Rect cbbox = via->bbox();
+              auto lx = cbbox.width() + 2 * vl->coverlx();
+              auto ly = cbbox.height() + 2 * vl->coverly();
+              auto ux = cbbox.width() + 2 * vl->coverux();
+              auto uy = cbbox.height() + 2 * vl->coveruy();
+              via->setLB(Geom::Rect(-lx/2, -ly/2, lx/2, ly/2));
+              via->setUB(Geom::Rect(-ux/2, -uy/2, ux/2, uy/2));
+              _vias.push_back(via);
+              _upVias[lp.first->index()].push_back(via);
+              _dnVias[lp.second->index()].push_back(via);
+            }
           }
         }
       }

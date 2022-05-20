@@ -313,7 +313,7 @@ class Router {
     bool isSource(const Node* n) const { return _sources.find(const_cast<Node*>(n)) != _sources.end(); }
     void setexpand(Node* newn, const Node* parent) const;
 
-    void constructVias();
+    void constructVias(const std::map<int, DRC::ViaArray>* ndrvias = nullptr);
     
   public:
     Router(const DRC::LayerInfo& lf);
@@ -371,7 +371,7 @@ class Router {
     const Via* isViaValid(const Node* n, const bool up) const;
     void updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
         const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs,
-        const std::set<int>& preflayers);
+        const std::set<int>& preflayers, const std::map<int, DRC::ViaArray>& ndrvias);
     void setModName(const std::string& n) { _modname = n; }
     void setNetName(const std::string& n) { _netname = n; }
     void setuu(const int uu) { _uu = uu; }

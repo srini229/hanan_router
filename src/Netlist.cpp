@@ -291,6 +291,54 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
       if (it != m.end()) {
         auto modit = _modules.find(*it);
         if (modit != _modules.end()) {
+          const std::vector<std::string> wsd = {"widths", "spaces", "directions", "preferred_layers", "vias"};
+          for (unsigned iwsd = 0; iwsd < wsd.size(); ++iwsd) {
+            auto itwsd = m.find(wsd[iwsd]);
+            if (itwsd != m.end()) {
+              if (iwsd < 3) {
+                for (auto& el : (*itwsd).items()) {
+                  auto layer = lf.getLayerIndex(el.key());
+                  if (layer >= 0) {
+                    switch (iwsd) {
+                      default:
+                      case 0: modit->second->addNDRWidth(layer, static_cast<double>(el.value()) * _uu);
+                              break;
+                      case 1: modit->second->addNDRSpace(layer, static_cast<double>(el.value()) * _uu);
+                              break;
+                      case 2: modit->second->addNDRDir(layer, el.value());
+                              break;
+                    }
+                  }
+                }
+              } else if (iwsd == 3) {
+                for (auto& el : (*itwsd)) {
+                  auto layer = lf.getLayerIndex(el);
+                  modit->second->addPrefLayer(layer);
+                }
+              } else if (iwsd == 4) {
+                for (auto& el : (*itwsd).items()) {
+                  auto layer = lf.getLayerIndex(el.key());
+                  auto &via = el.value();
+                  if (layer >= 0) {
+                    int wx{0}, wy{0}, sx{0}, sy{0}, nx{0}, ny{0};
+                    auto itvia = via.find("WidthX");
+                    if (itvia != via.end()) wx = *itvia;
+                    itvia = via.find("WidthY");
+                    if (itvia != via.end()) wy = *itvia;
+                    itvia = via.find("SpaceX");
+                    if (itvia != via.end()) sx = *itvia;
+                    itvia = via.find("SpaceY");
+                    if (itvia != via.end()) sy = *itvia;
+                    itvia = via.find("NumX");
+                    if (itvia != via.end()) nx = *itvia;
+                    itvia = via.find("NumY");
+                    if (itvia != via.end()) ny = *itvia;
+                    modit->second->addNDRVia(layer, DRC::ViaArray(wx, wy, sx, sy, nx, ny));
+                  }
+                }
+              }
+            }
+          }
           it = m.find("nets");
           if (it != m.end()) {
             for (auto& netiter : *it) {
@@ -300,7 +348,6 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                 if (itdetour != netiter.end() && *itdetour == "allowed") {
                   modit->second->allowDetour(*itnetname);
                 }
-                const std::string wsd[] = {"widths", "spaces", "directions", "preferred_layers"};
                 for (auto iwsd : {0, 1, 2, 3}) {
                   auto itwsd = netiter.find(wsd[iwsd]);
                   if (itwsd != netiter.end()) {
@@ -310,19 +357,20 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                         if (layer >= 0) {
                           switch (iwsd) {
                             default:
-                            case 0: modit->second->addNDRWidth(*itnetname, layer, static_cast<double>(el.value()) * _uu);
+                            case 0: modit->second->addNDRWidth(layer, static_cast<double>(el.value()) * _uu, *itnetname);
                                     break;
-                            case 1: modit->second->addNDRSpace(*itnetname, layer, static_cast<double>(el.value()) * _uu);
+                            case 1: modit->second->addNDRSpace(layer, static_cast<double>(el.value()) * _uu, *itnetname);
                                     break;
-                            case 2: modit->second->addNDRDir(*itnetname, layer, el.value());
+                            case 2: modit->second->addNDRDir(layer, el.value(), *itnetname);
                                     break;
                           }
                         }
                       }
-                    } else {
+                    } else if (iwsd == 3) {
+                      modit->second->clearPrefLayer(*itnetname);
                       for (auto& el : (*itwsd)) {
                         auto layer = lf.getLayerIndex(el);
-                        modit->second->addPrefLayer(*itnetname, layer);
+                        modit->second->addPrefLayer(layer, *itnetname);
                       }
                     }
                   }

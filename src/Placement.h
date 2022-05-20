@@ -90,6 +90,7 @@ class Net {
     std::map<int, DRC::Direction> _ndrdirs;
     std::set<int> _preflayers;
     std::string _driver;
+    std::map<int, DRC::ViaArray> _ndrvias;
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0}, _detour{0}, _driver{} {}
     ~Net()
@@ -131,7 +132,6 @@ class Net {
     }
     int halfpm() const { return _bbox.halfpm(); }
     void addNDRWidth(const int layer, const int width) {
-      COUT << "Adding ndr width : " << width << " to layer : " << layer << " of net : " << _name << '\n';
       _ndrwidths[layer] = width;
     }
     void addNDRSpace(const int layer, const int space) { _ndrspaces[layer] = space; }
@@ -142,6 +142,8 @@ class Net {
       else if (dir == "V" || dir == "v") _ndrdirs[layer] = DRC::Direction::VERTICAL;
     }
     void addPrefLayer(const int layer) { _preflayers.insert(layer); }
+    void addNDRVia(const int layer, const DRC::ViaArray& v) { _ndrvias[layer] = v; }
+    void clearPrefLayer() { _preflayers.clear(); }
     void exclude() { _exclude = 1; }
     void allowDetour() { _detour = 1; }
     bool excluded() const { return _exclude ? true : false; }
@@ -260,25 +262,56 @@ class Module {
         n.second.update();
       }
     }
-    void addNDRWidth(const std::string& netName, const int layer, const int ws)
+
+    void addNDRWidth(const int layer, const int ws, const std::string& netName = "")
     {
-      auto n = net(netName);
-      if (n) n->addNDRWidth(layer, ws);
+      if (netName.empty()) {
+        for (auto& itn : _nets) itn.second.addNDRSpace(layer, ws);
+      } else {
+        auto n = net(netName);
+        if (n) n->addNDRWidth(layer, ws);
+      }
     }
-    void addNDRSpace(const std::string& netName, const int layer, const int ws)
+    void addNDRSpace(const int layer, const int ws, const std::string& netName = "")
     {
-      auto n = net(netName);
-      if (n) n->addNDRSpace(layer, ws);
+      if (netName.empty()) {
+        for (auto& itn : _nets) itn.second.addNDRSpace(layer, ws);
+      } else {
+        auto n = net(netName);
+        if (n) n->addNDRSpace(layer, ws);
+      }
     }
-    void addNDRDir(const std::string& netName, const int layer, const std::string& d)
+    void addNDRDir(const int layer, const std::string& d, const std::string& netName = "")
     {
-      auto n = net(netName);
-      if (n) n->addNDRDir(layer, d);
+      if (netName.empty()) {
+        for (auto& itn : _nets) itn.second.addNDRDir(layer, d);
+      } else {
+        auto n = net(netName);
+        if (n) n->addNDRDir(layer, d);
+      }
     }
-    void addPrefLayer(const std::string& netName, const int layer)
+    void clearPrefLayer(const std::string& netName) 
     {
       auto n = net(netName);
-      if (n) n->addPrefLayer(layer);
+      if (n) n->clearPrefLayer();
+    }
+    void addPrefLayer(const int layer, const std::string& netName = "")
+    {
+      if (netName.empty()) {
+        for (auto& itn : _nets) itn.second.addPrefLayer(layer);
+      } else {
+        auto n = net(netName);
+        if (n) n->addPrefLayer(layer);
+      }
+    }
+    void addNDRVia(const int layer, const DRC::ViaArray& v, const std::string& netName = "")
+    {
+      if (netName.empty()) {
+        for (auto& itn : _nets) itn.second.addNDRVia(layer, v);
+      } else {
+        auto n = net(netName);
+        if (n) n->addNDRVia(layer, v);
+      }
     }
     void allowDetour(const std::string& netName)
     {

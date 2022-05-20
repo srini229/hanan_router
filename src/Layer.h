@@ -85,28 +85,38 @@ class MetalLayer : public Layer {
 };
 typedef std::vector<MetalLayer*> MetalLayers;
 
+struct SpaceWidth {
+  std::pair<int, int> _space, _width; // 0 : x, 1 : y
+  SpaceWidth() : _space{0, 0}, _width{0, 0} {}
+};
+struct ViaArray {
+  SpaceWidth _sw;
+  int _nx, _ny;
+  ViaArray() : _sw{}, _nx{0}, _ny{0} {}
+  ViaArray(const int  wx, const int wy, const int sx, const int sy, const int nx, const int ny)
+  {
+    _sw._space = std::make_pair(sx, sy);
+    _sw._width = std::make_pair(wx, wy);
+    _nx = nx;
+    _ny = ny;
+  }
+  const std::string str() const
+  {
+    return std::string(
+        "w : " + std::to_string(_sw._width.first) + ", " + std::to_string(_sw._width.second) +
+        "s : " + std::to_string(_sw._space.first) + ", " + std::to_string(_sw._space.second) +
+        "n : " + std::to_string(_nx) + ", " + std::to_string(_ny)
+        );
+  }
+};
+typedef std::vector<ViaArray> ViaArrays;
+
 class ViaLayer : public Layer {
   private:
-    struct SpaceWidth {
-      std::pair<int, int> _space, _width; // 0 : x, 1 : y
-      SpaceWidth() : _space{0, 0}, _width{0, 0} {}
-    };
     SpaceWidth _sw;
     std::pair<const MetalLayer*, const MetalLayer*> _layerPair; // first : lower, second : upper
     int _coverl[2], _coveru[2]; // 0 : low, 1 : high
-    struct ViaArray {
-      SpaceWidth _sw;
-      int _nx, _ny;
-      ViaArray() : _sw{}, _nx{0}, _ny{0} {}
-      ViaArray(const int  wx, const int wy, const int sx, const int sy, const int nx, const int ny)
-      {
-        _sw._space = std::make_pair(sx, sy);
-        _sw._width = std::make_pair(wx, wy);
-        _nx = nx;
-        _ny = ny;
-      }
-    };
-    std::vector<ViaArray> _va;
+    ViaArrays _va;
   public:
     ViaLayer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur)
       : Layer(gdsNo, name, mur, lr, ur, LayerType::VIA), _sw{}, _layerPair(nullptr, nullptr),
