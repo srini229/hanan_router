@@ -348,7 +348,7 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                 if (itdetour != netiter.end() && *itdetour == "allowed") {
                   modit->second->allowDetour(*itnetname);
                 }
-                for (auto iwsd : {0, 1, 2, 3}) {
+                for (unsigned iwsd = 0; iwsd < wsd.size(); ++iwsd) {
                   auto itwsd = netiter.find(wsd[iwsd]);
                   if (itwsd != netiter.end()) {
                     if (iwsd < 3) {
@@ -371,6 +371,27 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                       for (auto& el : (*itwsd)) {
                         auto layer = lf.getLayerIndex(el);
                         modit->second->addPrefLayer(layer, *itnetname);
+                      }
+                    } else if (iwsd == 4) {
+                      for (auto& el : (*itwsd).items()) {
+                        auto layer = lf.getLayerIndex(el.key());
+                        auto &via = el.value();
+                        if (layer >= 0) {
+                          int wx{0}, wy{0}, sx{0}, sy{0}, nx{0}, ny{0};
+                          auto itvia = via.find("WidthX");
+                          if (itvia != via.end()) wx = *itvia;
+                          itvia = via.find("WidthY");
+                          if (itvia != via.end()) wy = *itvia;
+                          itvia = via.find("SpaceX");
+                          if (itvia != via.end()) sx = *itvia;
+                          itvia = via.find("SpaceY");
+                          if (itvia != via.end()) sy = *itvia;
+                          itvia = via.find("NumX");
+                          if (itvia != via.end()) nx = *itvia;
+                          itvia = via.find("NumY");
+                          if (itvia != via.end()) ny = *itvia;
+                          modit->second->addNDRVia(layer, DRC::ViaArray(wx, wy, sx, sy, nx, ny), *itnetname);
+                        }
                       }
                     }
                   }
