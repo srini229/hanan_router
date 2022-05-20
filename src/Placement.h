@@ -130,7 +130,10 @@ class Net {
       }
     }
     int halfpm() const { return _bbox.halfpm(); }
-    void addNDRWidth(const int layer, const int width) { _ndrwidths[layer] = width; }
+    void addNDRWidth(const int layer, const int width) {
+      COUT << "Adding ndr width : " << width << " to layer : " << layer << " of net : " << _name << '\n';
+      _ndrwidths[layer] = width;
+    }
     void addNDRSpace(const int layer, const int space) { _ndrspaces[layer] = space; }
     void addNDRDir(const int layer, const std::string& dir)
     {

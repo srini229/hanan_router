@@ -310,9 +310,9 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                         if (layer >= 0) {
                           switch (iwsd) {
                             default:
-                            case 0: modit->second->addNDRWidth(*itnetname, layer, el.value());
+                            case 0: modit->second->addNDRWidth(*itnetname, layer, static_cast<double>(el.value()) * _uu);
                                     break;
-                            case 1: modit->second->addNDRSpace(*itnetname, layer, el.value());
+                            case 1: modit->second->addNDRSpace(*itnetname, layer, static_cast<double>(el.value()) * _uu);
                                     break;
                             case 2: modit->second->addNDRDir(*itnetname, layer, el.value());
                                     break;
