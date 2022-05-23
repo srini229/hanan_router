@@ -128,6 +128,7 @@ for j,m in modules.items():
 gdslib = gdspy.GdsLibrary(name=args.top_cell, unit=args.units)
 
 layers = dict()
+labellayers = dict()
 if args.layers:
     with open(args.layers) as fp:
         layerdata = json.load(fp)
@@ -141,6 +142,8 @@ if args.layers:
                     else:
                         glno2 = 0
                     layers[layer] = (glno1,glno2)
+                    if "LabelLayer" in l:
+                        labellayers[layer] = l["LabelLayer"]
 
         
 for j,m in modules.items():
@@ -153,6 +156,8 @@ if args.deff:
         infills = False
         sca = args.scale
         layeridx = None
+        currnet = None
+        labeladded = False
         for line in fp:
             line.strip()
             if "UNITS" in line:
@@ -186,20 +191,34 @@ if args.deff:
                         print("fill shape : ", rect)
                         if args.top_cell in modules:
                             modules[args.top_cell]._cell.add(gdspy.Rectangle((rect[0], rect[1]), (rect[2], rect[3]), layer=l[0], datatype=l[1]))
-            if innets and "RECT" in line:
-                s = line.split()
-                if len(s) > 10:
-                    index = 0
-                    if s[0] == "RECT":
+            if innets:
+                if not currnet and "-" in line:
+                    s = line.split()
+                    if len(s) > 1:
+                        currnet = s[1]
+
+                if "RECT" in line:
+                    s = line.split()
+                    if len(s) > 10:
                         index = 0
-                    if s[1] == "RECT":
-                        index = 1
-                    layer = s[index + 1]
-                    rect = [float(s[index + 3])/sca, float(s[index + 4])/sca, float(s[index + 7])/sca, float(s[index + 8])/sca]
-                    l = layers[layer]
-                    if args.top_cell in modules:
-                        print(rect)
-                        modules[args.top_cell]._cell.add(gdspy.Rectangle((rect[0], rect[1]), (rect[2], rect[3]), layer=l[0], datatype=l[1]))
+                        if s[0] == "RECT":
+                            index = 0
+                        if s[1] == "RECT":
+                            index = 1
+                        layer = s[index + 1]
+                        rect = [float(s[index + 3])/sca, float(s[index + 4])/sca, float(s[index + 7])/sca, float(s[index + 8])/sca]
+                        l = layers[layer]
+                        if args.top_cell in modules:
+                            print(rect)
+                            modules[args.top_cell]._cell.add(gdspy.Rectangle((rect[0], rect[1]), (rect[2], rect[3]),\
+                                        layer=l[0], datatype=l[1]))
+                        if currnet and (not labeladded) and (layer in labellayers) and ('M' in layer.upper()):
+                            modules[args.top_cell]._cell.add(gdspy.Label(currnet, position=((rect[0] + rect[2])/2, (rect[1] + rect[3])/2),\
+                                        anchor='o', layer = labellayers[layer][0], texttype = labellayers[layer][1]))
+                            labeladded = True
+                if ";" in line:
+                    currnet = None
+                    labeladded = False
             
 
         

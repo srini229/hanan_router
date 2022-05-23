@@ -4,7 +4,7 @@ namespace Router {
 #if DEBUG
 size_t Node::_nodectr = 0;
 #endif
-#define NUM_POINTS 25
+#define NUM_POINTS 100
 
 Via::Via(const Via& via, const Geom::Point& p) : _l{via._l}, _u{via._u}, _c{via._c}
 {
@@ -127,7 +127,7 @@ CostFn::CostFn(const DRC::LayerInfo& lf)
 
 CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
 {
-  CostType dc = 0;
+  CostType dc{0};
 
   if (n1.z() == n2.z()) {
     CostType bendCost{0};
@@ -383,47 +383,50 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
   Geom::PointWidthSet points;
 
   if (dir == DOWN || dir == UP) {
-    if ((vert && r.isVert()) || (hor && r.isHor())) {
-      auto adj = z;
-      if (dir == UP) {
-        if (z < _maxLayer) adj = z + 1;
-      } else {
-        if (z > _minLayer) adj = z - 1;
-      }
+    auto adj = z;
+    if (dir == UP) {
+      if (z < _maxLayer) adj = z + 1;
+    } else {
+      if (z > _minLayer) adj = z - 1;
+    }
 
-      if (adj != z) {
-        auto wx = widthx(adj), wy = widthy(adj);
-        Geom::Rect padbox;
-        if (dir == UP && !_upVias[z].empty()) {
-          padbox = _upVias[z][0]->upad();
+    if (adj != z) {
+      auto wx = widthx(adj), wy = widthy(adj);
+      Geom::Rect padbox, zpadbox;
+      if (dir == UP && !_upVias[z].empty()) {
+        padbox = _upVias[z][0]->upad();
+        zpadbox = _upVias[z][0]->lpad();
+      }
+      if (dir == DOWN && !_dnVias[z].empty()) {
+        padbox = _dnVias[z][0]->lpad();
+        zpadbox = _dnVias[z][0]->upad();
+      }
+      if (vert) {
+        int space = std::max(spacey(adj) + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1)), r.height()/NUM_POINTS);
+        if (padbox.valid()) {
+          space = std::max(space, padbox.width());
         }
-        if (dir == DOWN && !_dnVias[z].empty()) {
-          padbox = _dnVias[z][0]->lpad();
-        }
-        if (vert) {
-          int space = std::max(spacey(adj) + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1)), r.height()/NUM_POINTS);
-          //if (padbox.valid()) {
-          //  space = std::max(space, padbox.width());
-          //}
-          int yn = r.ymax() - ((r.ymax() - y) % space);
-          while (yn > r.ymin()) {
-            points.insert(std::make_pair(Geom::Point(x,yn), widthy(z)));
-            yn -= space;
-          }
-        }
-        if (hor) {
-          int space = std::max(spacex(adj) + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1)), r.width()/NUM_POINTS);
-          //if (padbox.valid()) {
-          //  space = std::max(space, padbox.height());
-          //}
-          int xn = r.xmax() - ((r.xmax() - x) % space);
-          while (xn > r.xmin()) {
-            points.insert(std::make_pair(Geom::Point(xn,y), widthx(z)));
-            xn -= space;
-          }
+        points.insert(std::make_pair(Geom::Point(x,y), widthy(z)));
+        auto dimy{std::max(zpadbox.height(), widthy(z))/2};
+        int yn = r.ymax() - dimy;
+        while (yn >= (r.ymin() + dimy)) {
+          points.insert(std::make_pair(Geom::Point(x,yn), widthy(z)));
+          yn -= space;
         }
       }
-      points.insert(std::make_pair(Geom::Point(r.xcenter(), r.ycenter()), (vert ? widthy(z) : widthx(z))));
+      if (hor) {
+        int space = std::max(spacex(adj) + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1)), r.width()/NUM_POINTS);
+        if (padbox.valid()) {
+          space = std::max(space, padbox.height());
+        }
+        points.insert(std::make_pair(Geom::Point(x,y), widthx(z)));
+        auto dimx{std::max(zpadbox.width(), widthx(z))/2};
+        int xn = r.xmax() - dimx;
+        while (xn >= (r.xmin() + dimx)) {
+          points.insert(std::make_pair(Geom::Point(xn,y), widthx(z)));
+          xn -= space;
+        }
+      }
     }
   } else if (dir == EAST || dir == WEST) {
     if (hor) {
@@ -1100,7 +1103,7 @@ Geom::LayerRects Router::findSol()
         if (!s->closed()) insertToPQ(s);
         _bbox.merge(s->x(), s->y(), s->x(), s->y());
 #if DEBUG
-        COUT << "src : " << s->x() << ' ' << s->y() << ' ' << s->tcost() << ' ' << s->cost() << '\n';
+        COUT << "src : " << s->x() << ' ' << s->y() << ' ' << s->tcost() << ' ' << s->fcost() << ' ' << s->cost() << '\n';
 #endif
       }
       for (auto& t : _targets) {
