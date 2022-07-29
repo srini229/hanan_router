@@ -13,24 +13,25 @@ For now, the following sets of back-end of line design rules are honored:
 
 
 # Building the router
-Requirements
+Requirements:
   * A C++ compiler with support for C++14 or higher
   * `make` system
+  
 Steps to clone and build:
   ```
   git clone https://github.com/srini229/hanan_router.git
   cd hanan_router
   make -j4
   ```
-  I have verified that the router gets built properly on: Ubuntu 18.04 (GCC 6), Fedora  36 (GCC 12), Debian 10 on WSL (GCC 8), and Mac OS 10.15 (Clang 11).
+The build commands have been verified on: Ubuntu 18.04 (GCC 6), Fedora  36 (GCC 12), Debian 10 on WSL (GCC 8), and Mac OS 10.15 (Clang 11).
   
  Make generates a binary `hanan_router` on the cloned directory. 
  The repository has a frozen copy of the [`nlohmann/JSON`](https://github.com/nlohmann/json) parser packaged with it to parse the netlist, layer information and user constraints.
- It has a small version of LEF parser that understands basic LEF syntax for now. The router uses `RTree` data structure for quickly accessing the layout structures from memory.
+ It has a small version of LEF parser that understands basic LEF syntax for now. The router uses `RTree` data structure to quickly accessing the geometric structures from memory.
  It has a copy of the [`RTree`](https://superliminal.com/sources/RTreeTemplate.zip). 
  Migration of the JSON/RTree APIs to [Boost](https://www.boost.org/) libraries is a work in progress. This will eliminate the need for these separate thirdparty libraries.
  
- The JSON file formats reuse the syntax from the [ALIGN](https://github.com/ALIGN-analoglayout/ALIGN-public) project. A generic version to use LEF/DEF files for the netlist and design rules is a work in progress.
+ The JSON file formats reuse the syntax from the [ALIGN](https://github.com/ALIGN-analoglayout/ALIGN-public) project. A generic version to use LEF/DEF files of the netlist/design rules is a work in progress.
 
 # Interface
 The router syntax is:
