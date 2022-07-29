@@ -11,7 +11,7 @@ ap.add_argument( "-p", "--pl_file", type=str, default="", help='<filename.placem
 ap.add_argument( "-g", "--gds_dir", type=str, default="", help='<dir with all leaf gds files>')
 ap.add_argument( "-t", "--top_cell", type=str, default="library", help='<top cell>')
 ap.add_argument( "-u", "--units", type=float, default=1e-6, help='<units in m>')
-ap.add_argument( "-s", "--scale", type=float, default=2e3, help='<scale>')
+ap.add_argument( "-s", "--scale", type=float, default=1, help='<scale>')
 ap.add_argument( "-l", "--layers", type=str, default="", help='<layers.json>')
 ap.add_argument( "-d", "--deff", type=str, default="", help='<route def file>')
 args = ap.parse_args()
@@ -209,7 +209,6 @@ if args.deff:
                         rect = [float(s[index + 3])/sca, float(s[index + 4])/sca, float(s[index + 7])/sca, float(s[index + 8])/sca]
                         l = layers[layer]
                         if args.top_cell in modules:
-                            print(rect)
                             modules[args.top_cell]._cell.add(gdspy.Rectangle((rect[0], rect[1]), (rect[2], rect[3]),\
                                         layer=l[0], datatype=l[1]))
                         if currnet and (not labeladded) and (layer in labellayers) and ('M' in layer.upper()):
