@@ -13,9 +13,9 @@
   ],
   "modules": [
     {
-      "abstract_name": "test_inter",
+      "abstract_name": "BLOCK_B",
       "bbox": [ 0, 0, 1000, 1000 ],
-      "concrete_name": "test_inter_0",
+      "concrete_name": "BLOCK_B_CONC_0",
       "instances": [
         {
           "abstract_template_name": "BLOCK_A",
@@ -44,13 +44,13 @@
       ]
     },
     {
-      "abstract_name": "test",
+      "abstract_name": "TEST",
       "bbox": [ 0, 0, 1000, 1000 ],
-      "concrete_name": "test_0",
+      "concrete_name": "TEST_CONC_0",
       "instances": [
         {
-          "abstract_template_name": "test_inter",
-          "concrete_template_name": "test_inter_0",
+          "abstract_template_name": "BLOCK_B",
+          "concrete_template_name": "BLOCK_B_CONC_0",
           "fa_map": [
             { "actual": "C", "formal": "X" },
             { "actual": "D", "formal": "Y" }
@@ -59,8 +59,8 @@
           "transformation": { "oX": 0, "oY": 0, "sX": 1, "sY": 1 }
         },
         {
-          "abstract_template_name": "test_inter",
-          "concrete_template_name": "test_inter_0",
+          "abstract_template_name": "BLOCK_B",
+          "concrete_template_name": "BLOCK_B_CONC_0",
           "fa_map": [
             { "actual": "C", "formal": "X" },
             { "actual": "D", "formal": "Y" }

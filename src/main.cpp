@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
     outdir += '/';
   }
 
-  int uu{2000};
+  int uu{1};
   try {
     uu = std::stoi(parseArgs(argc, argv, "-uu"));
   } catch (const std::invalid_argument& ia) {}

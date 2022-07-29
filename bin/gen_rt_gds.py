@@ -15,16 +15,16 @@ ap.add_argument( "-s", "--scale", type=float, default=2e3, help='<scale>')
 ap.add_argument( "-l", "--layers", type=str, default="", help='<layers.json>')
 ap.add_argument( "-d", "--deff", type=str, default="", help='<route def file>')
 args = ap.parse_args()
+if args.pl_file == "" or args.gds_dir == "" or args.layers == "" or args.deff == "":
+    ap.print_help()
+    exit()
+
 print(f"placement verilog : {args.pl_file}")
 print(f"gds dir           : {args.gds_dir}")
 print(f"top cell          : {args.top_cell}")
 print(f"units             : {args.units}")
 print(f"layers.json       : {args.layers}")
 print(f"route def file    : {args.deff}")
-
-if args.pl_file == "" or args.gds_dir == "" or args.layers == "" or args.deff == "":
-    ap.print_help()
-    exit()
 
 class Transform:
     def __init__(self, oX = 0, oY = 0, sX = 1, sY = 1):
