@@ -673,7 +673,9 @@ void Router::setexpand(Node* newn, const Node* parent) const
       }
     }
   } else {
-    if (newn->z() >= _minLayer && newn->z() < _maxLayer) {
+    newn->setexpand();
+    if (newn->z() >= _maxLayer)  newn->expand(UP, false);
+    else if (newn->z() >= _minLayer && newn->z() < _maxLayer) {
       newn->expand(UP, false);
       auto v = isViaValid(newn, true);
       if (v) {
@@ -681,7 +683,8 @@ void Router::setexpand(Node* newn, const Node* parent) const
         newn->expand(UP, true);
       }
     }
-    if (newn->z() > _minLayer && newn->z() <= _maxLayer) {
+    if (newn->z() >= _minLayer) newn->expand(DOWN, false);
+    else if (newn->z() > _minLayer && newn->z() <= _maxLayer) {
       newn->expand(DOWN, false);
       auto v = isViaValid(newn, false);
       if (v) {
@@ -1103,13 +1106,13 @@ Geom::LayerRects Router::findSol()
         if (!s->closed()) insertToPQ(s);
         _bbox.merge(s->x(), s->y(), s->x(), s->y());
 #if DEBUG
-        COUT << "src : " << s->x() << ' ' << s->y() << ' ' << s->tcost() << ' ' << s->fcost() << ' ' << s->cost() << '\n';
+        s->print("src : ");
 #endif
       }
       for (auto& t : _targets) {
         _bbox.merge(t->x(), t->y(), t->x(), t->y());
 #if DEBUG
-        COUT << "tgt : " << t->x() << ' ' << t->y() << '\n';
+        t->print("tgt : ");
 #endif
       }
       _bbox.bloat(100);
