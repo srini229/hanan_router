@@ -37,7 +37,17 @@ PortPairs Net::reorderPorts() const
   PortPairs porder;
   if (ports.empty()) return porder;
   std::sort(ports.begin(), ports.end(),
-      [](const Port* p1, const Port* p2) -> bool { return p1->bbox().halfpm() > p2->bbox().halfpm(); });
+      [](const Port* p1, const Port* p2) -> bool
+      {
+      const auto& b1 = p1->bbox();
+      const auto& b2 = p2->bbox();
+      if (b1.halfpm() == b2.halfpm()) {
+      if (b1.ymin() == b2.ymin()) return b1.xmin() > b2.xmin();
+      return b1.ymin() > b2.ymin();
+      }
+      return b1.halfpm() > b2.halfpm();
+      }
+      );
   std::vector< std::vector<double> > portpairdist(ports.size(), std::vector<double>(ports.size(), 0));
   double mindist{1e30};
   int idx1{-1}, idx2{-1};
@@ -78,8 +88,13 @@ PortPairs Net::reorderPorts() const
       COUT << "ports dist : " << ports[i]->name() << ' ' << ports[j]->name() << ' ' << dist << '\n';
       if (mindist > dist) {
         mindist = dist;
-        idx1 = static_cast<int>(i);
-        idx2 = static_cast<int>(j);
+        idx1 = static_cast<int>(std::min(i, j));
+        idx2 = static_cast<int>(std::max(i, j));
+      } else if (mindist == dist) {
+        if (idx1 > static_cast<int>(i)) {
+          idx1 = static_cast<int>(std::min(i, j));
+          idx2 = static_cast<int>(std::max(i, j));
+        }
       }
     }
   }
