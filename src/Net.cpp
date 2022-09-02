@@ -217,7 +217,9 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
         preflayersrctgt &= preflayer;
-        COUT << "pref layer pin" << (preflayer ? "" : " not") << " found for " << (src ? port1->name() : port2->name()) << '\n';
+        if (!_preflayers.empty()) {
+          COUT << "pref layer pin" << (preflayer ? "" : " not") << " found for " << (src ? port1->name() : port2->name()) << '\n';
+        }
         for (auto& l : (src ? p1 : p2)) {
           if (l.first > router.maxLayer() || l.first < router.minLayer()) continue;
           if (preflayer && _preflayers.find(l.first) == _preflayers.end()) continue;

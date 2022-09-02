@@ -53,6 +53,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
         auto aname = m.find("abstract_name");
         auto modu = new Module(*mname, (aname != m.end() ? *aname : *mname), 0, _uu);
         auto params = m.find("parameters");
+        COUT << "adding module : " << *mname << '\n';
         if (params != m.end()) {
           for (auto& p : *params) {
             modu->addPin(p);
@@ -473,6 +474,10 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                 }
               }
             }
+          }
+          it = m.find("use_pin_width");
+          if (it != m.end()) {
+            modit->second->setusepinwidth(static_cast<int>(*it));
           }
         }
       }

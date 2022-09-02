@@ -239,7 +239,7 @@ class Router {
     std::vector<Vias> _upVias, _dnVias;
     std::string _name;
     size_t _expansions{0};
-    const size_t _maxExpansions{10000};
+    const size_t _maxExpansions{100000};
     std::vector<int> _aboveViaLayer, _belowViaLayer;
     const DRC::LayerInfo& _lf;
     std::map<const Node*, int> _endextnxmin, _endextnymin, _endextnxmax, _endextnymax;
@@ -248,6 +248,7 @@ class Router {
     int _uu;
     Geom::LayerTree _ltree;
     std::set<int> _preflayers;
+    bool _usepinwidth{false};
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -329,6 +330,7 @@ class Router {
     const int maxLayer() const { return _maxLayer; }
     const int minLayer() const { return _minLayer; }
     void setName(const std::string& n) { _name = n; }
+    void setusepinwidth(const bool u) { _usepinwidth = u; }
 
     int widthx(const int z) const { return (_ndrwidthx[z] != INT_MAX ? std::max(_ndrwidthx[z], _widthx[z]) : _widthx[z]); }
     int widthy(const int z) const { return (_ndrwidthy[z] != INT_MAX ? std::max(_ndrwidthy[z], _widthy[z]) : _widthy[z]); }
@@ -376,7 +378,7 @@ class Router {
     void setNetName(const std::string& n) { _netname = n; }
     void setuu(const int uu) { _uu = uu; }
     void allowDetour() { _bbox.bloat(std::max(_bbox.width(), _bbox.height()) * 10); }
-    void writeLEF() const;
+    void writeLEF(const Geom::LayerRects* sol = nullptr) const;
 };
 
 }

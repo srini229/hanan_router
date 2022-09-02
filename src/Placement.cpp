@@ -122,7 +122,6 @@ void Module::route(Router::Router& router, const std::string& outdir)
 {
   TIME_M();
   if (!_routed) {
-    router.setModName(_name);
     router.setuu(_uu);
     //writeDEF("_before");
     router.clearObstacles();
@@ -155,9 +154,12 @@ void Module::route(Router::Router& router, const std::string& outdir)
     std::sort(nets.begin(), nets.end(), [](const Net* a, const Net* b) -> bool
         { return a->halfpm() < b->halfpm(); });
     nets.insert(nets.begin(), _routeorder.begin(), _routeorder.end());
-    COUT << " routing : " << _name << "; num nets : " << nets.size() << '\n';
+    COUT << " routing : " << _name << "; num nets : " << nets.size() << "; use pin width : " << (_usepinwidth ? 1 : 0) << '\n';
     //router.addObstacles(_obstacles);
     Geom::LayerRects netObstaclesRouted, netObstaclesUnrouted;
+    router.setModName(_name);
+    COUT << "setting module name : " << _name << '\n';
+    router.setusepinwidth((_usepinwidth == 1) ? true : false);
     for (auto it = nets.begin(); it != nets.end(); ++it) {
       netObstaclesUnrouted.clear();
       for (auto itn = nets.begin(); itn != it; ++itn) {

@@ -189,6 +189,7 @@ class Module {
     std::string _name, _absname;
     int _leaf : 1;
     int _routed : 1;
+    int _usepinwidth : 1;
     Nets _nets;
     Pins _pins;
     Instances _instances;
@@ -201,7 +202,7 @@ class Module {
 
     void build();
   public:
-    Module(const std::string& name, const std::string& absname, const int leaf, const int uu) : _name(name), _absname{absname}, _leaf(leaf), _routed{leaf}, _bbox{}, _uu{uu} {_instances.reserve(64);}
+    Module(const std::string& name, const std::string& absname, const int leaf, const int uu) : _name(name), _absname{absname}, _leaf(leaf), _routed{leaf}, _usepinwidth{0}, _bbox{}, _uu{uu} {_instances.reserve(64);}
     ~Module();
     Instance* addInstance(const std::string& name, const std::string& mname, const Geom::Transform& tr)
     {
@@ -349,6 +350,8 @@ class Module {
       auto n = net(netName);
       if (nullptr != n) n->addObstacle(layer, r);
     }
+
+    void setusepinwidth(int u) { _usepinwidth = u ? 1 : 0; }
 
     void print() const;
     void route(Router::Router& r, const std::string& outdir);

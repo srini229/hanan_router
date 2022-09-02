@@ -1325,6 +1325,7 @@ Geom::LayerRects Router::findSol()
   {
     plot();
     printSol();
+    writeLEF(&sol);
   }
   clearSourceTargets();
   return sol;
@@ -1628,7 +1629,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
         _ndrwidthx[it.first] = std::max(_ndrwidthx[it.first], it.second);
         _ndrwidthy[it.first] = std::max(_ndrwidthy[it.first], it.second);
       }
-    } else if (preflayers.empty()) {
+    } else if (preflayers.empty() && _usepinwidth) {
       if (_sourceshapes.size() == 1) {
         auto itsrc = _sourceshapes.begin();
         auto ittgt = _targetshapes.find(itsrc->first);
@@ -1638,9 +1639,9 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
             && itsrc->second.size() == 1) {
           auto z = itsrc->first;
           if ((itsrc->second.begin()->width() < 10 * itsrc->second.begin()->height()) 
-                && (itsrc->second.begin()->height() < 10 * itsrc->second.begin()->width())
-                && (ittgt->second.begin()->width() < 10 * ittgt->second.begin()->height())
-                && (ittgt->second.begin()->height() < 10 * ittgt->second.begin()->width())) {
+              && (itsrc->second.begin()->height() < 10 * itsrc->second.begin()->width())
+              && (ittgt->second.begin()->width() < 10 * ittgt->second.begin()->height())
+              && (ittgt->second.begin()->height() < 10 * ittgt->second.begin()->width())) {
             if (_cf.isVert(z)) {
               _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
               _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
@@ -1668,9 +1669,9 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
             && itsrc->second.size() == 1) {
           auto z = ittgt->first;
           if ((itsrc->second.begin()->width() < 10 * itsrc->second.begin()->height()) 
-                && (itsrc->second.begin()->height() < 10 * itsrc->second.begin()->width())
-                && (ittgt->second.begin()->width() < 10 * ittgt->second.begin()->height())
-                && (ittgt->second.begin()->height() < 10 * ittgt->second.begin()->width())) {
+              && (itsrc->second.begin()->height() < 10 * itsrc->second.begin()->width())
+              && (ittgt->second.begin()->width() < 10 * ittgt->second.begin()->height())
+              && (ittgt->second.begin()->height() < 10 * ittgt->second.begin()->width())) {
             if (_cf.isVert(z)) {
               _ndrwidthy[z] = std::min(_ndrwidthy[z], itsrc->second.begin()->width());
               _ndrwidthy[z] = std::min(_ndrwidthy[z], ittgt->second.begin()->width());
@@ -1690,6 +1691,16 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
           }
         }
       }
+      for (unsigned i = 0; i < _ndrwidthx.size(); ++i) {
+        COUT << "after updatendr layer : " << i << " width : " << _widthx[i] << ' ' << _widthy[i];
+        if (_ndrwidthx[i] != INT_MAX) {
+          COUT << " ndr widthx : " << _ndrwidthx[i] ;
+        }
+        if (_ndrwidthy[i] != INT_MAX) {
+          COUT << " ndr widthy : " << _ndrwidthy[i];
+        }
+        COUT << '\n';
+      }
     }
   }
 //#if DEBUG
@@ -1699,7 +1710,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
       COUT << " ndr widthx : " << _ndrwidthx[i] ;
     }
     if (_ndrwidthy[i] != INT_MAX) {
-      COUT << " ndr widthyz : " << _ndrwidthy[i];
+      COUT << " ndr widthy : " << _ndrwidthy[i];
     }
     COUT << '\n';
   }
@@ -1937,16 +1948,55 @@ void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
   }
 }
 
-void Router::writeLEF() const
+void Router::writeLEF(const Geom::LayerRects* sol) const
 {
   auto name(_modname + "_" + _netname);
-  std::ofstream ofs(name + ".lef");
-  if (ofs.is_open()) { 
+  COUT << "writing LEF file : " << name << ".lef\n";
+  std::ofstream ofs(name + (sol ? "_sol.lef" : ".lef"));
+  if (ofs.is_open()) {
     ofs << "MACRO " << name << "\n";
     ofs << "  UNITS\n    DISTANCE MICRONS " << _uu << ";\n  END UNITS\n";
     ofs << "  ORIGIN "  << _bbox.xmin()  << ' ' << _bbox.ymin() << " ;\n";
     ofs << "  FOREIGN " << name << ' '  << (1.*_bbox.xmin()/_uu) << ' ' << (1.*_bbox.ymin()/_uu) << " ;\n";
     ofs << "  SIZE "    << (1.*_bbox.width()/_uu) << " BY " << (1.* _bbox.height()/_uu) << " ;\n";
+    ofs << "    PIN SRC\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+    for (auto& l : _sourceshapes) {
+      ofs << "        LAYER " << LAYER_NAMES[l.first] << "_SRC ;\n";
+      for (auto& r : l.second) {
+        ofs << "          RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+      }
+    }
+    ofs << "      END\n    END SRC\n";
+    ofs << "    PIN TGT\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+    for (auto& l : _targetshapes) {
+      ofs << "      LAYER " << LAYER_NAMES[l.first] << "_TGT ;\n";
+      for (auto& r : l.second) {
+        ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+      }
+    }
+    ofs << "      END\n    END TGT\n";
+    ofs << "    PIN SRCNODES\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+    for (auto& s : _sources) {
+      ofs << "        LAYER " << LAYER_NAMES[s->z()] << "_SRC ;\n";
+      ofs << "          RECT " << (1.*(s->x() - 100)/_uu) << ' ' << (1.*(s->y() - 100)/_uu) << ' ' << (1.*(s->x() + 100)/_uu) << ' ' << (1.*(s->y() + 100)/_uu) << " ;\n";
+    }
+    ofs << "      END\n    END SRCNODES\n";
+    ofs << "    PIN TGTNODES\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+    for (auto& s : _targets) {
+      ofs << "        LAYER " << LAYER_NAMES[s->z()] << "_TGT ;\n";
+      ofs << "          RECT " << (1.*(s->x() - 100)/_uu) << ' ' << (1.*(s->y() - 100)/_uu) << ' ' << (1.*(s->x() + 100)/_uu) << ' ' << (1.*(s->y() + 100)/_uu) << " ;\n";
+    }
+    ofs << "      END\n    END TGTNODES\n";
+    if (sol) {
+      ofs << "    PIN SOL\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+      for (auto& l : *sol) {
+        ofs << "        LAYER " << LAYER_NAMES[l.first] << "_SOL ;\n";
+        for (auto& r : l.second) {
+          ofs << "          RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+        }
+      }
+      ofs << "      END\n    END SOL\n";
+    }
     if (!_tobstacles.empty()) {
       ofs << "    OBS\n";
       for (auto& l : _tobstacles) {
@@ -1955,6 +2005,8 @@ void Router::writeLEF() const
           ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
         }
       }
+      ofs << "      LAYER BBOX ;\n";
+      ofs << "        RECT " << (1.*_bbox.xmin()/_uu) << ' ' << (1.*_bbox.ymin()/_uu) << ' ' << (1.*_bbox.xmax()/_uu) << ' ' << (1.*_bbox.ymax()/_uu) << " ;\n";
       ofs << "    END\n";
     }
     ofs << "END " << name << "\nEND LIBRARY\n";
