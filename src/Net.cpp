@@ -327,4 +327,33 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   }
 }
 
+void Net::writeLEF(const std::string& modname, const int uu) const
+{
+  auto name(("net_" + modname + "_" + _name + ".lef"));
+  COUT << "writing LEF file : " << name << "\n";
+  std::ofstream ofs(name);
+  if (ofs.is_open()) {
+    ofs << "MACRO " << modname << "\n";
+    ofs << "  UNITS\n    DISTANCE MICRONS " << uu << ";\n  END UNITS\n";
+    ofs << "  ORIGIN "  << _bbox.xmin()  << ' ' << _bbox.ymin() << " ;\n";
+    ofs << "  FOREIGN " << name << ' '  << (1.*_bbox.xmin()/uu) << ' ' << (1.*_bbox.ymin()/uu) << " ;\n";
+    ofs << "  SIZE "    << (1.*_bbox.width()/uu) << " BY " << (1.* _bbox.height()/uu) << " ;\n";
+    for (auto& p : _pins) {
+      ofs << "  PIN " << p->name() <<"\n    DIRECTION INOUT ;\n    USE SIGNAL ;\n";
+      for (auto& pp : p->ports()) {
+        ofs << "    PORT\n";
+        for (auto& l : pp->shapes()) {
+          ofs << "      LAYER " << LAYER_NAMES[l.first] << "_SRC ;\n";
+          for (auto& r : l.second) {
+            ofs << "        RECT " << (1.*r.xmin()/uu) << ' ' << (1.*r.ymin()/uu) << ' ' << (1.*r.xmax()/uu) << ' ' << (1.*r.ymax()/uu) << " ;\n";
+          }
+        }
+        ofs << "      END\n";
+      }
+      ofs <<"  END " << p->name() << '\n';
+    }
+    ofs << "END " << modname << "\nEND LIBRARY\n";
+  }
+}
+
 }

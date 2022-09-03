@@ -1,5 +1,6 @@
 #include "Util.h"
 #include "Geom.h"
+#include <sstream>
 
 std::string parseArgs(const int argc, char* const argv[], const std::string& arg, std::string str)
 {
@@ -20,6 +21,17 @@ bool checkArg(const int argc, char* const argv[], const std::string& arg)
     }
   }
   return false;
+}
+
+std::set<std::string> splitString(const std::string& s, const char delim)
+{
+  std::set<std::string> strings;
+  if (!s.empty()) {
+    std::stringstream ss(s);
+    std::string tmps;
+    while(getline(ss, tmps, delim)) strings.insert(tmps);
+  }
+  return strings;
 }
 
 const std::vector<std::string> LAYER_COLORS = {"red", "green", "blue", "cyan", "magenta", "black", "grey", "violet", "yellow", "orange", "black"};

@@ -11,7 +11,7 @@
 #include "Geom.h"
 #include "Layer.h"
 
-#define COST_MAX 100000
+#define COST_MAX 10000
 
 namespace Router {
 
@@ -239,7 +239,7 @@ class Router {
     std::vector<Vias> _upVias, _dnVias;
     std::string _name;
     size_t _expansions{0};
-    const size_t _maxExpansions{100000};
+    const size_t _maxExpansions{10000};
     std::vector<int> _aboveViaLayer, _belowViaLayer;
     const DRC::LayerInfo& _lf;
     std::map<const Node*, int> _endextnxmin, _endextnymin, _endextnxmax, _endextnymax;
@@ -248,7 +248,7 @@ class Router {
     int _uu;
     Geom::LayerTree _ltree;
     std::set<int> _preflayers;
-    bool _usepinwidth{false};
+    bool _usepinwidth{false}, _debugplot{false};
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -379,6 +379,7 @@ class Router {
     void setuu(const int uu) { _uu = uu; }
     void allowDetour() { _bbox.bloat(std::max(_bbox.width(), _bbox.height()) * 10); }
     void writeLEF(const Geom::LayerRects* sol = nullptr) const;
+    void setEnableDebug(const bool b) { _debugplot = b; }
 };
 
 }

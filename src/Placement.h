@@ -64,12 +64,10 @@ class Pin {
     const Ports& ports() const { return _ports; }
     void copyRects(const Geom::LayerRects& lr, bool newport = false)
     {
-      Port *port;
       if (_ports.empty() || newport) {
         addPort(new Port("", isVirtualPin()));
       }
-      port = _ports.back();
-      port->copyRects(lr);
+      _ports.back()->copyRects(lr);
     }
 };
 typedef std::map<std::string, Pin*> Pins;
@@ -152,6 +150,7 @@ class Net {
       COUT << "Adding obstacle to net : " << _name << " layer : " << layer << ' ' << r.str() << '\n';
       _obstacles[layer].push_back(r);
     }
+    void writeLEF(const std::string& modname, const int uu) const;
 };
 typedef std::map<std::string, Net> Nets;
 typedef std::vector<Net*> NetsVec;

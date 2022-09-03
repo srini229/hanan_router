@@ -4,7 +4,7 @@ namespace Router {
 #if DEBUG
 size_t Node::_nodectr = 0;
 #endif
-#define NUM_POINTS 100
+#define NUM_POINTS 1000
 
 Via::Via(const Via& via, const Geom::Point& p) : _l{via._l}, _u{via._u}, _c{via._c}
 {
@@ -1141,7 +1141,7 @@ Geom::LayerRects Router::findSol()
       generateHananGrid();
 #if DEBUG
 #else
-      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name))
+      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
 #endif
         writeLEF();
 

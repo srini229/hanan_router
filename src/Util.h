@@ -5,6 +5,7 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <set>
 
 #define COUT std::cout //<< __PRETTY_FUNCTION__ << " -:- "
 #define CERR std::cerr //<< __PRETTY_FUNCTION__ << " -:- "
@@ -66,6 +67,7 @@ extern const std::vector<std::string> LAYER_COLORS;
 
 std::string parseArgs(const int argc, char* const argv[], const std::string& arg, std::string str = "");
 bool checkArg(const int argc, char* const argv[], const std::string& arg);
+std::set<std::string> splitString(const std::string& s, const char delim = ',');
 
 extern std::vector<std::string> LAYER_NAMES;
 extern std::string SEPARATOR;
