@@ -1,4 +1,5 @@
 #include "Router.h"
+#include <algorithm>
 
 namespace Router {
 #if DEBUG
@@ -1950,7 +1951,8 @@ void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
 
 void Router::writeLEF(const Geom::LayerRects* sol) const
 {
-  auto name(_modname + "_" + _netname);
+  auto name(_modname + "_" + _name);
+  std::replace(name.begin(), name.end(), '/', '+');
   COUT << "writing LEF file : " << name << ".lef\n";
   std::ofstream ofs(name + (sol ? "_sol.lef" : ".lef"));
   if (ofs.is_open()) {
