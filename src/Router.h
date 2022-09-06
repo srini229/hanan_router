@@ -246,6 +246,7 @@ class Router {
     std::map<int, std::set<Geom::Rect>> _sourceshapes, _targetshapes;
     std::string _modname, _netname;
     int _uu;
+    int _precision{5};
     Geom::LayerTree _ltree;
     std::set<int> _preflayers;
     bool _usepinwidth{false}, _debugplot{false};
@@ -377,7 +378,7 @@ class Router {
     void setModName(const std::string& n) { _modname = n; }
     void setNetName(const std::string& n) { _netname = n; }
     void setuu(const int uu) { _uu = uu; }
-    void allowDetour() { _bbox.bloat(std::max(_bbox.width(), _bbox.height()) * 10); }
+    void allowDetour() { _bbox.expand(std::max(_bbox.width(), _bbox.height()) * 10); }
     void writeLEF(const Geom::LayerRects* sol = nullptr) const;
     void setEnableDebug(const bool b) { _debugplot = b; }
     bool debug() const { return _debugplot; }

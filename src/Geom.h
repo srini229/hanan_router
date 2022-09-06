@@ -41,7 +41,18 @@ class Point {
     {
       return _x == p._x && _y == p._y;
     }
-
+    void snap(const int precx, const int precy, bool down) 
+    {
+      auto rx = (precx != 0) ? _x % precx : 0;
+      auto ry = (precy != 0) ? _y % precy : 0;
+      if (down) {
+        if (rx != 0) _x -= rx;
+        if (ry != 0) _y -= ry;
+      } else {
+        if (rx != 0) _x += (precx - rx);
+        if (ry != 0) _y += (precy - ry);
+      }
+    }
 };
 typedef std::set<Geom::Point> PointSet;
 typedef std::set<std::pair<Geom::Point, int>> PointWidthSet;
@@ -113,8 +124,8 @@ class Rect {
       ymax() = max(ymax(), y2);
     }
 
-    void bloat(const int c) { _ll.translate(-c); _ur.translate(c); }
-    void bloat(const int x, const int y) { _ll.translate(-x, -y); _ur.translate(x, y); }
+    void expand(const int c) { _ll.translate(-c); _ur.translate(c); }
+    void expand(const int x, const int y) { _ll.translate(-x, -y); _ur.translate(x, y); }
     Rect bloatby(const int c) const { return Rect(xmin() - c, ymin() - c, xmax() + c, ymax() + c); }
     Rect bloatby(const int x, const int y) const { return Rect(xmin() - x, ymin() - y, xmax() + x, ymax() + y); }
     Rect bloatby(const int x1, const int y1, const int x2, const int y2) const
@@ -183,6 +194,15 @@ class Rect {
       if (_ur == r._ur) return _ll < r._ll;
       return _ur < r._ur;
     }
+
+    void snap(const int precx, const int precy)
+    {
+      _ll.snap(precx, precy, true);
+      _ur.snap(precx, precy, false);
+    }
+
+    void snap(const int prec) { snap(prec, prec); }
+    Rect snap(const int prec) const { auto x = Rect(_ll, _ur); x.snap(prec); return x; }
 };
 typedef vector<Rect> Rects;
 typedef map<int, Rects> LayerRects;

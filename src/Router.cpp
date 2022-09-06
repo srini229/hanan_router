@@ -1025,6 +1025,12 @@ void Router::generateHananGrid()
   _hanangridv.clear();
   _hanangridv.resize(_maxLayer + 1);
   std::set<int> xcoords, ycoords;
+  int bloat(0);
+  for (auto l = _minLayer; l <= _maxLayer; ++l) {
+    bloat = std::max(_spacex[l], bloat);
+    bloat = std::max(_spacey[l], bloat);
+  }
+  _bbox.expand(bloat * 2);
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
     auto box = _bbox;
     //box.bloat(_bbox.width(), _bbox.height());
@@ -1037,6 +1043,7 @@ void Router::generateHananGrid()
     if (l.first > _maxLayer) continue;
     for (auto& o : l.second) {
       if (!o.overlaps(_bbox)) continue;
+      auto osnapped{o};
       xcoords.insert(o.xmin());
       xcoords.insert(o.xmax());
       ycoords.insert(o.ymin());
@@ -1116,7 +1123,7 @@ Geom::LayerRects Router::findSol()
         t->print("tgt : ");
 #endif
       }
-      _bbox.bloat(100);
+      _bbox.expand(100);
 
       /*for (auto& l : _tobstacles) {
         COUT << "layer before : " << l.first << '\n';
@@ -1796,7 +1803,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
                 Geom::Rect p = (lower ? via->lpad() : via->upad());
                 Geom::Rects nbrs;
                 it->second.search(nbrs, p.bloatby(spacex(l), spacey(l)));
-                p.bloat(-std::min(widthy(l), p.width())/2, -std::min(widthx(l), p.height())/2);
+                p.expand(-std::min(widthy(l), p.width())/2, -std::min(widthx(l), p.height())/2);
                 for (auto& o : nbrs) {
                   if (o.overlaps(p, true)) {
                     //COUT << "obs viapad up : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
@@ -1839,7 +1846,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
               it = _tobstacles.find(l);
               if (it != _tobstacles.end()) {
                 Geom::Rect p = (lower ? via->lpad() : via->upad());
-                p.bloat(-std::min(widthy(l), p.width())/2, -std::min(widthx(l), p.height())/2);
+                p.expand(-std::min(widthy(l), p.width())/2, -std::min(widthx(l), p.height())/2);
                 for (auto& o : it->second) {
                   if (o.overlaps(p, true)) {
                     //COUT << "obs viapad down : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';

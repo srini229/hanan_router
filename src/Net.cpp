@@ -178,10 +178,6 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   SaveRestoreStream src(_name + "_route.log");
 #endif
   _unroute = 0;
-  if (_exclude) {
-    COUT << "excluding net : " << _name << " from routing\n";
-    return;
-  }
   for (auto& pin : _pins) {
     for (auto& p : pin->ports()) {
       Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
@@ -190,6 +186,10 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   if (router.debug()) {
     const Geom::LayerRects *obs[] = {&l1, &l2, &l3};
     writeLEF(modname, uu, bbox, obs);
+  }
+  if (_exclude) {
+    COUT << "excluding net : " << _name << " from routing\n";
+    return;
   }
   if (_pins.size() > 1) {
     COUT << "routing net : " << _name << ' ' << halfpm() << '\n';
@@ -359,9 +359,9 @@ void Net::writeLEF(const std::string& modname, const int uu, const Geom::Rect& b
       }
     }
     ofs << "  OBS\n";
-    for (unsigned i = 0; i < 3; ++i) {
+    for (unsigned i = 0; i < 4; ++i) {
       if (obs[i]) {
-        for (auto& l : *obs[i]) {
+        for (auto& l : (i < 3 ? *obs[i] : _obstacles)) {
           ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
           for (auto r : l.second) {
             if (r.intersect(_bbox)) {
