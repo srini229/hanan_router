@@ -154,13 +154,12 @@ void Module::route(Router::Router& router, const std::string& outdir)
     std::sort(nets.begin(), nets.end(), [](const Net* a, const Net* b) -> bool
         { return a->halfpm() < b->halfpm(); });
     nets.insert(nets.begin(), _routeorder.begin(), _routeorder.end());
-    COUT << " routing : " << _name << "; num nets : " << nets.size() << "; use pin width : " << (_usepinwidth ? 1 : 0) << '\n';
+    COUT << " routing : " << _name << "; num nets : " << nets.size() << "; use pin width : " << ((_usepinwidth == 1) ? 1 : 0) << '\n';
     //router.addObstacles(_obstacles);
     Geom::LayerRects netObstaclesRouted, netObstaclesUnrouted;
     router.setModName(_name);
     COUT << "setting module name : " << _name << '\n';
     router.setusepinwidth((_usepinwidth == 1) ? true : false);
-    if (getenv("HANAN_DEBUG_NET")) COUT << "DEBUG NET : " << getenv("HANAN_DEBUG_NET") << '\n';
     static std::set<std::string> debugnet(splitString((getenv("HANAN_DEBUG_NET") ? std::string(getenv("HANAN_DEBUG_NET")) : std::string("")), ','));
     for (auto it = nets.begin(); it != nets.end(); ++it) {
       netObstaclesUnrouted.clear();
@@ -186,20 +185,15 @@ void Module::route(Router::Router& router, const std::string& outdir)
           }
         }
       }
-      /*if (_name == "mixer_first_rx_0") {
-        COUT << "net : " << (*it)->name() << '\n';
-        if ((*it)->name().find("VCMBIAS") == std::string::npos)  continue;
-      }*/
       router.setNetName((*it)->name());
       if (debugnet.find(_name + "__" + (*it)->name()) != debugnet.end()
           || debugnet.find((*it)->name()) != debugnet.end()
           || debugnet.find(_name) != debugnet.end()) {
-        (*it)->writeLEF(_name, _uu);
         router.setEnableDebug(true);
       } else {
         router.setEnableDebug(false);
       }
-      (*it)->route(router, netObstaclesRouted, netObstaclesUnrouted, _obstacles, true);
+      (*it)->route(router, netObstaclesRouted, netObstaclesUnrouted, _obstacles, true, _uu, _bbox, _name);
       //writeDEF("_" + (*it)->name(), (*it)->name());
       Geom::MergeLayerRects(netObstaclesRouted, (*it)->routeShapes());
     }

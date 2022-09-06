@@ -171,7 +171,7 @@ PortPairs Net::clockRouteOrder() const
   return porder;
 }
 
-void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update)
+void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname)
 {
   //TIME_M();
 #if DEBUG
@@ -186,6 +186,10 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     for (auto& p : pin->ports()) {
       Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
     }
+  }
+  if (router.debug()) {
+    const Geom::LayerRects *obs[] = {&l1, &l2, &l3};
+    writeLEF(modname, uu, bbox, obs);
   }
   if (_pins.size() > 1) {
     COUT << "routing net : " << _name << ' ' << halfpm() << '\n';
@@ -327,7 +331,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   }
 }
 
-void Net::writeLEF(const std::string& modname, const int uu) const
+void Net::writeLEF(const std::string& modname, const int uu, const Geom::Rect& bbox, const Geom::LayerRects* obs[]) const
 {
   auto name(("net_" + modname + "_" + _name + ".lef"));
   COUT << "writing LEF file : " << name << "\n";
@@ -335,9 +339,9 @@ void Net::writeLEF(const std::string& modname, const int uu) const
   if (ofs.is_open()) {
     ofs << "MACRO " << modname << "\n";
     ofs << "  UNITS\n    DISTANCE MICRONS " << uu << ";\n  END UNITS\n";
-    ofs << "  ORIGIN "  << _bbox.xmin()  << ' ' << _bbox.ymin() << " ;\n";
-    ofs << "  FOREIGN " << name << ' '  << (1.*_bbox.xmin()/uu) << ' ' << (1.*_bbox.ymin()/uu) << " ;\n";
-    ofs << "  SIZE "    << (1.*_bbox.width()/uu) << " BY " << (1.* _bbox.height()/uu) << " ;\n";
+    ofs << "  ORIGIN "  << bbox.xmin()  << ' ' << bbox.ymin() << " ;\n";
+    ofs << "  FOREIGN " << name << ' '  << (1.*bbox.xmin()/uu) << ' ' << (1.*bbox.ymin()/uu) << " ;\n";
+    ofs << "  SIZE "    << (1.*bbox.width()/uu) << " BY " << (1.* bbox.height()/uu) << " ;\n";
     for (auto& v : {0, 1}) {
       for (auto& p : (v ? _pins : _vpins)) {
         ofs << "  PIN " << p->name() <<"\n    DIRECTION INOUT ;\n    USE SIGNAL ;\n";
@@ -354,6 +358,22 @@ void Net::writeLEF(const std::string& modname, const int uu) const
         ofs <<"  END " << p->name() << '\n';
       }
     }
+    ofs << "  OBS\n";
+    for (unsigned i = 0; i < 3; ++i) {
+      if (obs[i]) {
+        for (auto& l : *obs[i]) {
+          ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+          for (auto r : l.second) {
+            if (r.intersect(_bbox)) {
+              ofs << "        RECT " << (1.*r.xmin()/uu) << ' ' << (1.*r.ymin()/uu) << ' ' << (1.*r.xmax()/uu) << ' ' << (1.*r.ymax()/uu) << " ;\n";
+            }
+          }
+        }
+      }
+    }
+    ofs << "    LAYER BBOX ;\n";
+    ofs << "      RECT " << (1.*_bbox.xmin()/uu) << ' ' << (1.*_bbox.ymin()/uu) << ' ' << (1.*_bbox.xmax()/uu) << ' ' << (1.*_bbox.ymax()/uu) << " ;\n";
+    ofs << "  END\n";
     ofs << "END " << modname << "\nEND LIBRARY\n";
   }
 }

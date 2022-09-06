@@ -380,6 +380,7 @@ class Router {
     void allowDetour() { _bbox.bloat(std::max(_bbox.width(), _bbox.height()) * 10); }
     void writeLEF(const Geom::LayerRects* sol = nullptr) const;
     void setEnableDebug(const bool b) { _debugplot = b; }
+    bool debug() const { return _debugplot; }
 };
 
 }
