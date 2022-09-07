@@ -171,11 +171,28 @@ class LayerInfo {
     LayerInfo(const std::string& lj, const int uu);
     void print() const;
     ~LayerInfo();
+    const std::string& getLayerName(const int i) const { return _layers[i]->name(); }
     int getLayerIndex(const std::string& name) const
     {
       auto it = _layerIndex.find(name);
       return ((it != _layerIndex.end()) ? it->second : -1);
     }
+    int space(const int l, const bool x) const
+    {
+      int s(0);
+      auto layer = (static_cast<unsigned>(l) < _layers.size()) ? _layers[l] : nullptr;
+      if (layer) {
+        if (layer->isMetal()) {
+          return static_cast<MetalLayer*>(layer)->space();
+        } else {
+          return x ? static_cast<ViaLayer*>(layer)->spacex() :
+            static_cast<ViaLayer*>(layer)->spacey();
+        }
+      }
+      return s;
+    }
+    int spacex(const int l) const { return space(l, true); }
+    int spacey(const int l) const { return space(l, false); }
     std::pair<int, int> getLayers(const ViaLayer* v) const
     {
       auto l = v->layers();

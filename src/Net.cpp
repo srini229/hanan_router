@@ -210,6 +210,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       const auto& p1 = port1->shapes();
       const auto& p2 = port2->shapes();
       bool preflayersrctgt{true};
+      Geom::LayerRects samenetobst;
       for (auto src : {true, false}) {
         bool preflayer{false};
         for (auto& l : _preflayers) {
@@ -225,7 +226,10 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           COUT << "pref layer pin" << (preflayer ? "" : " not") << " found for " << (src ? port1->name() : port2->name()) << '\n';
         }
         for (auto& l : (src ? p1 : p2)) {
-          if (l.first > router.maxLayer() || l.first < router.minLayer()) continue;
+          if (l.first > router.maxLayer() || l.first < router.minLayer()) {
+            for (auto& s : l.second) samenetobst[l.first].push_back(s);
+            continue;
+          }
           if (preflayer && _preflayers.find(l.first) == _preflayers.end()) continue;
           //COUT << "port : " << (src ? port1->name() : port2->name()) << " layer " << l.first << '\n';
           for (auto& s : l.second) {
@@ -269,6 +273,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.addObstacles(l2, true);
       router.addObstacles(l3, true);
       router.addObstacles(_obstacles, true);
+      router.addObstacles(samenetobst, true);
       auto sol = router.findSol();
       if (!sol.empty()) {
 #if DEBUG

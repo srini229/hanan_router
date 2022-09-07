@@ -1123,7 +1123,6 @@ Geom::LayerRects Router::findSol()
         t->print("tgt : ");
 #endif
       }
-      _bbox.expand(100);
 
       /*for (auto& l : _tobstacles) {
         COUT << "layer before : " << l.first << '\n';
@@ -1783,10 +1782,10 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
           auto it = _ltree.find(aboveLayer);
           if (it != _ltree.end()) {
             Geom::Rects nbrs;
-            it->second.search(nbrs, via->bbox().bloatby(spacex(aboveLayer), spacey(aboveLayer)));
+            it->second.search(nbrs, via->bbox().bloatby(_lf.spacex(aboveLayer), _lf.spacey(aboveLayer)));
             for (auto& o : nbrs) {
               for (auto& c : via->cuts()) {
-                if (o.overlaps(c, false)) {
+                if (o.bloatby(_lf.spacex(aboveLayer), _lf.spacey(aboveLayer)).overlaps(c, false)) {
                   delete via;
                   via = nullptr;
                   break;
@@ -1827,9 +1826,11 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
         for (auto& v : _dnVias[n->z()]) {
           delete via;
           via = new Via(*v, Geom::Point(n->x(), n->y()));
-          auto it = _tobstacles.find(belowLayer);
-          if (it != _tobstacles.end()) {
-            for (auto& o : it->second) {
+          auto it = _ltree.find(belowLayer);
+          if (it != _ltree.end()) {
+            Geom::Rects nbrs;
+            it->second.search(nbrs, via->bbox().bloatby(_lf.spacex(belowLayer), _lf.spacey(belowLayer)));
+            for (auto& o : nbrs) {
               for (auto& c : via->cuts()) {
                 if (o.overlaps(c, false)) {
                   delete via;
@@ -1843,11 +1844,13 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
           if (via) {
             for (bool lower : {true, false}) {
               auto l = (lower ? via->l() : via->u());
-              it = _tobstacles.find(l);
-              if (it != _tobstacles.end()) {
+              it = _ltree.find(l);
+              if (it != _ltree.end()) {
                 Geom::Rect p = (lower ? via->lpad() : via->upad());
+                Geom::Rects nbrs;
+                it->second.search(nbrs, p.bloatby(spacex(l), spacey(l)));
                 p.expand(-std::min(widthy(l), p.width())/2, -std::min(widthx(l), p.height())/2);
-                for (auto& o : it->second) {
+                for (auto& o : nbrs) {
                   if (o.overlaps(p, true)) {
                     //COUT << "obs viapad down : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;
@@ -2006,18 +2009,20 @@ void Router::writeLEF(const Geom::LayerRects* sol) const
       }
       ofs << "      END\n    END SOL\n";
     }
-    if (!_tobstacles.empty()) {
-      ofs << "    OBS\n";
-      for (auto& l : _tobstacles) {
-        ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
-        for (auto& r : l.second) {
-          ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+    ofs << "    OBS\n";
+    if (!_tobstacles.empty() || !_obstacles.empty()) {
+      for (auto temp : {true, false}) {
+        for (auto& l : (temp ? _tobstacles : _obstacles)) {
+          ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+          for (auto& r : l.second) {
+            ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+          }
         }
       }
-      ofs << "      LAYER BBOX ;\n";
-      ofs << "        RECT " << (1.*_bbox.xmin()/_uu) << ' ' << (1.*_bbox.ymin()/_uu) << ' ' << (1.*_bbox.xmax()/_uu) << ' ' << (1.*_bbox.ymax()/_uu) << " ;\n";
-      ofs << "    END\n";
     }
+    ofs << "      LAYER BBOX ;\n";
+    ofs << "        RECT " << (1.*_bbox.xmin()/_uu) << ' ' << (1.*_bbox.ymin()/_uu) << ' ' << (1.*_bbox.xmax()/_uu) << ' ' << (1.*_bbox.ymax()/_uu) << " ;\n";
+    ofs << "    END\n";
     ofs << "END " << name << "\nEND LIBRARY\n";
   }
 }
