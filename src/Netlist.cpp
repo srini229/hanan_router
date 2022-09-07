@@ -2,6 +2,7 @@
 #include "nlohmann/json.hpp"
 #include "Util.h"
 #include "Placement.h"
+#include <cmath>
 
 namespace Placement {
 using json = nlohmann::json;
@@ -252,7 +253,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
         double llx{0}, lly{0}, urx{0}, ury{0};
         ss >> str >> llx >> lly >> urx >> ury;
         if (layer >= 0) {
-          curr_port->addRect(layer, Geom::Rect(llx * units, lly * units, urx * units, ury * units));
+          curr_port->addRect(layer, Geom::Rect(round(llx * units), round(lly * units), round(urx * units), round(ury * units)));
         }
         continue;
       }
@@ -268,7 +269,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
         double llx{0}, lly{0}, urx{0}, ury{0};
         ss >> str >> llx >> lly >> urx >> ury;
         if (layer >= 0) {
-          curr_module->addObstacle(layer, Geom::Rect(llx * units, lly * units, urx * units, ury * units));
+          curr_module->addObstacle(layer, Geom::Rect(round(llx * units), round(lly * units), round(urx * units), round(ury * units)));
         }
         continue;
       }
@@ -302,9 +303,9 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                   if (layer >= 0) {
                     switch (iwsd) {
                       default:
-                      case 0: modit->second->addNDRWidth(layer, static_cast<double>(el.value()) * _uu);
+                      case 0: modit->second->addNDRWidth(layer, std::round(static_cast<double>(el.value()) * _uu));
                               break;
-                      case 1: modit->second->addNDRSpace(layer, static_cast<double>(el.value()) * _uu);
+                      case 1: modit->second->addNDRSpace(layer, std::round(static_cast<double>(el.value()) * _uu));
                               break;
                       case 2: modit->second->addNDRDir(layer, el.value());
                               break;
@@ -358,9 +359,9 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                         if (layer >= 0) {
                           switch (iwsd) {
                             default:
-                            case 0: modit->second->addNDRWidth(layer, static_cast<double>(el.value()) * _uu, *itnetname);
+                            case 0: modit->second->addNDRWidth(layer, std::round(static_cast<double>(el.value()) * _uu), *itnetname);
                                     break;
-                            case 1: modit->second->addNDRSpace(layer, static_cast<double>(el.value()) * _uu, *itnetname);
+                            case 1: modit->second->addNDRSpace(layer, std::round(static_cast<double>(el.value()) * _uu), *itnetname);
                                     break;
                             case 2: modit->second->addNDRDir(layer, el.value(), *itnetname);
                                     break;
@@ -406,8 +407,8 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                     auto layer = lf.getLayerIndex(l.key());
                     if (layer >= 0) {
                       for (auto& r : l.value()) {
-                        if (r.size() == 4) lr[layer].emplace_back(static_cast<double>(r[0]) * _uu, static_cast<double>(r[1]) * _uu,
-                            static_cast<double>(r[2]) * _uu, static_cast<double>(r[3]) * _uu);
+                        if (r.size() == 4) lr[layer].emplace_back(std::round(static_cast<double>(r[0]) * _uu), std::round(static_cast<double>(r[1]) * _uu),
+                            std::round(static_cast<double>(r[2]) * _uu), std::round(static_cast<double>(r[3]) * _uu));
                       }
                     }
                   }
@@ -453,8 +454,8 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                       for (auto& r : l.value()) {
                         if (r.size() == 4) {
                           COUT << "Adding obstacle to module " << modit->second->name() << " layer : " << l.key() << " : [" << r[0] << ' ' << r[1] << ' ' << r[2] << ' ' << r[3] << "]\n";
-                          modit->second->addObstacle(layer, Geom::Rect(static_cast<double>(r[0]) * _uu, static_cast<double>(r[1]) * _uu,
-                                static_cast<double>(r[2]) * _uu, static_cast<double>(r[3]) * _uu)); 
+                          modit->second->addObstacle(layer, Geom::Rect(std::round(static_cast<double>(r[0]) * _uu), std::round(static_cast<double>(r[1]) * _uu),
+                                std::round(static_cast<double>(r[2]) * _uu), std::round(static_cast<double>(r[3]) * _uu))); 
                         }
                       }
                     }
@@ -465,8 +466,8 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                       auto layer = lf.getLayerIndex(l.key());
                       if (layer >= 0) {
                         for (auto& r : l.value()) {
-                          if (r.size() == 4) modit->second->addNetObstacle(n, layer, Geom::Rect(static_cast<double>(r[0]) * _uu, static_cast<double>(r[1]) * _uu,
-                                static_cast<double>(r[2]) * _uu, static_cast<double>(r[3]) * _uu));
+                          if (r.size() == 4) modit->second->addNetObstacle(n, layer, Geom::Rect(std::round(static_cast<double>(r[0]) * _uu), std::round(static_cast<double>(r[1]) * _uu),
+                                std::round(static_cast<double>(r[2]) * _uu), std::round(static_cast<double>(r[3]) * _uu)));
                         }
                       }
                     }

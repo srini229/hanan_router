@@ -333,10 +333,10 @@ class Router {
     void setName(const std::string& n) { _name = n; }
     void setusepinwidth(const bool u) { _usepinwidth = u; }
 
-    int widthx(const int z) const { return (_ndrwidthx[z] != INT_MAX ? std::max(_ndrwidthx[z], _widthx[z]) : _widthx[z]); }
-    int widthy(const int z) const { return (_ndrwidthy[z] != INT_MAX ? std::max(_ndrwidthy[z], _widthy[z]) : _widthy[z]); }
-    int spacex(const int z) const { return (_ndrspacex[z] != INT_MAX ? std::max(_ndrspacex[z], _spacex[z]) : _spacex[z]); }
-    int spacey(const int z) const { return (_ndrspacey[z] != INT_MAX ? std::max(_ndrspacey[z], _spacey[z]) : _spacey[z]); }
+    int widthx(const int z) const { return (_ndrwidthx[z] != INT_MAX ? _ndrwidthx[z] : _widthx[z]); }
+    int widthy(const int z) const { return (_ndrwidthy[z] != INT_MAX ? _ndrwidthy[z] : _widthy[z]); }
+    int spacex(const int z) const { return (_ndrspacex[z] != INT_MAX ? _ndrspacex[z] : _spacex[z]); }
+    int spacey(const int z) const { return (_ndrspacey[z] != INT_MAX ? _ndrspacey[z] : _spacey[z]); }
 
     void clearSourceTargets() {
       _cf.resetdirs();

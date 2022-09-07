@@ -1625,8 +1625,8 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
       _ndrspacex = _spacex;
       _ndrspacey = _spacey;
       for (auto& it : ndrspaces) {
-        _ndrspacex[it.first] = std::max(_ndrspacex[it.first], it.second);
-        _ndrspacey[it.first] = std::max(_ndrspacey[it.first], it.second);
+        _ndrspacex[it.first] = it.second;
+        _ndrspacey[it.first] = it.second;
       }
     }
     if (!ndrwidths.empty()) {
@@ -1698,16 +1698,22 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
           }
         }
       }
-      for (unsigned i = 0; i < _ndrwidthx.size(); ++i) {
-        COUT << "after updatendr layer : " << i << " width : " << _widthx[i] << ' ' << _widthy[i];
-        if (_ndrwidthx[i] != INT_MAX) {
-          COUT << " ndr widthx : " << _ndrwidthx[i] ;
-        }
-        if (_ndrwidthy[i] != INT_MAX) {
-          COUT << " ndr widthy : " << _ndrwidthy[i];
-        }
-        COUT << '\n';
+    }
+    for (unsigned i = 0; i < _ndrwidthx.size(); ++i) {
+      COUT << "after updatendr layer : " << i << " width : " << _widthx[i] << ' ' << _widthy[i];
+      if (_ndrwidthx[i] != INT_MAX) {
+        COUT << " ndr widthx : " << _ndrwidthx[i] ;
       }
+      if (_ndrwidthy[i] != INT_MAX) {
+        COUT << " ndr widthy : " << _ndrwidthy[i];
+      }
+      if (_ndrspacex[i] != INT_MAX) {
+        COUT << " ndr spacex : " << _ndrspacex[i] ;
+      }
+      if (_ndrspacey[i] != INT_MAX) {
+        COUT << " ndr spacey : " << _ndrspacey[i];
+      }
+      COUT << '\n';
     }
   }
 //#if DEBUG
