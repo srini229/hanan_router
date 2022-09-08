@@ -1633,8 +1633,8 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
       _ndrwidthx = _widthx;
       _ndrwidthy = _widthy;
       for (auto& it : ndrwidths) {
-        _ndrwidthx[it.first] = std::max(_ndrwidthx[it.first], it.second);
-        _ndrwidthy[it.first] = std::max(_ndrwidthy[it.first], it.second);
+        _ndrwidthx[it.first] = it.second;
+        _ndrwidthy[it.first] = it.second;
       }
     } else if (preflayers.empty() && _usepinwidth) {
       if (_sourceshapes.size() == 1) {

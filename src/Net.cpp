@@ -353,7 +353,7 @@ void Net::writeLEF(const std::string& modname, const int uu, const Geom::Rect& b
         for (auto& pp : p->ports()) {
           ofs << "    PORT\n";
           for (auto& l : pp->shapes()) {
-            ofs << "      LAYER " << LAYER_NAMES[l.first] << "_SRC ;\n";
+            ofs << "      LAYER " << LAYER_NAMES[l.first] << "_PIN ;\n";
             for (auto& r : l.second) {
               ofs << "        RECT " << (1.*r.xmin()/uu) << ' ' << (1.*r.ymin()/uu) << ' ' << (1.*r.xmax()/uu) << ' ' << (1.*r.ymax()/uu) << " ;\n";
             }
