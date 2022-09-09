@@ -316,6 +316,12 @@ class Router {
     void setexpand(Node* newn, const Node* parent) const;
 
     void constructVias(const std::map<int, DRC::ViaArray>* ndrvias = nullptr);
+    int roundup(const int x) const
+    {
+      auto r = x % _precision;
+      return (r == 0) ? x : (x + _precision - r);
+    }
+
     
   public:
     Router(const DRC::LayerInfo& lf);

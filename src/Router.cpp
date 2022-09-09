@@ -380,7 +380,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
 {
   auto vert = _cf.isVert(z);
   auto hor = _cf.isHor(z);
-  auto x = r.xcenter(), y = r.ycenter(); 
+  auto x = roundup(r.xcenter()), y = roundup(r.ycenter()); 
   Geom::PointWidthSet points;
 
   if (dir == DOWN || dir == UP) {
@@ -403,7 +403,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         zpadbox = _dnVias[z][0]->upad();
       }
       if (vert) {
-        int space = std::max(spacey(adj) + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1)), r.height()/NUM_POINTS);
+        int space = roundup(std::max(spacey(adj) + ((wy % 2 == 0) ? wy/2 : (wy/2 + 1)), r.height()/NUM_POINTS));
         if (padbox.valid()) {
           space = std::max(space, padbox.width());
         }
@@ -416,7 +416,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         }
       }
       if (hor) {
-        int space = std::max(spacex(adj) + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1)), r.width()/NUM_POINTS);
+        int space = roundup(std::max(spacex(adj) + ((wx % 2 == 0) ? wx/2 : (wx/2 + 1)), r.width()/NUM_POINTS));
         if (padbox.valid()) {
           space = std::max(space, padbox.height());
         }
@@ -436,7 +436,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       COUT << "we : " << width << '\n';
 #endif
       if (width < r.height()) {
-        int space = std::max(spacex(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1)), r.height()/NUM_POINTS);
+        int space = roundup(std::max(spacex(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1)), r.height()/NUM_POINTS));
         /* for (auto right : {true, false}) {
           int x = (right ? r.xmax() : r.xmin());
           int yn = y;
@@ -455,13 +455,13 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
             yn -= space;
           }
         } */
-        int yn = r.ycenter();
+        int yn = roundup(r.ycenter());
         while (yn <= (r.ymax() - width/2)) {
           points.insert(std::make_pair(Geom::Point(r.xmin(),yn), width));
           points.insert(std::make_pair(Geom::Point(r.xmax(),yn), width));
           yn += space;
         }
-        yn = r.ycenter();
+        yn = roundup(r.ycenter());
         while (yn >= (r.ymin() + width/2)) {
           points.insert(std::make_pair(Geom::Point(r.xmin(),yn), width));
           points.insert(std::make_pair(Geom::Point(r.xmax(),yn), width));
@@ -479,19 +479,19 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       COUT << "wn : " << width << '\n';
 #endif
       if (width < r.width()) {
-        int space = std::max(spacey(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1)), r.width() / NUM_POINTS);
+        int space = roundup(std::max(spacey(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1)), r.width() / NUM_POINTS));
         /*int xn = x;
           while (xn < r.xmax()) {
           points.insert(std::make_pair(Geom::Point(xn,y), width));
           xn += space;
           }*/
-        int xn = r.xcenter();
+        int xn = roundup(r.xcenter());
         while (xn <= (r.xmax() - width/2)) {
           points.insert(std::make_pair(Geom::Point(xn,r.ymin()), width));
           points.insert(std::make_pair(Geom::Point(xn,r.ymax()), width));
           xn += space;
         }
-        xn = r.xcenter();
+        xn = roundup(r.xcenter());
         while (xn >= (r.xmin() + width/2)) {
           points.insert(std::make_pair(Geom::Point(xn,r.ymin()), width));
           points.insert(std::make_pair(Geom::Point(xn,r.ymax()), width));
@@ -1044,10 +1044,11 @@ void Router::generateHananGrid()
     for (auto& o : l.second) {
       if (!o.overlaps(_bbox)) continue;
       auto osnapped{o};
-      xcoords.insert(o.xmin());
-      xcoords.insert(o.xmax());
-      ycoords.insert(o.ymin());
-      ycoords.insert(o.ymax());
+      osnapped.snap(_precision);
+      xcoords.insert(osnapped.xmin());
+      xcoords.insert(osnapped.xmax());
+      ycoords.insert(osnapped.ymin());
+      ycoords.insert(osnapped.ymax());
     }
   }
   for (bool src : {true, false}) {
