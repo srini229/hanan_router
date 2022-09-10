@@ -180,7 +180,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   _unroute = 0;
   for (auto& pin : _pins) {
     for (auto& p : pin->ports()) {
-      Geom::MergeLayerRects(_routeshapes, p->shapes(), &_bbox);
+      Geom::MergeLayerRects(_routeshapeswithpins, p->shapes(), &_bbox);
     }
   }
   if (router.debug()) {
@@ -311,6 +311,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
             }
           }
         }
+        Geom::MergeLayerRects(_routeshapeswithpins, sol, &_bbox);
         Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
       } else {
         _unroute = 1;
@@ -320,6 +321,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), sol, &_bbox);
         if (port2->isVirtualPort()) {
           Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), port2->shapes(), &_bbox);
+          Geom::MergeLayerRects(_routeshapeswithpins, port2->shapes(), &_bbox);
           Geom::MergeLayerRects(_routeshapes, port2->shapes(), &_bbox);
         }
       }
@@ -328,6 +330,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), sol, &_bbox);
         if (port1->isVirtualPort()) {
           Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), port1->shapes(), &_bbox);
+          Geom::MergeLayerRects(_routeshapeswithpins, port1->shapes(), &_bbox);
           Geom::MergeLayerRects(_routeshapes, port1->shapes(), &_bbox);
         }
       }

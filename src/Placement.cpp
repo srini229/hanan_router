@@ -195,7 +195,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
       }
       (*it)->route(router, netObstaclesRouted, netObstaclesUnrouted, _obstacles, true, _uu, _bbox, _name);
       //writeDEF("_" + (*it)->name(), (*it)->name());
-      Geom::MergeLayerRects(netObstaclesRouted, (*it)->routeShapes());
+      Geom::MergeLayerRects(netObstaclesRouted, (*it)->routeShapesWithPins());
     }
     router.clearObstacles();
     std::set<std::string> _addednets;
@@ -204,8 +204,8 @@ void Module::route(Router::Router& router, const std::string& outdir)
       //std::cout << "DEBUG pin name " << p.first << '\n';
       if (itn != _nets.end()) {
         _addednets.insert(itn->first);
-        //std::cout << "DEBUG found net : " << itn->second.name() << ' ' << itn->second.routeShapes().size() << '\n';
-        if (!itn->second.excluded()) p.second->copyRects(itn->second.routeShapes());
+        //std::cout << "DEBUG found net : " << itn->second.name() << ' ' << itn->second.routeShapesWithPins().size() << '\n';
+        if (!itn->second.excluded()) p.second->copyRects(itn->second.routeShapesWithPins());
         else {
           COUT << "excluded : " << itn->second.name() << "\n";
           for (auto& pin : itn->second.pins()) {
@@ -221,7 +221,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
     for (auto& n : _nets) {
       if (_addednets.find(n.first) == _addednets.end()) {
         //std::cout << "unadded net : " << n.first << '\n';
-        Geom::MergeLayerRects(_internalroutes, n.second.routeShapes());
+        Geom::MergeLayerRects(_internalroutes, n.second.routeShapesWithPins());
       }
     }
     writeDEF(outdir);
@@ -263,7 +263,7 @@ void Module::plot() const
       }
     }
     for (auto& n : _nets) {
-      for (auto& l : n.second.routeShapes()) {
+      for (auto& l : n.second.routeShapesWithPins()) {
         for (auto& b : l.second) {
           const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
           if (b.valid()) {
@@ -333,8 +333,8 @@ void Module::checkShort() const
   COUT << "Checking SHORT for module : " << _name << '\n';
   for (auto it1 = _nets.begin(); it1 != _nets.end(); ++it1) {
     for (auto it2 = std::next(it1); it2 != _nets.end(); ++it2) {
-      auto& s1 = it1->second.routeShapes();
-      auto& s2 = it2->second.routeShapes();
+      auto& s1 = it1->second.routeShapesWithPins();
+      auto& s2 = it2->second.routeShapesWithPins();
       for (auto& l : s1) {
         auto its2 = s2.find(l.first);
         if (its2 == s2.end()) continue;
@@ -350,7 +350,7 @@ void Module::checkShort() const
     }
   }
   for (auto it1 = _nets.begin(); it1 != _nets.end(); ++it1) {
-    auto& s1 = it1->second.routeShapes();
+    auto& s1 = it1->second.routeShapesWithPins();
     auto& s2 = _obstacles;
     for (auto& l : s1) {
       auto its2 = s2.find(l.first);
@@ -417,7 +417,7 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
       }
       ofs << "END NETS\n\n";
     }
-    if (!_internalroutes.empty()) {
+    /*if (!_internalroutes.empty()) {
       ofs << "FILLS " << _internalroutes.size() << " ;\n ";
       for (auto& l : _internalroutes) {
         ofs << "  - LAYER " << LAYER_NAMES[l.first] << "\n";
@@ -429,7 +429,7 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
         }
       }
       ofs << "END FILLS\n\n";
-    }
+    }*/
     ofs << "END DESIGN\n";
   }
 }

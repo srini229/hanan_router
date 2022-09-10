@@ -76,7 +76,7 @@ class Net {
   private:
     std::string _name;
     std::set<const Pin*> _pins, _vpins;
-    Geom::LayerRects _routeshapes, _obstacles;
+    Geom::LayerRects _routeshapeswithpins, _routeshapes, _obstacles;
     Router::Vias _vias;
     Geom::Rect _bbox;
     unsigned int _unroute : 1;
@@ -110,6 +110,7 @@ class Net {
     void print() const;
     const std::string& name() const { return _name; }
     void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname);
+    const Geom::LayerRects& routeShapesWithPins() const { return _routeshapeswithpins; }
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
     const Geom::Rect& bbox() const { return _bbox; }
     const bool open() const { return _unroute ? true : false; }

@@ -457,14 +457,24 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         } */
         int yn = roundup(r.ycenter());
         while (yn <= (r.ymax() - width/2)) {
-          points.insert(std::make_pair(Geom::Point(r.xmin(),yn), width));
-          points.insert(std::make_pair(Geom::Point(r.xmax(),yn), width));
+          if (r.width() > width) {
+            points.insert(std::make_pair(Geom::Point(roundup(r.xmin() + width/2),yn), width));
+            points.insert(std::make_pair(Geom::Point(roundup(r.xmax() - width/2),yn), width));
+          } else {
+            points.insert(std::make_pair(Geom::Point(r.xmin(),yn), width));
+            points.insert(std::make_pair(Geom::Point(r.xmax(),yn), width));
+          }
           yn += space;
         }
         yn = roundup(r.ycenter());
         while (yn >= (r.ymin() + width/2)) {
-          points.insert(std::make_pair(Geom::Point(r.xmin(),yn), width));
-          points.insert(std::make_pair(Geom::Point(r.xmax(),yn), width));
+          if (r.width() > width) {
+            points.insert(std::make_pair(Geom::Point(roundup(r.xmin() + width/2),yn), width));
+            points.insert(std::make_pair(Geom::Point(roundup(r.xmax() - width/2),yn), width));
+          } else {
+            points.insert(std::make_pair(Geom::Point(r.xmin(),yn), width));
+            points.insert(std::make_pair(Geom::Point(r.xmax(),yn), width));
+          }
           yn -= space;
         }
       } else if (width == r.height()) {
@@ -487,14 +497,24 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }*/
         int xn = roundup(r.xcenter());
         while (xn <= (r.xmax() - width/2)) {
-          points.insert(std::make_pair(Geom::Point(xn,r.ymin()), width));
-          points.insert(std::make_pair(Geom::Point(xn,r.ymax()), width));
+          if (r.height() > width) {
+            points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymin() + width/2)), width));
+            points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymax() - width/2)), width));
+          } else {
+            points.insert(std::make_pair(Geom::Point(xn,r.ymin()), width));
+            points.insert(std::make_pair(Geom::Point(xn,r.ymax()), width));
+          }
           xn += space;
         }
         xn = roundup(r.xcenter());
         while (xn >= (r.xmin() + width/2)) {
-          points.insert(std::make_pair(Geom::Point(xn,r.ymin()), width));
-          points.insert(std::make_pair(Geom::Point(xn,r.ymax()), width));
+          if (r.height() > width) {
+            points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymin() + width/2)), width));
+            points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymax() - width/2)), width));
+          } else {
+            points.insert(std::make_pair(Geom::Point(xn,r.ymin()), width));
+            points.insert(std::make_pair(Geom::Point(xn,r.ymax()), width));
+          }
           xn -= space;
         }
       } else if (width == r.width()) {
@@ -1219,15 +1239,17 @@ Geom::LayerRects Router::findSol()
                   break;
                 }
               }
-              auto hwx = (n->hwx() == 0 ? widthx(n->z())/2 : n->hwx());
-              auto hwy = (n->hwy() == 0 ? widthy(n->z())/2 : n->hwy());
-              auto extnx1 = hwx;
-              auto extnx2 = hwx;
-              auto extny1 = hwy;
-              auto extny2 = hwy;
+              auto hwx1 = (n->hwx() == 0 ? widthx(n->z())/2 : n->hwx());
+              auto hwx2 = (n->hwx() == 0 ? (widthx(n->z()) - hwx1) : n->hwx());
+              auto hwy1 = (n->hwy() == 0 ? widthy(n->z())/2 : n->hwy());
+              auto hwy2 = (n->hwy() == 0 ? (widthy(n->z()) - hwy1) : n->hwy());
+              auto extnx1 = hwx1;
+              auto extnx2 = hwx2;
+              auto extny1 = hwy1;
+              auto extny2 = hwy2;
               if (n->y() > parent->y()) {
-                extnx1 = hwy;
-                extnx2 = hwy;
+                extnx1 = hwy1;
+                extnx2 = hwy2;
                 if (isTarget(n)) extny2 = 0;
                 else {
                   auto it = _endextnymax.find(n);
@@ -1242,8 +1264,8 @@ Geom::LayerRects Router::findSol()
                   }
                 }
               } else if (n->y() < parent->y()) {
-                extnx1 = hwy;
-                extnx2 = hwy;
+                extnx1 = hwy1;
+                extnx2 = hwy2;
                 if (isSource(parent)) extny2 = 0;
                 else {
                   auto it = _endextnymax.find(n);
@@ -1260,8 +1282,8 @@ Geom::LayerRects Router::findSol()
                 }
               }
               if (n->x() > parent->x()) {
-                extny1 = hwx;
-                extny2 = hwx;
+                extny1 = hwx1;
+                extny2 = hwx2;
                 if (isTarget(n)) extnx2 = 0;
                 else {auto it = _endextnxmax.find(n);
                   if (it != _endextnxmax.end()) {
@@ -1276,8 +1298,8 @@ Geom::LayerRects Router::findSol()
                   }
                 }
               } else if (n->x() < parent->x()) {
-                extny1 = hwx;
-                extny2 = hwx;
+                extny1 = hwx1;
+                extny2 = hwx2;
                 if (isSource(parent)) extnx2 = 0;
                 else {
                   auto it = _endextnxmax.find(parent);
@@ -1512,7 +1534,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
   for (auto& l : lr) {
     const auto& layer = l.first;
     if (!uselayers.empty() && uselayers.find(l.first) == uselayers.end()) continue;
-    for (auto& r : l.second) {
+    for (const auto& r : l.second) {
       int sx{0}, sy{0};
       if (layer < static_cast<int>(_widthx.size())) {
         sx = spacex(layer) + (layer <= _maxLayer ? ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1)) : 0);
@@ -1523,7 +1545,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 #endif
       auto obs = r.bloatby(sx, sy);
       int x1 = sx, x2 = sx, y1 = sy, y2 = sy;
-      for (auto src : {true, false}) {
+      /*for (auto src : {true, false}) {
         const auto it = src ? _sourceshapes.find(l.first) : _targetshapes.find(l.first);
         const auto itend = src ? _sourceshapes.end() : _targetshapes.end();
         const auto& nodes = src ? _sources : _targets;
@@ -1579,15 +1601,14 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
             }
           }
         }
-      }
+      }*/
       bool olsrcortgt{false};
-      obs = r.bloatby(x1, y1, x2, y2);
       for (auto src : {true, false}) {
         const auto& shapes = src ? _sourceshapes : _targetshapes;
-        const auto it = shapes.find(l.first);
+        const auto it = shapes.find(layer);
         if (it != shapes.end()) {
           for (auto& sr : it->second) {
-            if (sr.overlaps(r)) {
+            if (sr.overlaps(r, true)) {
               olsrcortgt = true;
               break;
             }
@@ -1595,6 +1616,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         }
         if (olsrcortgt) break;
       }
+      obs = r.bloatby(x1, y1, x2, y2);
       if (!olsrcortgt && _bbox.overlaps(obs)) {
         if (temp) {
           _tobstacles[layer].push_back(obs);
@@ -2016,6 +2038,22 @@ void Router::writeLEF(const Geom::LayerRects* sol) const
       }
       ofs << "      END\n    END SOL\n";
     }
+    ofs << "    PIN GRID\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+    for (auto vert : {true, false}) {
+      for (unsigned l = 0; l < _hanangridh.size(); ++l) {
+        ofs << "        LAYER " << LAYER_NAMES[l] << "_GRID ;\n";
+        for (auto& pos : (vert ? _hanangridv[l] : _hanangridh[l])) {
+          for (auto& r : pos.second) {
+            if (vert) {
+              ofs << "          RECT " << (1.*(pos.first - 50)/_uu) << ' ' << (1.*r.first/_uu) << ' ' << (1.*(pos.first + 50)/_uu) << ' ' << (1.*r.second/_uu) << " ;\n";
+            } else {
+              ofs << "          RECT " << (1.*r.first/_uu) << ' ' << (1.*(pos.first - 50)/_uu) << ' ' << (1.*r.second/_uu) << ' ' << (1.*(pos.first + 50)/_uu) << " ;\n";
+            }
+          }
+        }
+      }
+    }
+    ofs << "      END\n    END GRID\n";
     ofs << "    OBS\n";
     if (!_tobstacles.empty() || !_obstacles.empty()) {
       for (auto temp : {true, false}) {
