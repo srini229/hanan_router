@@ -55,7 +55,7 @@ PortPairs Net::reorderPorts() const
   for (auto& p : ports) {
     netbbox.merge(p->bbox());
   }
-  double nethpwl{(netbbox.width() + netbbox.height())/2.};
+  double nethpwl{(netbbox.width() + netbbox.height()) * 1.};
   for (unsigned i = 0; i < ports.size(); ++i) {
     auto& p1 = ports[i];
     auto& s1 = p1->shapes();
@@ -67,7 +67,10 @@ PortPairs Net::reorderPorts() const
         for (auto& r1 : l1.second) {
           for (auto& l2 : s2) {
             for (auto& r2 : l2.second) {
-              dist = std::min(Geom::Dist(r1, r2)/nethpwl + std::abs(l1.first - l2.first) * 0.1, dist);
+              dist = std::min(Geom::Dist(r1, r2)/nethpwl + std::abs(l1.first - l2.first) * 0.03, dist);
+              /*if (ports[i]->isVirtualPort() || ports[j]->isVirtualPort()) {
+                COUT << ports[i]->name() << ' ' << ports[j]->name() << ' ' <<  Geom::Dist(r1, r2) << ' ' << l1.first << ' ' << l2.first << ' ' << r1.str() << ' ' << r2.str() << ' ' << dist << '\n';
+              }*/
             }
           }
         }
@@ -295,8 +298,8 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
                   for (auto& r : l.second) {
                     for (auto& rp : it->second) {
                       if (rp.overlaps(r)) {
-                        if ((rp.ymin() >= r.ymin() && rp.ymax() <= r.ymax())
-                            || (rp.xmin() >= r.xmin() && rp.xmax() <= r.xmax())) {
+                        if ((rp.ymin() == r.ymin() && rp.ymax() == r.ymax())
+                            || (rp.xmin() == r.xmin() && rp.xmax() == r.xmax())) {
                           r.merge(rp);
                           merged = true;
                           break;
