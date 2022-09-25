@@ -1040,17 +1040,12 @@ void Router::invertRange(IntRangeSet& s, const bool vert)
 
 void Router::generateHananGrid()
 {
+  TIME_M();
   _hanangridh.clear();
   _hanangridh.resize(_maxLayer + 1);
   _hanangridv.clear();
   _hanangridv.resize(_maxLayer + 1);
   std::set<int> xcoords, ycoords;
-  int bloat(0);
-  for (auto l = _minLayer; l <= _maxLayer; ++l) {
-    bloat = std::max(_spacex[l], bloat);
-    bloat = std::max(_spacey[l], bloat);
-  }
-  _bbox.expand(bloat * 2);
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
     auto box = _bbox;
     //box.bloat(_bbox.width(), _bbox.height());
@@ -1121,7 +1116,7 @@ Geom::LayerRects Router::findSol()
 #if DEBUG
   COUT << "routing : " << _name << '\n';
 #endif
-  static std::string debugplot{getenv("HANAN_DEBUG_WIRE") ? getenv("HANAN_DEBUG_WIRE") : ""};
+  static std::set<std::string> debugplot(splitString((getenv("HANAN_DEBUG_WIRE") ? std::string(getenv("HANAN_DEBUG_WIRE")) : std::string("")), ','));
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
     for (auto attempt : {0}) {
@@ -1155,11 +1150,6 @@ Geom::LayerRects Router::findSol()
       for (auto& it: _tobstacles) {
         _ltree.emplace(it.first, Geom::RTree2D(it.second));
       }
-#if DEBUG
-#else
-      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) 
-#endif
-        writeSTO();
       /*for (auto& l : _tobstacles) {
         COUT << "layer after : " << l.first << '\n';
         for (auto& o : l.second) {
@@ -1169,9 +1159,12 @@ Geom::LayerRects Router::findSol()
       generateHananGrid();
 #if DEBUG
 #else
-      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
+      if (!debugplot.empty() && ((*debugplot.begin() == "1") || (debugplot.find(_name) != debugplot.end()))) 
 #endif
+      {
+        //writeSTO();
         writeLEF();
+      }
 
 #if DEBUG
       for (unsigned l = 0; l < _hanangridh.size(); ++l) {
@@ -1350,11 +1343,11 @@ Geom::LayerRects Router::findSol()
   }
 #if DEBUG
 #else
-  if (!debugplot.empty() && (debugplot == "1" || debugplot == _name))
+  if (!debugplot.empty() && ((*debugplot.begin() == "1") || (debugplot.find(_name) != debugplot.end())))
 #endif
   {
-    plot();
-    printSol();
+    //plot();
+    //printSol();
     writeLEF(&sol);
   }
   clearSourceTargets();
@@ -1476,6 +1469,12 @@ void Router::writeSTO() const
 
 void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 {
+  int bloat(0);
+  for (auto l = _minLayer; l <= _maxLayer; ++l) {
+    bloat = std::max(bloat, spacex(l) + ((widthy(l) % 2 == 0) ? widthy(l)/2 : (widthy(l)/2 + 1)));
+    bloat = std::max(bloat, spacey(l) + ((widthx(l) % 2 == 0) ? widthx(l)/2 : (widthx(l)/2 + 1)));
+  }
+  _bbox.expand(bloat * 2);
   std::set<int> uselayers;
   bool srcInPref{false}, tgtInPref{false};
   if (!_preflayers.empty()) {
@@ -1632,8 +1631,25 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 
 void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
     const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs,
-    const std::set<int>& preflayers, const std::map<int, DRC::ViaArray>& ndrvias)
+    const std::set<int>& preflayers, const std::map<int, DRC::ViaArray>& ndrvias, const bool isVirtual)
 {
+
+  if (isVirtual) {
+    for (auto& ls : _sourceshapes) {
+      for (auto& s : ls.second) { 
+        for (auto& lt : _targetshapes) {
+          for (auto& t : lt.second) { 
+            if (s.overlaps(t, true)) {
+              auto ol(s);
+              ol.intersect(t);
+              addSource(ol, ls.first);
+              addTarget(ol, lt.first);
+            }
+          }
+        }
+      }
+    }
+  }
   _ndrwidthx.clear(); _ndrwidthy.clear();
   _ndrspacex.clear(); _ndrspacey.clear();
   _ndrwidthx.resize(_widthx.size(), INT_MAX);
