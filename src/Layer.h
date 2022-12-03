@@ -296,9 +296,9 @@ class LayerInfo {
     {
       if (ulayer < static_cast<int>(_mlayers.size())) {
         if (_mlayers[llayer]->isHorizontal() && _mlayers[ulayer]->isVertical()) {
-          return _mlayers[llayer]->isPtOnGrid(p.x()) && _mlayers[llayer]->isPtOnGrid(p.y());
+          return _mlayers[llayer]->isPtOnGrid(p.y()) && _mlayers[ulayer]->isPtOnGrid(p.x());
         } else if (_mlayers[llayer]->isVertical() && _mlayers[ulayer]->isHorizontal()) {
-          return _mlayers[llayer]->isPtOnGrid(p.y()) && _mlayers[llayer]->isPtOnGrid(p.x());
+          return _mlayers[llayer]->isPtOnGrid(p.x()) && _mlayers[ulayer]->isPtOnGrid(p.y());
         }
       }
       return false;
