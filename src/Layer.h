@@ -59,7 +59,7 @@ class Grid {
     void setPitchOffset(const int pitch, const int offset) { _pitch = pitch; _offset = offset; }
     const int snapUp(const int val) const {
       auto rem = (val - _offset) % _pitch;
-      return rem ? (val + _offset - rem) : val;
+      return rem ? (val + _pitch - rem) : val;
     }
     const int snapDn(const int val) const { return val - ((val - _offset) % _pitch); }
     bool isPtOnGrid(const int val) const { return ((val - _offset) % _pitch == 0); }
@@ -107,11 +107,11 @@ class MetalLayer : public Layer {
     Geom::Rect snapToGrid(const Geom::Rect& r) const
     {
       if (isHorizontal()) {
-        return Geom::Rect(_grid.snapDn(r.xmin()), r.ymin(),
-            _grid.snapUp(r.xmax()), r.ymax());
-      } else if (isVertical()) {
         return Geom::Rect(r.xmin(), _grid.snapDn(r.ymin()),
             r.xmax(), _grid.snapUp(r.ymax()));
+      } else if (isVertical()) {
+        return Geom::Rect(_grid.snapDn(r.xmin()), r.ymin(),
+            _grid.snapUp(r.xmax()), r.ymax());
       }
       return r;
     }

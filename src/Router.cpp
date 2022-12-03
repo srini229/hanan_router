@@ -496,6 +496,17 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       } else if (width == r.height()) {
         points.insert(std::make_pair(Geom::Point(r.xmin(),r.ycenter()), width));
         points.insert(std::make_pair(Geom::Point(r.xmax(),r.ycenter()), width));
+        std::vector<int> pts;
+        for (auto adj : {z + 1, z - 1}) {
+          if (adj >= _minLayer && adj <= _maxLayer) {
+            _lf.getPointsOnGrid(r.xmin(), r.xmax(), adj, pts);
+          }
+        }
+        if (!pts.empty()) {
+          for (const auto& pt : pts) {
+            points.insert(std::make_pair(Geom::Point(pt, r.ycenter()), width));
+          }
+        }
       }
     }
   } else if (dir == NORTH || dir == SOUTH) {
@@ -536,6 +547,17 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       } else if (width == r.width()) {
         points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymin()), width));
         points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymax()), width));
+        std::vector<int> pts;
+        for (auto adj : {z + 1, z - 1}) {
+          if (adj >= _minLayer && adj <= _maxLayer) {
+            _lf.getPointsOnGrid(r.ymin(), r.ymax(), adj, pts);
+          }
+        }
+        if (!pts.empty()) {
+          for (const auto& pt : pts) {
+            points.insert(std::make_pair(Geom::Point(r.xcenter(), pt), width));
+          }
+        }
       }
     }
   }

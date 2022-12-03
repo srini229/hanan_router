@@ -159,7 +159,7 @@ class Node {
 
     CostType fcost() const { return _fcost; }
     CostType tcost() const { return _tcost; }
-    CostType cost()  const { return std::max(_fcost, 0.) + _tcost;  }
+    CostType cost()  const { return _fcost + _tcost;  }
     void setFCost(CostType fcost) { _fcost = fcost; }
     void setTCost(CostType tcost) { _tcost = tcost; }
     void setParent(const Node* n) { _parent = n; }
