@@ -88,7 +88,7 @@ PortPairs Net::reorderPorts() const
       if (ports[i]->isVirtualPort() || ports[j]->isVirtualPort()) dist /= 10;
       portpairdist[i][j] = dist;
       portpairdist[j][i] = dist;
-      COUT << "ports dist : " << ports[i]->name() << ' ' << ports[j]->name() << ' ' << dist << '\n';
+      COUT << "ports dist : " << ports[i]->name() << ' ' << ports[j]->name() << ' ' << dist << std::endl;
       if (mindist > dist) {
         mindist = dist;
         idx1 = static_cast<int>(std::min(i, j));

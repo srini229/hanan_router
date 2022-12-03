@@ -1335,7 +1335,7 @@ Geom::LayerRects Router::findSol()
               }
               sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
 #if DEBUG
-              COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
+              //COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
               COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
 #endif
             } else {
@@ -1559,7 +1559,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         hwy = spacey(layer) + (layer <= _maxLayer ? ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1)) : 0);
       }
 #if DEBUG
-      COUT << "layer : " << layer << " obs : " << sx << ' ' << sy << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
+      COUT << "layer : " << layer << " obs : " << hwx << ' ' << hwy << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
 #endif
       bool olsrcortgt{false};
       for (auto src : {true, false}) {
