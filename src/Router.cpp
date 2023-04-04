@@ -1598,7 +1598,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         if (olsrcortgt) break;
       }
       auto obs = _lf.snapToGrid(r.bloatby(hwx, hwy, hwx, hwy), l.first);
-      COUT << "rect : " << r.str() << ' ' << obs.str() << '\n';
+      //COUT << "rect : " << r.str() << ' ' << obs.str() << '\n';
       if (!olsrcortgt && _bbox.overlaps(obs)) {
         if (temp) {
           _tobstacles[layer].push_back(obs);
