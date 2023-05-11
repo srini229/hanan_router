@@ -170,8 +170,10 @@ if (args.gds_dir):
             continue
         m._fname = args.gds_dir + '/' + j + '.gds'
         if not os.path.isfile(m._fname):
-            print(f'leaf {m._fname} not found')
-            exit()
+            m._fname = args.gds_dir + '/' + j.lower() + '.gds'
+            if not os.path.isfile(m._fname):
+                print(f'leaf {m._fname} not found')
+                exit()
         lib = gdspy.GdsLibrary(infile=m._fname)
         m._cell = lib.top_level()[0]
         m._cell.flatten()
