@@ -142,8 +142,8 @@ if args.layers:
                     else:
                         glno2 = 0
                     layers[layer] = (glno1,glno2)
-                    if "LabelLayer" in l:
-                        labellayers[layer] = l["LabelLayer"]
+                    if "LabelLayerNo" in l:
+                        labellayers[layer] = l["LabelLayerNo"]
 
         
 for j,m in modules.items():
@@ -163,7 +163,7 @@ if args.deff:
             if "UNITS" in line:
               if "DISTANCE" in line:
                 s = line.split()
-                if len(s) == 5:
+                if sca == 1 and len(s) == 5:
                   sca = int(s[3])
             if "NETS" in line:
                 if "END" in line:
