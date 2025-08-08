@@ -19,7 +19,7 @@ DEPFLAGS = -MMD -MP
 
 MAIN = hanan_router
 
-OPTFLAGS = -Ofast
+OPTFLAGS = -O3 -ffast-math
 #OPTFLAGS = 
 ifeq ($(DEBUG), 1)
 OPTFLAGS = 

@@ -152,7 +152,7 @@ def read_def(def_file, modu):
                                         layer=l[0], datatype=l[1]))
                         if currnet and (not labeladded) and (layer in labellayers) and ('M' in layer.upper()):
                             modu._cell.add(gdspy.Label(currnet, position=((rect[0] + rect[2])/2, (rect[1] + rect[3])/2),\
-                                        anchor='o', layer = labellayers[layer][0], texttype = labellayers[layer][1]))
+                                        anchor='o', layer = labellayers[layer][0][0], texttype = labellayers[layer][0][1]))
                             labeladded = True
                 if ";" in line:
                     currnet = None

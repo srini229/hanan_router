@@ -1,13 +1,12 @@
 [
   {
-    "module": "test_inter_0",
-    "nets": [{"name": "X", "widths": {"M1": 34, "M2": 36}, "spaces": {"M1":31, "M2":31}, "preferred_layers":["M1", "M2"]}],
-    "do_not_route":["Y"]
+    "module": "BLOCK_B_CONC_0",
+    "widths": {"M1": 40, "M2": 52}, "spaces": {"M1":40, "M2":52}, "preferred_layers":["M1", "M2"]
   },
   {
-    "module": "test_0",
+    "module": "TEST_CONC_0",
     "nets": [
-    {"name": "D", "preferred_layers":["M3", "M4"]},
+    {"name": "D", "widths": {"M3": 60, "M4": 72}, "spaces": {"M3":60, "M4":72}, "preferred_layers":["M3", "M4"]},
     {"name": "C", "preferred_layers":["M3", "M4"], "virtual_pins":[{"M3":[[1250,190,1282,222]]}]}
     ],
     "clock_nets":[{"name":"D", "driver":"J_1/Y"}]

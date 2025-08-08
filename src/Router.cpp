@@ -1118,9 +1118,7 @@ void Router::generateHananGrid()
 Geom::LayerRects Router::findSol()
 {
   TIME_M();
-#if DEBUG
   COUT << "routing : " << _name << '\n';
-#endif
   static std::string debugplot{getenv("HANAN_DEBUG_WIRE") ? getenv("HANAN_DEBUG_WIRE") : ""};
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
@@ -1317,7 +1315,7 @@ Geom::LayerRects Router::findSol()
               }
               sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
 #if DEBUG
-              COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
+              //COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
               COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
 #endif
             } else {
@@ -1617,7 +1615,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         if (olsrcortgt) break;
       }
       obs = r.bloatby(x1, y1, x2, y2);
-      if (!olsrcortgt && _bbox.overlaps(obs)) {
+      if (!olsrcortgt) {
         if (temp) {
           _tobstacles[layer].push_back(obs);
           //COUT << "tobs : " << layer << ' ' << _tobstacles[layer].back().str() << '\n';
@@ -2019,13 +2017,13 @@ void Router::writeLEF(const Geom::LayerRects* sol) const
     ofs << "    PIN SRCNODES\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
     for (auto& s : _sources) {
       ofs << "        LAYER " << LAYER_NAMES[s->z()] << "_SRC ;\n";
-      ofs << "          RECT " << (1.*(s->x() - 100)/_uu) << ' ' << (1.*(s->y() - 100)/_uu) << ' ' << (1.*(s->x() + 100)/_uu) << ' ' << (1.*(s->y() + 100)/_uu) << " ;\n";
+      ofs << "          RECT " << (1.*(s->x() - 10)/_uu) << ' ' << (1.*(s->y() - 10)/_uu) << ' ' << (1.*(s->x() + 10)/_uu) << ' ' << (1.*(s->y() + 10)/_uu) << " ;\n";
     }
     ofs << "      END\n    END SRCNODES\n";
     ofs << "    PIN TGTNODES\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
     for (auto& s : _targets) {
       ofs << "        LAYER " << LAYER_NAMES[s->z()] << "_TGT ;\n";
-      ofs << "          RECT " << (1.*(s->x() - 100)/_uu) << ' ' << (1.*(s->y() - 100)/_uu) << ' ' << (1.*(s->x() + 100)/_uu) << ' ' << (1.*(s->y() + 100)/_uu) << " ;\n";
+      ofs << "          RECT " << (1.*(s->x() - 10)/_uu) << ' ' << (1.*(s->y() - 10)/_uu) << ' ' << (1.*(s->x() + 10)/_uu) << ' ' << (1.*(s->y() + 10)/_uu) << " ;\n";
     }
     ofs << "      END\n    END TGTNODES\n";
     if (sol) {
@@ -2045,9 +2043,9 @@ void Router::writeLEF(const Geom::LayerRects* sol) const
         for (auto& pos : (vert ? _hanangridv[l] : _hanangridh[l])) {
           for (auto& r : pos.second) {
             if (vert) {
-              ofs << "          RECT " << (1.*(pos.first - 50)/_uu) << ' ' << (1.*r.first/_uu) << ' ' << (1.*(pos.first + 50)/_uu) << ' ' << (1.*r.second/_uu) << " ;\n";
+              ofs << "          RECT " << (1.*(pos.first - 1)/_uu) << ' ' << (1.*r.first/_uu) << ' ' << (1.*(pos.first + 1)/_uu) << ' ' << (1.*r.second/_uu) << " ;\n";
             } else {
-              ofs << "          RECT " << (1.*r.first/_uu) << ' ' << (1.*(pos.first - 50)/_uu) << ' ' << (1.*r.second/_uu) << ' ' << (1.*(pos.first + 50)/_uu) << " ;\n";
+              ofs << "          RECT " << (1.*r.first/_uu) << ' ' << (1.*(pos.first - 1)/_uu) << ' ' << (1.*r.second/_uu) << ' ' << (1.*(pos.first + 1)/_uu) << " ;\n";
             }
           }
         }
