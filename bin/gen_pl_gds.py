@@ -123,8 +123,8 @@ for j,m in modules.items():
 
 gdslib = gdspy.GdsLibrary(name=args.top_cell, unit=args.units)
 for j,m in modules.items():
-    m.add()
     gdslib.add(m._cell)
+    m.add()
 
 print(f'writing gds file {args.top_cell}_out.gds')
 gdslib.write_gds(args.top_cell + '_out.gds')

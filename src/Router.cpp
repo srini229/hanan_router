@@ -1119,9 +1119,7 @@ void Router::generateHananGrid()
 Geom::LayerRects Router::findSol()
 {
   TIME_M();
-#if DEBUG
   COUT << "routing : " << _name << '\n';
-#endif
   static std::string debugplot{getenv("HANAN_DEBUG_WIRE") ? getenv("HANAN_DEBUG_WIRE") : ""};
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {

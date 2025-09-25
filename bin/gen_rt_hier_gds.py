@@ -116,7 +116,7 @@ def read_def(def_file, modu):
             if "UNITS" in line:
               if "DISTANCE" in line:
                 s = line.split()
-                if len(s) == 5:
+                if sca == 1 and len(s) == 5:
                   sca = int(s[3])
                 sca = 100
             if "NETS" in line:
@@ -153,7 +153,7 @@ def read_def(def_file, modu):
                                         layer=l[0], datatype=l[1]))
                         if currnet and (not labeladded) and (layer in labellayers) and ('M' in layer.upper()):
                             modu._cell.add(gdspy.Label(currnet, position=((rect[0] + rect[2])/2, (rect[1] + rect[3])/2),\
-                                        anchor='o', layer = labellayers[layer][0], texttype = labellayers[layer][1]))
+                                        anchor='o', layer = labellayers[layer][0][0], texttype = labellayers[layer][0][1]))
                             labeladded = True
                 if ";" in line:
                     currnet = None
@@ -171,8 +171,10 @@ if (args.gds_dir):
             continue
         m._fname = args.gds_dir + '/' + j + '.gds'
         if not os.path.isfile(m._fname):
-            print(f'leaf {m._fname} not found')
-            exit()
+            m._fname = args.gds_dir + '/' + j.lower() + '.gds'
+            if not os.path.isfile(m._fname):
+                print(f'leaf {m._fname} not found')
+                exit()
         lib = gdspy.GdsLibrary(infile=m._fname)
         m._cell = lib.top_level()[0]
         m._cell.flatten()
@@ -202,9 +204,9 @@ if args.layers:
                     else:
                         glno2 = 0
                     layers[layer] = (glno1,glno2)
-                    if "LabelLayer" in l:
-                        labellayers[layer] = l["LabelLayer"]
-
+                    if "LabelLayerNo" in l:
+                        labellayers[layer] = l["LabelLayerNo"]
+print(labellayers)
         
 for j,m in modules.items():
     m.add()
