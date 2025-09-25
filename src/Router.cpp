@@ -795,8 +795,9 @@ int Router::snap(const Node* n, const bool vert, const bool up) const
         }
       }
     } else {
-      snapc = (vert ? (up ? _bbox.ymax() : _bbox.ymin())
-          : (up ? _bbox.xmax() : _bbox.xmin()));
+      snapc = (vert ? n->y() : n->x());
+      //snapc = (vert ? (up ? _bbox.ymax() : _bbox.ymin())
+      //    : (up ? _bbox.xmax() : _bbox.xmin()));
     }
   }
   return snapc;
@@ -1145,6 +1146,13 @@ Geom::LayerRects Router::findSol()
 #endif
       }
 
+      for (auto& l : _tobstacles) {
+        for (auto& o : l.second) {
+          _bbox.merge(o.xmin(), o.ymin(), o.xmax(), o.ymax());
+        }
+      }
+      _bbox.expand(_bbox.width(), _bbox.height());
+
       /*for (auto& l : _tobstacles) {
         COUT << "layer before : " << l.first << '\n';
         for (auto& o : l.second) {
@@ -1317,7 +1325,7 @@ Geom::LayerRects Router::findSol()
               }
               sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
 #if DEBUG
-              COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
+              //COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
               COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
 #endif
             } else {
@@ -1617,7 +1625,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         if (olsrcortgt) break;
       }
       obs = r.bloatby(x1, y1, x2, y2);
-      if (!olsrcortgt && _bbox.overlaps(obs)) {
+      if (!olsrcortgt) {
         if (temp) {
           _tobstacles[layer].push_back(obs);
           //COUT << "tobs : " << layer << ' ' << _tobstacles[layer].back().str() << '\n';
@@ -2019,13 +2027,13 @@ void Router::writeLEF(const Geom::LayerRects* sol) const
     ofs << "    PIN SRCNODES\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
     for (auto& s : _sources) {
       ofs << "        LAYER " << LAYER_NAMES[s->z()] << "_SRC ;\n";
-      ofs << "          RECT " << (1.*(s->x() - 100)/_uu) << ' ' << (1.*(s->y() - 100)/_uu) << ' ' << (1.*(s->x() + 100)/_uu) << ' ' << (1.*(s->y() + 100)/_uu) << " ;\n";
+      ofs << "          RECT " << (1.*(s->x() - 10)/_uu) << ' ' << (1.*(s->y() - 10)/_uu) << ' ' << (1.*(s->x() + 10)/_uu) << ' ' << (1.*(s->y() + 10)/_uu) << " ;\n";
     }
     ofs << "      END\n    END SRCNODES\n";
     ofs << "    PIN TGTNODES\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
     for (auto& s : _targets) {
       ofs << "        LAYER " << LAYER_NAMES[s->z()] << "_TGT ;\n";
-      ofs << "          RECT " << (1.*(s->x() - 100)/_uu) << ' ' << (1.*(s->y() - 100)/_uu) << ' ' << (1.*(s->x() + 100)/_uu) << ' ' << (1.*(s->y() + 100)/_uu) << " ;\n";
+      ofs << "          RECT " << (1.*(s->x() - 10)/_uu) << ' ' << (1.*(s->y() - 10)/_uu) << ' ' << (1.*(s->x() + 10)/_uu) << ' ' << (1.*(s->y() + 10)/_uu) << " ;\n";
     }
     ofs << "      END\n    END TGTNODES\n";
     if (sol) {
@@ -2045,9 +2053,9 @@ void Router::writeLEF(const Geom::LayerRects* sol) const
         for (auto& pos : (vert ? _hanangridv[l] : _hanangridh[l])) {
           for (auto& r : pos.second) {
             if (vert) {
-              ofs << "          RECT " << (1.*(pos.first - 50)/_uu) << ' ' << (1.*r.first/_uu) << ' ' << (1.*(pos.first + 50)/_uu) << ' ' << (1.*r.second/_uu) << " ;\n";
+              ofs << "          RECT " << (1.*(pos.first - 1)/_uu) << ' ' << (1.*r.first/_uu) << ' ' << (1.*(pos.first + 1)/_uu) << ' ' << (1.*r.second/_uu) << " ;\n";
             } else {
-              ofs << "          RECT " << (1.*r.first/_uu) << ' ' << (1.*(pos.first - 50)/_uu) << ' ' << (1.*r.second/_uu) << ' ' << (1.*(pos.first + 50)/_uu) << " ;\n";
+              ofs << "          RECT " << (1.*r.first/_uu) << ' ' << (1.*(pos.first - 1)/_uu) << ' ' << (1.*r.second/_uu) << ' ' << (1.*(pos.first + 1)/_uu) << " ;\n";
             }
           }
         }

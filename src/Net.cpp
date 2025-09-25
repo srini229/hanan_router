@@ -248,7 +248,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
 #if DEBUG
       COUT << "adding line of sight nodes if they exist\n";
 #endif
-      for (auto& l : p1) {
+      /*for (auto& l : p1) {
         auto it = p2.find(l.first);
         if (preflayersrctgt && _preflayers.find(l.first) == _preflayers.end()) continue;
         if (it != p2.end()) {
@@ -270,7 +270,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
             }
           }
         }
-      }
+      }*/
       if (_detour) router.allowDetour();
       router.addObstacles(l1, true);
       router.addObstacles(l2, true);
@@ -375,9 +375,9 @@ void Net::writeLEF(const std::string& modname, const int uu, const Geom::Rect& b
         for (auto& l : (i < 3 ? *obs[i] : _obstacles)) {
           ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
           for (auto r : l.second) {
-            if (r.intersect(_bbox)) {
+            //if (r.intersect(_bbox)) {
               ofs << "        RECT " << (1.*r.xmin()/uu) << ' ' << (1.*r.ymin()/uu) << ' ' << (1.*r.xmax()/uu) << ' ' << (1.*r.ymax()/uu) << " ;\n";
-            }
+            //}
           }
         }
       }

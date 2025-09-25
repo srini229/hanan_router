@@ -118,6 +118,7 @@ def read_def(def_file, modu):
                 s = line.split()
                 if len(s) == 5:
                   sca = int(s[3])
+                sca = 100
             if "NETS" in line:
                 if "END" in line:
                     innets = False
