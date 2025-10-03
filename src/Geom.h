@@ -71,6 +71,8 @@ class Rect {
     int& ymin() { return _ll.y(); }
     int& xmax() { return _ur.x(); }
     int& ymax() { return _ur.y(); }
+    Point& ll() { return _ll; }
+    Point& ur() { return _ur; }
     const Point& ll() const { return _ll; }
     const Point& ur() const { return _ur; }
     const int xcenter() const { return (_ll.x() + _ur.x())/2; }
@@ -210,46 +212,70 @@ typedef map<int, Rects> LayerRects;
 class Transform {
   private:
     Point _o;
-    int _sX, _sY; 
+    int _angle;
 
   public:
-    Transform(const int x = 0, const int y = 0, const int sx = 1, const int sy = 1) :
-      _o{x, y}, _sX{sx}, _sY{sy} {}
+    Transform(const int x = 0, const int y = 0, const int angle = 0) :
+      _o{x, y}, _angle{angle} {}
     const Point& origin() const { return _o; }
     const int x() const { return _o.x(); }
     const int y() const { return _o.y(); }
-    int sX() const { return _sX; }
-    int sY() const { return _sY; }
+    int angle() const { return _angle; }
     std::string orient() const
     {
-      if (_sX == 1 && _sY == 1) return "N";
-      if (_sX == -1 && _sY == 1) return "FN";
-      if (_sX == 1 && _sY == -1) return "FS";
-      return "S";
+      switch (_angle) {
+        case 0:
+        default:
+          return "N";
+        case -90:
+          return "E";
+        case -180:
+          return "S";
+        case -270:
+          return "W";
+      };
+      return "N";
     }
     void apply(Point& pt) const 
     {
-      pt.x() = _o.x() + _sX * pt.x();
-      pt.y() = _o.y() + _sY * pt.y();
+      Point orig(pt);
+      switch (_angle) {
+        case 0:
+        default:
+          pt.x() = _o.x() + orig.x();
+          pt.y() = _o.y() + orig.y();
+          break;
+        case -90:
+          pt.x() = _o.x() + orig.y();
+          pt.y() = _o.y() - orig.x();
+          break;
+        case -180:
+          pt.x() = _o.x() - orig.x();
+          pt.y() = _o.y() - orig.y();
+          break;
+        case -270:
+          pt.x() = _o.x() - orig.y();
+          pt.y() = _o.y() + orig.x();
+          break;
+      };
     }
     Point transform(const Point& pt) const
     {
-      return Point(_o.x() + _sX * pt.x(), _o.y() + _sY * pt.y());
+      Point tmp(pt);
+      this->apply(tmp);
+      return tmp;
     }
     void apply(Rect& r) const 
     {
-      r.xmin() = _o.x() + _sX * r.xmin();
-      r.ymin() = _o.y() + _sY * r.ymin();
-      r.xmax() = _o.x() + _sX * r.xmax();
-      r.ymax() = _o.y() + _sY * r.ymax();
+      this->apply(r.ll());
+      this->apply(r.ur());
       r.fix();
     }
     Rect transform(const Rect& r) const
     {
       return Rect(transform(r.ll()), transform(r.ur()));
     }
-    //const json toJSON() const { return json{{"Origin", _o.toJSON()}, {"sX", _sX}, {"sY", _sY}}; }
-    const std::string str() const { return ("origin : {" + _o.str() + "} sX : " + std::to_string(_sX) + " sY : " + std::to_string(_sY)); }
+    const std::string str() const { return ("origin : {" + _o.str() + "} angle : " + std::to_string(_angle)); }
 };
 
 double Dist(const Geom::Rect& r1, const Geom::Rect& r2, const bool manh = true);

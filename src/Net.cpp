@@ -212,7 +212,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.setName(_name + "__" + port1->name() + "__" + port2->name());
       const auto& p1 = port1->shapes();
       const auto& p2 = port2->shapes();
-      bool preflayersrctgt{true};
+      //bool preflayersrctgt{true};
       Geom::LayerRects samenetobst;
       for (auto src : {true, false}) {
         bool preflayer{false};
@@ -224,7 +224,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
             break;
           }
         }
-        preflayersrctgt &= preflayer;
+        //preflayersrctgt &= preflayer;
         if (!_preflayers.empty()) {
           COUT << "pref layer pin" << (preflayer ? "" : " not") << " found for " << (src ? port1->name() : port2->name()) << '\n';
         }

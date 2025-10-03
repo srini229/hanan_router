@@ -9,6 +9,16 @@ using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
 const auto& npos = std::string::npos;
 
+static std::string getPrimitiveName(const std::string& instr)
+{
+  auto pos = instr.rfind('/');
+  auto pos1 = instr.rfind(".gds");
+  if (pos != std::string::npos && pos1 != std::string::npos) {
+    return instr.substr(pos + 1, pos1 - pos - 1);
+  }
+  return instr;
+}
+
 Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile, const std::string& ildir) : _uu(uu), _valid{1}
 {
   if (plfile.empty()) {
@@ -24,96 +34,123 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
   }
   ordered_json oj = json::parse(ifs);
   ifs.close();
-  auto it = oj.find("global_signals");
-  std::vector<std::string> globalNets;
-  globalNets.reserve(8);
+  auto it = oj.find("modules");
+  std::map<std::string, Geom::Rect> leafData;
+  // modules refers to leaf cells in this placement json file
   if (it != oj.end()) {
-    for (auto& l : *it) {
-      auto act = l.find("actual");
-      if (act != l.end()) {
-        globalNets.push_back(*act);
+    for (auto& kv : it->items()) {
+      auto mname = kv.key();
+      auto& m = kv.value();
+      if (_modules.find(mname) != _modules.end()) continue;
+      auto aname = m.find("gds_file");
+      std::string primName(mname);
+      if (aname != m.end()) {
+        primName = getPrimitiveName(aname->dump());
       }
+      auto modu = new Module(primName, primName, 1, _uu);
+      COUT << "adding leaf : " << primName << '\n';
+      /*
+      auto params = m.find("pins");
+      if (params != m.end()) {
+        for (unsigned i = 0; i < params->size(); ++i) {
+          auto pinName = std::to_string(i);
+          auto p = modu->addPin(pinName);
+          modu->addNet(pinName);
+          modu->net(pinName)->addPin(p);
+        }
+      }*/
+      auto tmpx = m.find("x");
+      auto tmpy = m.find("y");
+      auto tmpw = m.find("w");
+      auto tmph = m.find("h");
+      if (tmpx != m.end() && tmpy != m.end() && tmpw != m.end() && tmph != m.end()) {
+        leafData[modu->name()] = Geom::Rect(*tmpx, *tmpy, (int(*tmpx) + int(*tmpw)), (int(*tmpy) + int(*tmpw)));
+      }
+      _modules[modu->name()] = modu;
     }
   }
-  it = oj.find("leaves");
+  it = oj.find("chip");
+  Geom::Rect boundary;
   if (it != oj.end()) {
-    for (auto& l : *it) {
-      auto lname = l.find("concrete_name");
-      if (_modules.find(*lname) != _modules.end()) continue;
-      auto aname = l.find("abstract_name");
-      if (lname != l.end()) {
-        auto modu = new Module(*lname, (aname != l.end() ? *aname : *lname), 1, _uu);
-        COUT << "adding leaf : " << *lname << '\n';
-        for (auto& g : globalNets) {
-          auto p = modu->addPin(g);
-          modu->addNet(g);
-          modu->net(g)->addPin(p);
-        }
-        auto terms = l.find("terminals");
-        if (terms != l.end()) {
-          for (auto& term : *terms) {
-            auto p = modu->addPin(term["name"]);
-            modu->addNet(term["name"]);
-            modu->net(term["name"])->addPin(p);
-          }
-        }
-        _modules[modu->name()] = modu;
-      }
+    if (it->find("W") != it->end() && it->find("H") != it->end()) {
+      auto x = int((*it)["W"]);
+      auto y = int((*it)["H"]);
+      boundary.set(0, 0, x, y);
+      std::cout << boundary.str() << std::endl;
     }
   }
   it = oj.find("modules");
   if (it != oj.end()) {
-    for (auto& m : *it) {
-      auto mname = m.find("concrete_name");
-      if (mname != m.end()) {
-        if (_modules.find(*mname) != _modules.end()) continue;
-        auto aname = m.find("abstract_name");
-        auto modu = new Module(*mname, (aname != m.end() ? *aname : *mname), 0, _uu);
-        auto params = m.find("parameters");
-        COUT << "adding module : " << *mname << '\n';
-        if (params != m.end()) {
-          for (auto& p : *params) {
-            modu->addPin(p);
-          }
-        }
-        for (auto& g : globalNets) {
-          auto p = modu->addPin(g);
-          modu->addNet(g);
-          modu->net(g)->addPin(p);
-        }
-        auto bbox = m.find("bbox");
-        if (bbox != m.end()) {
-          const auto& b = (*bbox);
-          modu->setBBox(Geom::Rect(b[0], b[1], b[2], b[3]));
-        }
-        auto insts = m.find("instances");
-        if (insts != m.end()) {
-          for (auto& inst : *insts) {
-            auto iname = inst.find("instance_name");
-            auto mname = inst.find("concrete_template_name");
-            auto tritr = inst.find("transformation");
-            auto tr = (tritr == inst.end()) ? Geom::Transform() :
-              Geom::Transform((*tritr)["oX"], (*tritr)["oY"], (*tritr)["sX"], (*tritr)["sY"]) ;
-            Placement::Instance* instptr{nullptr};
-            if (iname != inst.end() && mname != inst.end()) {
-              instptr = modu->addInstance(*iname, *mname, tr);
-            }
-            if (instptr) {
-              auto famap = inst.find("fa_map");
-              if (famap != inst.end()) {
-                for (auto& pm : *famap) {
-                  const Net* n = &(modu->addNet(pm["actual"]));
-                  modu->addTmpPin(n, instptr, pm["formal"]);
-                }
-              }
-            } else {
-              COUT << "instptr nullptr\n";
-            }
-          }
-        }
-        _modules[modu->name()] = modu;
+    auto modu = new Module("CHIPTOP", "CHIPTOP", 0, _uu);
+    COUT << "adding module : CHIPTOP" << '\n';
+    modu->setBBox(boundary);
+    std::map<std::string, Placement::Instance*> instLUT;
+    for (auto& kv : it->items()) {
+      auto mname = kv.key();
+      auto& m = kv.value();
+      int oX, oY, W, H;
+      auto itx = m.find("x");
+      auto ity = m.find("y");
+      auto itw = m.find("w");
+      auto ith = m.find("h");
+      if (itx != m.end() && ity != m.end() && itw != m.end() && ith != m.end()) {
+        oX = *itx;
+        oY = *ity;
+        W = *itw;
+        H = *ith;
       }
+      Geom::Transform tr;
+      auto tritr = m.find("orientation");
+      if (tritr != m.end()) {
+        switch (int(*tritr)) {
+          case 0:
+          default:
+            tr = Geom::Transform(oX, oY, 0);
+            break;
+          case 1:
+            tr = Geom::Transform(oX, oY + H, -90);
+            break;
+          case 2:
+            tr = Geom::Transform(oX + W, oY + H, -180);
+            break;
+          case 3:
+            tr = Geom::Transform(oX + W, oY, -270);
+            break;
+        }
+      }
+      auto aname = m.find("gds_file");
+      std::string primName(mname);
+      if (aname != m.end()) {
+        primName = getPrimitiveName(aname->dump());
+      }
+      instLUT[mname] = modu->addInstance(mname, primName, tr);
     }
+    it = oj.find("nets");
+    if (it != oj.end()) {
+      for (auto& kv : it->items()) {
+        auto netName = kv.key();
+        auto& netData = kv.value();
+        const Net* n = &(modu->addNet(netName));
+        auto epit = netData.find("endpoints");
+        std::cout << "adding net : " << netName << std::endl;
+        if (epit != netData.end()) {
+          for (auto& pins : *epit) {
+            std::cout << "adding pin : " << pins["module"] << ' ' << instLUT[pins["module"]] << " " << pins["pin_name"] << std::endl;
+            modu->addTmpPin(n, instLUT[pins["module"]], pins["pin_name"]);
+            auto master = _modules.find(instLUT[pins["module"]]->moduleName());
+            if (master != _modules.end()) {
+              std::string pinName = pins["pin_name"];
+              auto p = master->second->addPin(pinName);
+              master->second->addNet(pinName);
+              master->second->net(pinName)->addPin(p);
+            }
+          }
+        }
+      }
+    } else {
+      COUT << "instptr nullptr\n";
+    }
+    _modules[modu->name()] = modu;
   }
   if (!ildir.empty()) {
     for (auto& it : _modules) {

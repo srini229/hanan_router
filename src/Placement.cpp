@@ -162,7 +162,8 @@ void Module::route(Router::Router& router, const std::string& outdir)
     router.setusepinwidth((_usepinwidth == 1) ? true : false);
     static std::set<std::string> debugnet(splitString((getenv("HANAN_DEBUG_NET") ? std::string(getenv("HANAN_DEBUG_NET")) : std::string("")), ','));
     for (auto it = nets.begin(); it != nets.end(); ++it) {
-      netObstaclesUnrouted.clear();
+      netObstaclesUnrouted.clear(); 
+      std::cout << "net : " << (*it)->name() << std::endl;
       for (auto itn = nets.begin(); itn != it; ++itn) {
         if ((*itn)->excluded()) {
           for (auto virt : {true, false}) {
@@ -380,8 +381,8 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
         auto& tr = inst->transform();
         ofs << "- " << inst->name() << ' ' << inst->moduleName();
         ofs << " + PLACED ( ";
-        ofs << ((tr.sX() > 0 ) ? tr.x() : (tr.x() - inst->bbox().width()))  << ' ';
-        ofs << ((tr.sY() > 0 ) ? tr.y() : (tr.y() - inst->bbox().height())) << " ) " << tr.orient() << " ;\n";
+        ofs << tr.x() << ' ';
+        ofs << tr.y() << " ) " << tr.orient() << " ;\n";
       }
       if (!netname.empty()) {
         ofs << "- " << _name << '_' << netname << "_0 " << _name << '_' << netname;

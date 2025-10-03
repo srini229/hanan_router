@@ -12,7 +12,7 @@ ap.add_argument( "-g", "--gds_dir", type=str, default="", help='<dir with all le
 ap.add_argument( "-i", "--def_dir", type=str, default="", help='<dir with all hier def files>')
 ap.add_argument( "-t", "--top_cell", type=str, default="library", help='<top cell>')
 ap.add_argument( "-u", "--units", type=float, default=1e-6, help='<units in m>')
-ap.add_argument( "-s", "--scale", type=float, default=1, help='<scale>')
+ap.add_argument( "-s", "--scale", type=float, default=1e3, help='<scale>')
 ap.add_argument( "-l", "--layers", type=str, default="", help='<layers.json>')
 ap.add_argument( "-d", "--deff", type=str, default="", help='<route def file>')
 args = ap.parse_args()
@@ -28,22 +28,20 @@ print(f"layers.json       : {args.layers}")
 print(f"route def file    : {args.deff}")
 print(f"hier def dir      : {args.def_dir}")
 
-class Transform:
-    def __init__(self, oX = 0, oY = 0, sX = 1, sY = 1):
-        self._oX = oX 
-        self._oY = oY
-        self._sX = sX
-        self._sY = sY
-    def __str__(self):
-        return f'({str(self._oX)} {str(self._oY)} {str(self._sX)} {str(self._sY)})'
+if args.pl_file == "" or args.gds_dir == "":
+    ap.print_help()
+    exit()
+
+orientLUT = [0, 90, 180, 270]
 
 class Instance:
-    def __init__(self, name = "", tr = Transform()):
-        self._name = name
-        self._tr   = tr
-        self._modu = None
+    def __init__(self, name = "", origin=(0,0), angle=0):
+        self._name   = name
+        self._angle  = angle
+        self._modu   = None
+        self._origin = origin
     def __str__(self):
-        return f'{self._name} {str(self._tr)}'
+        return f'{self._name} {self._origin} {self._angle}'
 
 class Module:
     def __init__(self, name = "", leaf = False):
@@ -66,12 +64,8 @@ class Module:
                     i._modu.add()
                 bbox = i._modu._cell.get_bounding_box()
                 angle, refl = 0, False
-                oX, oY = i._tr._oX/args.scale, i._tr._oY/args.scale
-                if i._tr._sX < 0:
-                    angle = 180
-                    refl = (i._tr._sY > 0)
-                else:
-                    refl = (i._tr._sY < 0)
+                oX, oY = i._origin[0]/args.scale, i._origin[1]/args.scale
+                angle = i._angle
                 print(f'{self._name} creating reference of {i._name} at {(oX,oY)} {refl} {angle})')
                 ref = gdspy.CellReference(i._modu._cell, (oX, oY), x_reflection = refl, rotation = angle)
                 if not self._cell:
@@ -83,25 +77,26 @@ modules = dict()
 if args.pl_file:
     with open(args.pl_file) as fp:
         pldata = json.load(fp)
-        for l in pldata.get("leaves"):
-            lname = l.get("concrete_name")
-            if lname:
-                modu = Module(lname, True)
-                modules[modu._name] = modu
-        for m in pldata.get("modules"):
-            mname = m.get("concrete_name")
-            if mname:
-                modu = Module(mname)
-                for i in m.get("instances"):
-                    iname = i.get("concrete_template_name")
-                    trstr = i.get("transformation")
-                    tr = Transform()
-                    if trstr:
-                        tr._oX, tr._oY = trstr["oX"], trstr["oY"]
-                        tr._sX, tr._sY = trstr["sX"], trstr["sY"]
-                    if iname:
-                        modu._instances.append(Instance(iname, tr))
-                modules[modu._name] = modu
+        if "modules" in pldata:
+            modu = Module(args.top_cell)
+            modules[modu._name] = modu
+            for k,v in pldata["modules"].items():
+                flname = v.get("gds_file")
+                if flname and '/' in flname and '.gds' in flname:
+                    flname = flname[flname.rfind('/') + 1:flname.rfind('.gds')]
+                    tmpmodu = Module(flname, True)
+                    modules[tmpmodu._name] = tmpmodu
+                orient = v.get("orientation")
+                angle = orientLUT[orient] if orient else 0
+                origin = (v.get("x"), v.get("y"))
+                wh = (v.get("w"), v.get("h"))
+                if orient == 1:
+                  origin = (origin[0], origin[1] + wh[1])
+                elif orient == 2:
+                  origin = (origin[0] + wh[0], origin[1] + wh[1])
+                elif orient == 3:
+                  origin = (origin[0] + wh[0], origin[1])
+                modu._instances.append(Instance(flname, origin, -angle))
 
 def read_def(def_file, modu):
     with open(def_file) as fp:
@@ -118,7 +113,6 @@ def read_def(def_file, modu):
                 s = line.split()
                 if sca == 1 and len(s) == 5:
                   sca = int(s[3])
-                sca = 100
             if "NETS" in line:
                 if "END" in line:
                     innets = False
