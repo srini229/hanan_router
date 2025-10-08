@@ -19,7 +19,7 @@ static std::string getPrimitiveName(const std::string& instr)
   return instr;
 }
 
-Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile, const std::string& ildir) : _uu(uu), _valid{1}
+Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile, const std::string& ildir, const std::string& topname) : _uu(uu), _valid{1}
 {
   if (plfile.empty()) {
     CERR<< "missing placement file" <<std::endl;
@@ -81,8 +81,8 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
   }
   it = oj.find("modules");
   if (it != oj.end()) {
-    auto modu = new Module("CHIPTOP", "CHIPTOP", 0, _uu);
-    COUT << "adding module : CHIPTOP" << '\n';
+    auto modu = new Module(topname, topname, 0, _uu);
+    COUT << "adding module : " << topname << '\n';
     modu->setBBox(boundary);
     std::map<std::string, Placement::Instance*> instLUT;
     for (auto& kv : it->items()) {
@@ -291,6 +291,9 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
       ss >> str >> str >> str >> macroUnits;
       units /= macroUnits;
     }
+    if (inPin && curr_pin && ((line.find("DIRECTION") != npos) || (line.find("USE") != npos))) {
+      continue;
+    }
     if (inPin && curr_pin && line.find("PORT") != npos) {
       inPort = true;
       curr_port = new Port();
@@ -327,6 +330,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
         double llx{0}, lly{0}, urx{0}, ury{0};
         ss >> str >> llx >> lly >> urx >> ury;
         if (layer >= 0) {
+//          std::cout << layer << ' ' << str << ' ' << llx << ' ' << lly << ' ' << urx << ' ' << ury << ' ' << units << std::endl;
           curr_module->addObstacle(layer, Geom::Rect(round(llx * units), round(lly * units), round(urx * units), round(ury * units)));
         }
         continue;

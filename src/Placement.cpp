@@ -135,6 +135,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
       for (const auto& l : m->obstacles()) {
         for (const auto& r : l.second) {
           _obstacles[l.first].push_back(inst->transform(r));
+//          std::cout << "obstacle : " << l.first << ' ' << r.str() << ' ' << _obstacles[l.first].back().str() << std::endl;
         }
       }
       for (const auto& l : m->internalroutes()) {
@@ -219,12 +220,12 @@ void Module::route(Router::Router& router, const std::string& outdir)
         }
       }
     }
-    for (auto& n : _nets) {
-      if (_addednets.find(n.first) == _addednets.end()) {
-        //std::cout << "unadded net : " << n.first << '\n';
-        Geom::MergeLayerRects(_internalroutes, n.second.routeShapesWithPins());
-      }
-    }
+    //for (auto& n : _nets) {
+    //  if (_addednets.find(n.first) == _addednets.end()) {
+    //    //std::cout << "unadded net : " << n.first << '\n';
+    //    Geom::MergeLayerRects(_internalroutes, n.second.routeShapesWithPins());
+    //  }
+    //}
     writeDEF(outdir);
   }
   if (!_leaf) {
@@ -413,7 +414,7 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
               ofs << " ( " << r.xmin() << ' ' << r.ymin() << " ) ( " << r.xmax() << ' ' << r.ymax() << " )\n";
             }
           }
-        } else {
+        } /*else {
           ofs << "\n";
           for (auto& pin : n.second.pins()) {
             for (auto& p : pin->ports()) {
@@ -432,7 +433,7 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
               }
             }
           }
-        }
+        }*/
         ofs << " ;\n";
       }
       ofs << "END NETS\n\n";

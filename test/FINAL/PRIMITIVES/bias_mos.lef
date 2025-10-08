@@ -10,9 +10,7 @@ MACRO bias_mos
     USE SIGNAL ;
     PORT
       LAYER M3 ;
-        RECT 680 915 860 2695 ;
-      LAYER M3 ;
-        RECT 0 915 720 2695 ;
+        RECT 680 1755 860 1975 ;
     END
   END G
   PIN D
@@ -20,7 +18,7 @@ MACRO bias_mos
     USE SIGNAL ;
     PORT
       LAYER M2 ;
-        RECT 2310 935 2810 2675 ;
+        RECT 2635 1800 2805 2040 ;
     END
   END D
   PIN B
@@ -28,7 +26,7 @@ MACRO bias_mos
     USE SIGNAL ;
     PORT
       LAYER M1 ;
-        RECT 955 3180 1975 3390 ;
+        RECT 1395 3180 1705 3390 ;
     END
   END B
   OBS

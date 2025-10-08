@@ -1,310 +1,288 @@
 {
   "chip": {
-    "W": 350105.0,
-    "H": 350105.0
+    "W": 361439.1,
+    "H": 365090.0
   },
   "modules": {
     "drain_ind": {
-      "x": 87100,
-      "y": 166035,
-      "w": 117445,
-      "h": 120070,
-      "orientation": 0,
+      "x": 75000,
+      "y": 5695,
+      "w": 120070,
+      "h": 117445,
+      "orientation": 3,
       "gds_file": "PRIMITIVES/drain_ind_x.25.gds",
       "pins": [
         {
-          "x": 200295,
-          "y": 224570
+          "x": 141785,
+          "y": 118890
         },
         {
-          "x": 138385,
-          "y": 281855
+          "x": 79250,
+          "y": 58980
         },
         {
-          "x": 188670,
-          "y": 219320
+          "x": 141785,
+          "y": 107265
         }
       ]
     },
     "source_ind": {
-      "x": 70035,
-      "y": 12175,
-      "w": 134655,
-      "h": 137370,
-      "orientation": 0,
-      "gds_file": "PRIMITIVES/source_ind_x.25.gds",
+      "x": 105275,
+      "y": 246880,
+      "w": 55000,
+      "h": 2000,
+      "orientation": 2,
+      "gds_file": "PRIMITIVES/source_ind.gds",
       "pins": [
         {
-          "x": 200940,
-          "y": 80050
+          "x": 159275,
+          "y": 247880
         },
         {
-          "x": 129095,
-          "y": 145795
-        },
-        {
-          "x": 189905,
-          "y": 74610
+          "x": 106275,
+          "y": 247880
         }
       ]
     },
     "gate_ind": {
-      "x": 208690,
-      "y": 30000,
-      "w": 111600,
-      "h": 119600,
-      "orientation": 3,
+      "x": 176280,
+      "y": 127140,
+      "w": 119600,
+      "h": 111600,
+      "orientation": 2,
       "gds_file": "PRIMITIVES/gate_ind_x.1.gds",
       "pins": [
         {
-          "x": 261365,
-          "y": 148100
+          "x": 177780,
+          "y": 179815
         },
         {
-          "x": 267615,
-          "y": 148100
+          "x": 177780,
+          "y": 186065
         },
         {
-          "x": 264490,
-          "y": 136600
+          "x": 189280,
+          "y": 182940
         }
       ]
     },
     "cas_mos": {
-      "x": 195460,
-      "y": 153600,
+      "x": 164275,
+      "y": 242740,
       "w": 9230,
       "h": 8435,
-      "orientation": 2,
+      "orientation": 0,
       "gds_file": "PRIMITIVES/cas_mos.gds",
       "pins": [
         {
-          "x": 200425,
-          "y": 161603
+          "x": 168540,
+          "y": 243172
         },
         {
-          "x": 195695,
-          "y": 158590
+          "x": 173270,
+          "y": 246185
         },
         {
-          "x": 200465,
-          "y": 154025
+          "x": 168500,
+          "y": 250750
         },
         {
-          "x": 204505,
-          "y": 156895
+          "x": 164460,
+          "y": 247880
         },
         {
-          "x": 203885,
-          "y": 157755
+          "x": 165080,
+          "y": 247020
         }
       ]
     },
     "bias_mos": {
-      "x": 208690,
-      "y": 153600,
+      "x": 166635,
+      "y": 209090,
       "w": 3610,
       "h": 2810,
-      "orientation": 3,
+      "orientation": 1,
       "gds_file": "PRIMITIVES/bias_mos.gds",
       "pins": [
         {
-          "x": 210380,
-          "y": 156320
+          "x": 168555,
+          "y": 209180
         },
         {
-          "x": 210435,
-          "y": 154370
+          "x": 168500,
+          "y": 211130
         },
         {
-          "x": 210430,
-          "y": 155065
+          "x": 168505,
+          "y": 210435
         },
         {
-          "x": 209015,
-          "y": 155150
-        }
-      ]
-    },
-    "xc2": {
-      "x": 208545,
-      "y": 211565,
-      "w": 8320,
-      "h": 13320,
-      "orientation": 1,
-      "gds_file": "PRIMITIVES/xc2_1.gds",
-      "pins": [
-        {
-          "x": 212705,
-          "y": 224056
-        },
-        {
-          "x": 212705,
-          "y": 212395
-        },
-        {
-          "x": 216650,
-          "y": 218225
-        },
-        {
-          "x": 208759,
-          "y": 218225
-        }
-      ]
-    },
-    "xc3": {
-      "x": 64740,
-      "y": 157405,
-      "w": 18360,
-      "h": 28110,
-      "orientation": 2,
-      "gds_file": "PRIMITIVES/xc3_2.5.gds",
-      "pins": [
-        {
-          "x": 82271,
-          "y": 171460
-        },
-        {
-          "x": 65570,
-          "y": 171460
-        },
-        {
-          "x": 73920,
-          "y": 157620
-        },
-        {
-          "x": 73920,
-          "y": 185301
+          "x": 169920,
+          "y": 210350
         }
       ]
     },
     "xc1": {
-      "x": 64000,
-      "y": 189515,
-      "w": 19100,
-      "h": 24100,
-      "orientation": 1,
+      "x": 134284,
+      "y": 153471,
+      "w": 13320,
+      "h": 8320,
+      "orientation": 0,
       "gds_file": "PRIMITIVES/xc1_1.gds",
       "pins": [
         {
-          "x": 73550,
-          "y": 212786
+          "x": 135113,
+          "y": 157631
         },
         {
-          "x": 73550,
-          "y": 190345
+          "x": 146774,
+          "y": 157631
         },
         {
-          "x": 82885,
-          "y": 201565
+          "x": 140944,
+          "y": 161576
         },
         {
-          "x": 64214,
-          "y": 201565
+          "x": 140944,
+          "y": 153685
+        }
+      ]
+    },
+    "xc2": {
+      "x": 75000,
+      "y": 168775,
+      "w": 16280,
+      "h": 34580,
+      "orientation": 2,
+      "gds_file": "PRIMITIVES/xc2_4.gds",
+      "pins": [
+        {
+          "x": 90451,
+          "y": 186065
+        },
+        {
+          "x": 75830,
+          "y": 186065
+        },
+        {
+          "x": 83140,
+          "y": 168991
+        },
+        {
+          "x": 83140,
+          "y": 203141
+        }
+      ]
+    },
+    "xc0": {
+      "x": 96485,
+      "y": 254045,
+      "w": 19100,
+      "h": 24100,
+      "orientation": 3,
+      "gds_file": "PRIMITIVES/xc0_1.gds",
+      "pins": [
+        {
+          "x": 106035,
+          "y": 254874
+        },
+        {
+          "x": 106035,
+          "y": 277315
+        },
+        {
+          "x": 96700,
+          "y": 266095
+        },
+        {
+          "x": 115371,
+          "y": 266095
         }
       ]
     },
     "xwg1": {
-      "x": 220865,
-      "y": 171320,
+      "x": 95280,
+      "y": 167040,
       "w": 77000,
       "h": 38050,
       "orientation": 0,
       "gds_file": "PRIMITIVES/xwg1.gds",
       "pins": [
         {
-          "x": 227979,
-          "y": 190345
+          "x": 102394,
+          "y": 186065
         },
         {
-          "x": 290751,
-          "y": 190345
+          "x": 165166,
+          "y": 186065
         },
         {
-          "x": 259365,
-          "y": 176989
+          "x": 133780,
+          "y": 172709
         },
         {
-          "x": 259365,
-          "y": 203701
-        }
-      ]
-    },
-    "xR1": {
-      "x": 187190,
-      "y": 153545,
-      "w": 4270,
-      "h": 8490,
-      "orientation": 0,
-      "gds_file": "PRIMITIVES/xR1_4.gds",
-      "pins": [
-        {
-          "x": 187465,
-          "y": 157805
-        },
-        {
-          "x": 191185,
-          "y": 157805
+          "x": 133780,
+          "y": 199421
         }
       ]
     },
     "xR0": {
-      "x": 101360,
-      "y": 158315,
-      "w": 9320,
-      "h": 2280,
-      "orientation": 1,
-      "gds_file": "PRIMITIVES/xR0_8.gds",
+      "x": 177505,
+      "y": 246910,
+      "w": 5860,
+      "h": 7650,
+      "orientation": 0,
+      "gds_file": "PRIMITIVES/xR0_4.gds",
       "pins": [
         {
-          "x": 106035,
-          "y": 160320
+          "x": 177780,
+          "y": 250750
         },
         {
-          "x": 106035,
-          "y": 158590
+          "x": 183090,
+          "y": 250750
+        }
+      ]
+    },
+    "xR1": {
+      "x": 166640,
+      "y": 215900,
+      "w": 3750,
+      "h": 14210,
+      "orientation": 3,
+      "gds_file": "PRIMITIVES/xR1_5.gds",
+      "pins": [
+        {
+          "x": 168500,
+          "y": 216175
+        },
+        {
+          "x": 168500,
+          "y": 229835
         }
       ]
     },
     "xR2": {
-      "x": 208545,
-      "y": 171320,
-      "w": 3750,
-      "h": 14210,
+      "x": 180925,
+      "y": 261770,
+      "w": 10250,
+      "h": 28320,
       "orientation": 1,
-      "gds_file": "PRIMITIVES/xR2_5.gds",
+      "gds_file": "PRIMITIVES/xR2_7.gds",
       "pins": [
         {
-          "x": 210435,
-          "y": 185255
+          "x": 186065,
+          "y": 289815
         },
         {
-          "x": 210435,
-          "y": 171595
-        }
-      ]
-    },
-    "xR3": {
-      "x": 210160,
-      "y": 160410,
-      "w": 26730,
-      "h": 6910,
-      "orientation": 0,
-      "gds_file": "PRIMITIVES/xR3_9.gds",
-      "pins": [
-        {
-          "x": 210435,
-          "y": 163880
-        },
-        {
-          "x": 236615,
-          "y": 163880
+          "x": 186065,
+          "y": 262045
         }
       ]
     },
     "vdd": {
       "x": 0,
-      "y": 240090,
+      "y": 80030,
       "w": 60000,
       "h": 50000,
       "orientation": 3,
@@ -312,27 +290,27 @@
       "pins": [
         {
           "x": 51160,
-          "y": 266095
+          "y": 106035
         }
       ]
     },
     "output": {
-      "x": 0,
-      "y": 160060,
-      "w": 60000,
-      "h": 50000,
-      "orientation": 3,
+      "x": 80030,
+      "y": 305090,
+      "w": 50000,
+      "h": 60000,
+      "orientation": 0,
       "gds_file": "PRIMITIVES/output.gds",
       "pins": [
         {
-          "x": 51160,
-          "y": 186065
+          "x": 106035,
+          "y": 313930
         }
       ]
     },
     "input": {
       "x": 0,
-      "y": 80030,
+      "y": 160060,
       "w": 60000,
       "h": 50000,
       "orientation": 3,
@@ -340,55 +318,41 @@
       "pins": [
         {
           "x": 51160,
-          "y": 106035
+          "y": 186065
         }
       ]
     },
     "gnd0": {
-      "x": 240090,
-      "y": 290105,
-      "w": 50000,
-      "h": 60000,
-      "orientation": 0,
+      "x": 0,
+      "y": 240090,
+      "w": 60000,
+      "h": 50000,
+      "orientation": 3,
       "gds_file": "PRIMITIVES/gnd0.gds",
       "pins": [
         {
-          "x": 266095,
-          "y": 298945
+          "x": 51160,
+          "y": 266095
         }
       ]
     },
     "bias": {
-      "x": 80030,
-      "y": 290105,
+      "x": 160060,
+      "y": 305090,
       "w": 50000,
       "h": 60000,
       "orientation": 0,
       "gds_file": "PRIMITIVES/bias.gds",
       "pins": [
         {
-          "x": 106035,
-          "y": 298945
-        }
-      ]
-    },
-    "gnd1": {
-      "x": 160060,
-      "y": 290105,
-      "w": 50000,
-      "h": 60000,
-      "orientation": 0,
-      "gds_file": "PRIMITIVES/gnd1.gds",
-      "pins": [
-        {
           "x": 186065,
-          "y": 298945
+          "y": 313930
         }
       ]
     }
   },
   "nets": {
-    "net4": {
+    "net5": {
       "weight": 1.0,
       "endpoints": [
         {
@@ -402,12 +366,12 @@
           "pin_index": 0
         },
         {
-          "module": "xc2",
-          "pin_name": "MINUS",
-          "pin_index": 1
+          "module": "xc1",
+          "pin_name": "PLUS",
+          "pin_index": 0
         },
         {
-          "module": "xc3",
+          "module": "xc0",
           "pin_name": "PLUS",
           "pin_index": 0
         }
@@ -442,11 +406,6 @@
           "pin_index": 1
         },
         {
-          "module": "source_ind",
-          "pin_name": "GND",
-          "pin_index": 2
-        },
-        {
           "module": "gate_ind",
           "pin_name": "GND",
           "pin_index": 2
@@ -467,9 +426,19 @@
           "pin_index": 3
         },
         {
-          "module": "xc2",
-          "pin_name": "PLUS",
-          "pin_index": 0
+          "module": "xc1",
+          "pin_name": "MINUS",
+          "pin_index": 1
+        },
+        {
+          "module": "xc1",
+          "pin_name": "BULK1",
+          "pin_index": 2
+        },
+        {
+          "module": "xc1",
+          "pin_name": "BULK2",
+          "pin_index": 3
         },
         {
           "module": "xc2",
@@ -482,22 +451,12 @@
           "pin_index": 3
         },
         {
-          "module": "xc3",
+          "module": "xc0",
           "pin_name": "BULK1",
           "pin_index": 2
         },
         {
-          "module": "xc3",
-          "pin_name": "BULK2",
-          "pin_index": 3
-        },
-        {
-          "module": "xc1",
-          "pin_name": "BULK1",
-          "pin_index": 2
-        },
-        {
-          "module": "xc1",
+          "module": "xc0",
           "pin_name": "BULK2",
           "pin_index": 3
         },
@@ -515,15 +474,10 @@
           "module": "gnd0",
           "pin_name": "PAD",
           "pin_index": 0
-        },
-        {
-          "module": "gnd1",
-          "pin_name": "PAD",
-          "pin_index": 0
         }
       ]
     },
-    "net022": {
+    "net1": {
       "weight": 1.0,
       "endpoints": [
         {
@@ -538,7 +492,7 @@
         }
       ]
     },
-    "net6": {
+    "net2": {
       "weight": 1.0,
       "endpoints": [
         {
@@ -552,14 +506,24 @@
           "pin_index": 2
         },
         {
-          "module": "xR3",
+          "module": "bias_mos",
+          "pin_name": "D",
+          "pin_index": 0
+        },
+        {
+          "module": "xR0",
+          "pin_name": "PLUS",
+          "pin_index": 0
+        },
+        {
+          "module": "xR1",
           "pin_name": "MINUS",
           "pin_index": 1
         }
       ]
     },
-    "net019": {
-      "weight": 1.0,
+    "net8": {
+      "weight": 10.0,
       "endpoints": [
         {
           "module": "gate_ind",
@@ -573,7 +537,7 @@
         }
       ]
     },
-    "net8": {
+    "net4": {
       "weight": 1.0,
       "endpoints": [
         {
@@ -582,43 +546,18 @@
           "pin_index": 1
         },
         {
-          "module": "xR1",
-          "pin_name": "PLUS",
-          "pin_index": 0
-        },
-        {
           "module": "xR0",
-          "pin_name": "MINUS",
-          "pin_index": 1
-        }
-      ]
-    },
-    "net5": {
-      "weight": 1.0,
-      "endpoints": [
-        {
-          "module": "bias_mos",
-          "pin_name": "D",
-          "pin_index": 0
-        },
-        {
-          "module": "xR1",
           "pin_name": "MINUS",
           "pin_index": 1
         },
         {
           "module": "xR2",
-          "pin_name": "PLUS",
-          "pin_index": 0
-        },
-        {
-          "module": "xR3",
-          "pin_name": "PLUS",
-          "pin_index": 0
+          "pin_name": "MINUS",
+          "pin_index": 1
         }
       ]
     },
-    "net2": {
+    "net13": {
       "weight": 1.0,
       "endpoints": [
         {
@@ -627,9 +566,39 @@
           "pin_index": 1
         },
         {
-          "module": "xR2",
+          "module": "xR1",
+          "pin_name": "PLUS",
+          "pin_index": 0
+        }
+      ]
+    },
+    "net14": {
+      "weight": 10.0,
+      "endpoints": [
+        {
+          "module": "xc2",
+          "pin_name": "PLUS",
+          "pin_index": 0
+        },
+        {
+          "module": "xwg1",
+          "pin_name": "P1",
+          "pin_index": 0
+        }
+      ]
+    },
+    "net010": {
+      "weight": 10.0,
+      "endpoints": [
+        {
+          "module": "xc2",
           "pin_name": "MINUS",
           "pin_index": 1
+        },
+        {
+          "module": "input",
+          "pin_name": "PAD",
+          "pin_index": 0
         }
       ]
     },
@@ -637,7 +606,7 @@
       "weight": 1.0,
       "endpoints": [
         {
-          "module": "xc3",
+          "module": "xc0",
           "pin_name": "MINUS",
           "pin_index": 1
         },
@@ -648,41 +617,11 @@
         }
       ]
     },
-    "net010": {
-      "weight": 1.0,
-      "endpoints": [
-        {
-          "module": "xc1",
-          "pin_name": "PLUS",
-          "pin_index": 0
-        },
-        {
-          "module": "input",
-          "pin_name": "PAD",
-          "pin_index": 0
-        }
-      ]
-    },
-    "net19": {
-      "weight": 1.0,
-      "endpoints": [
-        {
-          "module": "xc1",
-          "pin_name": "MINUS",
-          "pin_index": 1
-        },
-        {
-          "module": "xwg1",
-          "pin_name": "P1",
-          "pin_index": 0
-        }
-      ]
-    },
     "net7": {
       "weight": 1.0,
       "endpoints": [
         {
-          "module": "xR0",
+          "module": "xR2",
           "pin_name": "PLUS",
           "pin_index": 0
         },

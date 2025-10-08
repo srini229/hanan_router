@@ -10,7 +10,7 @@ MACRO cas_mos
     USE SIGNAL ;
     PORT
       LAYER M1 ;
-        RECT 700 3965 910 4615 ;
+        RECT 700 4165 910 4395 ;
     END
   END GND
   PIN G2
@@ -18,7 +18,7 @@ MACRO cas_mos
     USE SIGNAL ;
     PORT
       LAYER M3 ;
-        RECT 8318 2645 9230 4245 ;
+        RECT 8760 2655 9230 4235 ;
     END
   END G2
   PIN SS
@@ -26,7 +26,7 @@ MACRO cas_mos
     USE SIGNAL ;
     PORT
       LAYER M7 ;
-        RECT 0 4615 8065 5655 ;
+        RECT 0 4635 370 5645 ;
     END
   END SS
   PIN DD
@@ -34,7 +34,7 @@ MACRO cas_mos
     USE SIGNAL ;
     PORT
       LAYER M9 ;
-        RECT 1165 0 8065 2000 ;
+        RECT 3265 0 5265 865 ;
     END
   END DD
   PIN GG
@@ -42,7 +42,7 @@ MACRO cas_mos
     USE SIGNAL ;
     PORT
       LAYER M9 ;
-        RECT 1365 6435 7865 8435 ;
+        RECT 3225 7590 5225 8430 ;
     END
   END GG
   OBS

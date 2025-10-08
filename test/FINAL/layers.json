@@ -196,7 +196,6 @@
 "VencA_H": 40,
 "VencP_L": 40,
 "VencP_H": 40,
-"ViaCut":{"Gen":"ViaArrayGenerator", "WidthX":1, "WidthY":1, "SpaceX":1, "SpaceY":1, "NumX":1, "NumY":2},
 "R": {"L_3Sigma":15, "Mean":25, "U_3Sigma":35}
 },
 
@@ -231,7 +230,6 @@
 "VencA_H": 40,
 "VencP_L": 40,
 "VencP_H": 40,
-"ViaCut":{"Gen":"ViaArrayGenerator", "WidthX":1, "WidthY":1, "SpaceX":1, "SpaceY":1, "NumX":2, "NumY":2},
 "R": {"L_3Sigma":15, "Mean":25, "U_3Sigma":35}
 },
 
@@ -266,7 +264,6 @@
 "VencA_H": 40,
 "VencP_L": 40,
 "VencP_H": 40,
-"ViaCut":{"Gen":"ViaArrayGenerator", "WidthX":1, "WidthY":1, "SpaceX":1, "SpaceY":1, "NumX":2, "NumY":2},
 "R": {"L_3Sigma":15, "Mean":25, "U_3Sigma":35}
 },
 
@@ -275,7 +272,7 @@
 "GdsLayerNo": 37,
 "GdsDatatype": {"Draw":0, "Pin":1, "Label":20, "Blockage":5},
 "LabelLayerNo":[[137, 0]],
-"Direction": "V",
+"Direction": "O",
 "Color": [],
 "Pitch": 100,
 "Width": 100,
@@ -301,7 +298,6 @@
 "VencA_H": 40,
 "VencP_L": 40,
 "VencP_H": 40,
-"ViaCut":{"Gen":"ViaArrayGenerator", "WidthX":1, "WidthY":1, "SpaceX":1, "SpaceY":1, "NumX":5, "NumY":2},
 "R": {"L_3Sigma":15, "Mean":25, "U_3Sigma":35}
 },
 
@@ -310,10 +306,10 @@
 "GdsLayerNo": 38,
 "GdsDatatype": {"Draw":40, "Pin":1, "Label":20, "Blockage":5},
 "LabelLayerNo":[[138, 0]],
-"Direction": "H",
+"Direction": "O",
 "Color": [],
 "Pitch": 200,
-"Width": 200,
+"Width": 400,
 "MinL": 20,
 "MaxL": 0,
 "EndToEnd": 140,
@@ -328,15 +324,14 @@
 "GdsLayerNo": 57,
 "GdsDatatype": {"Draw":40},
 "Stack": ["M7", "M8"],
-"SpaceX": 200,
-"SpaceY": 200,
-"WidthX": 200,
-"WidthY": 200,
-"VencA_L": 80,
-"VencA_H": 80,
-"VencP_L": 80,
-"VencP_H": 80,
-"ViaCut":{"Gen":"ViaArrayGenerator", "WidthX":3, "WidthY":3, "SpaceX":3, "SpaceY":5, "NumX":2, "NumY":2},
+"SpaceX": 340,
+"SpaceY": 560,
+"WidthX": 360,
+"WidthY": 360,
+"VencA_L": 200,
+"VencA_H": 200,
+"VencP_L": 200,
+"VencP_H": 200,
 "R": {"L_3Sigma":15, "Mean":25, "U_3Sigma":35}
 },
 
@@ -345,10 +340,10 @@
 "GdsLayerNo": 39,
 "GdsDatatype": {"Draw":60, "Pin":1, "Label":20, "Blockage":5},
 "LabelLayerNo":[[139, 0]], 
-"Direction": "V",
+"Direction": "O",
 "Color": [],
-"Pitch": 200,
-"Width": 200,
+"Pitch": 2000,
+"Width": 2000,
 "MinL": 96,
 "MaxL": 0,
 "EndToEnd": 140,
@@ -371,7 +366,6 @@
 "VencA_H": 300,
 "VencP_L": 300,
 "VencP_H": 300,
-"ViaCut":{"Gen":"ViaArrayGenerator", "WidthX":3, "WidthY":3, "SpaceX":5, "SpaceY":5, "NumX":2, "NumY":2},
 "R": {"L_3Sigma":15, "Mean":25, "U_3Sigma":35}
 },
 

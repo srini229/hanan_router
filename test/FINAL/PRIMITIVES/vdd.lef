@@ -10,7 +10,7 @@ MACRO vdd
     USE SIGNAL ;
     PORT
       LAYER M9 ;
-        RECT 0 0 50000 60000 ;
+        RECT 14750 0 37260 17680 ;
     END
   END PAD
   OBS

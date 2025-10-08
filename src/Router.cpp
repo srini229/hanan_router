@@ -1614,6 +1614,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         const auto it = shapes.find(layer);
         if (it != shapes.end()) {
           for (auto& sr : it->second) {
+//            std::cout << layer << " src/tgt : " << sr.str() << std::endl;
             if (sr.overlaps(r, true)) {
               olsrcortgt = true;
               break;
@@ -1622,8 +1623,11 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         }
         if (olsrcortgt) break;
       }
+//      std::cout << "overlaps src/tgt : " << olsrcortgt << std::endl;
       obs = r.bloatby(x1, y1, x2, y2);
+//      std::cout << "obs : " << obs.str() << std::endl;
       if (!olsrcortgt) {
+//        std::cout << "adding\n";
         if (temp) {
           _tobstacles[layer].push_back(obs);
           //COUT << "tobs : " << layer << ' ' << _tobstacles[layer].back().str() << '\n';

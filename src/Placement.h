@@ -375,7 +375,7 @@ class Netlist {
     std::set<std::string> _loadedMacros;
 
   public:
-    Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile, const std::string& ildir);
+    Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile, const std::string& ildir, const std::string& topname);
     ~Netlist();
     void print() const;
     void route(Router::Router& r, const std::string& outdir)

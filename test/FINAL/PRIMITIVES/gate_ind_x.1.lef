@@ -10,9 +10,7 @@ MACRO gate_ind_x.1
     USE SIGNAL ;
     PORT
       LAYER M9 ;
-        RECT 85100 57425 119600 60425 ;
-      LAYER M9 ;
-        RECT 23500 25060 119600 86540 ;
+        RECT 116600 57425 119600 60425 ;
     END
   END P1
   PIN P2
@@ -20,7 +18,7 @@ MACRO gate_ind_x.1
     USE SIGNAL ;
     PORT
       LAYER M9 ;
-        RECT 23500 25060 119600 86540 ;
+        RECT 116600 51175 119600 54175 ;
     END
   END P2
   PIN GND
@@ -28,7 +26,7 @@ MACRO gate_ind_x.1
     USE SIGNAL ;
     PORT
       LAYER M1 ;
-        RECT 0 0 111600 111600 ;
+        RECT 101600 50800 111600 60800 ;
     END
   END GND
   OBS

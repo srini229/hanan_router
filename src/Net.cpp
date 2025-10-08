@@ -272,10 +272,15 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }*/
       if (_detour) router.allowDetour();
+//      std::cout << "adding routed\n";
       router.addObstacles(l1, true);
+//      std::cout << "adding unrouted\n";
       router.addObstacles(l2, true);
+//      std::cout << "adding obstacles\n";
       router.addObstacles(l3, true);
+//      std::cout << "adding net specific\n";
       router.addObstacles(_obstacles, true);
+//      std::cout << "adding same net\n";
       router.addObstacles(samenetobst, true);
       auto sol = router.findSol();
       if (!sol.empty()) {
