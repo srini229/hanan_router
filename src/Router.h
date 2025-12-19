@@ -11,7 +11,7 @@
 #include "Geom.h"
 #include "Layer.h"
 
-#define COST_MAX 10000
+#define COST_MAX 1000
 
 namespace Router {
 

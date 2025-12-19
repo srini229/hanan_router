@@ -142,10 +142,10 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
         n2.parent()->print("bend3 : ");*/
       }
     }
-    if (n1.x() == n2.x() && _layerVCost[n1.z()] < COST_MAX) {
+    if (n1.x() == n2.x() && _layerVCost[n1.z()] <= COST_MAX) {
       return (bendCost + _layerVCost[n1.z()] * std::abs(n1.y() - n2.y()));
     }
-    if (n1.y() == n2.y() && _layerHCost[n1.z()] < COST_MAX) {
+    if (n1.y() == n2.y() && _layerHCost[n1.z()] <= COST_MAX) {
       return (bendCost + _layerHCost[n1.z()] * std::abs(n1.x() - n2.x()));
     }
   }
