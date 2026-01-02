@@ -11,7 +11,7 @@ ap.add_argument( "-p", "--pl_file", type=str, default="", help='<filename.placem
 ap.add_argument( "-g", "--gds_dir", type=str, default="", help='<dir with all leaf gds files>')
 ap.add_argument( "-t", "--top_cell", type=str, default="library", help='<top cell>')
 ap.add_argument( "-u", "--units", type=float, default=1e-6, help='<units in m>')
-ap.add_argument( "-s", "--scale", type=float, default=2e3, help='<scale>')
+ap.add_argument( "-s", "--scale", type=float, default=1e3, help='<scale>')
 args = ap.parse_args()
 print(f"placement verilog : {args.pl_file}")
 print(f"gds dir           : {args.gds_dir}")
@@ -123,8 +123,8 @@ for j,m in modules.items():
 
 gdslib = gdspy.GdsLibrary(name=args.top_cell, unit=args.units)
 for j,m in modules.items():
-    gdslib.add(m._cell)
     m.add()
+    gdslib.add(m._cell)
 
 print(f'writing gds file {args.top_cell}_out.gds')
 gdslib.write_gds(args.top_cell + '_out.gds')

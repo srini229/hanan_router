@@ -7,12 +7,12 @@ import argparse
 import os
 
 ap = argparse.ArgumentParser()
-ap.add_argument( "-p", "--pl_file", type=str, default="", help='<filename.placement_verilog.json>')
+ap.add_argument( "-p", "--pl_file", type=str, default="", help='<filename.scaled_placement_verilog.json>')
 ap.add_argument( "-g", "--gds_dir", type=str, default="", help='<dir with all leaf gds files>')
 ap.add_argument( "-i", "--def_dir", type=str, default="", help='<dir with all hier def files>')
 ap.add_argument( "-t", "--top_cell", type=str, default="library", help='<top cell>')
 ap.add_argument( "-u", "--units", type=float, default=1e-6, help='<units in m>')
-ap.add_argument( "-s", "--scale", type=float, default=1, help='<scale>')
+ap.add_argument( "-s", "--scale", type=float, default=1e3, help='<scale>')
 ap.add_argument( "-l", "--layers", type=str, default="", help='<layers.json>')
 ap.add_argument( "-d", "--deff", type=str, default="", help='<route def file>')
 args = ap.parse_args()
@@ -116,9 +116,9 @@ def read_def(def_file, modu):
             if "UNITS" in line:
               if "DISTANCE" in line:
                 s = line.split()
-                if sca == 1 and len(s) == 5:
+                if len(s) == 5:
                   sca = int(s[3])
-                sca = 100
+                sca = 1000
             if "NETS" in line:
                 if "END" in line:
                     innets = False

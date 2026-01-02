@@ -43,7 +43,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
       auto aname = l.find("abstract_name");
       if (lname != l.end()) {
         auto modu = new Module(*lname, (aname != l.end() ? *aname : *lname), 1, _uu);
-        COUT << "adding leaf : " << *lname << '\n';
+        COUT << "adding leaf : " << *lname << std::endl;
         for (auto& g : globalNets) {
           auto p = modu->addPin(g);
           modu->addNet(g);
@@ -52,9 +52,14 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
         auto terms = l.find("terminals");
         if (terms != l.end()) {
           for (auto& term : *terms) {
-            auto p = modu->addPin(term["name"]);
-            modu->addNet(term["name"]);
-            modu->net(term["name"])->addPin(p);
+            auto nameit = term.find("name");
+            if (nameit == term.end()) nameit = term.find("netName");
+            if (nameit != term.end()) {
+                std::cout << *nameit << std::endl;
+                auto p = modu->addPin(*nameit);
+                modu->addNet(*nameit);
+                modu->net(*nameit)->addPin(p);
+            }
           }
         }
         _modules[modu->name()] = modu;
