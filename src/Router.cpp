@@ -1,6 +1,12 @@
 #include "Router.h"
 #include <algorithm>
 
+#include <boost/polygon/polygon.hpp>
+
+namespace bp = boost::polygon;
+typedef bp::polygon_90_set_data<int> PolySet;
+typedef bp::rectangle_data<int> PRect;
+
 namespace Router {
 #if DEBUG
 size_t Node::_nodectr = 0;
@@ -382,6 +388,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
   auto hor = _cf.isHor(z);
   auto x = roundup(r.xcenter()), y = roundup(r.ycenter()); 
   Geom::PointWidthSet points;
+  COUT << _name << " points : \n";
 
   if (dir == DOWN || dir == UP) {
     auto adj = z;
@@ -412,6 +419,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         int yn = r.ymax() - dimy;
         while (yn >= (r.ymin() + dimy)) {
           points.insert(std::make_pair(Geom::Point(x,yn), widthy(z)));
+          COUT << "pointv : " << x << ',' << yn << ',' << widthy(z) << '\n';
           yn -= space;
         }
       }
@@ -425,6 +433,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         int xn = r.xmax() - dimx;
         while (xn >= (r.xmin() + dimx)) {
           points.insert(std::make_pair(Geom::Point(xn,y), widthx(z)));
+          COUT << "pointh : " << xn << ',' << y << ',' << widthx(z) << '\n';
           xn -= space;
         }
       }
@@ -437,7 +446,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
 #endif
       if (width < r.height()) {
         int space = roundup(std::max(spacex(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1)), r.height()/NUM_POINTS));
-        /* for (auto right : {true, false}) {
+        for (auto right : {true, false}) {
           int x = (right ? r.xmax() : r.xmin());
           int yn = y;
           while (yn < r.ymax()) {
@@ -454,10 +463,10 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
             points.insert(std::make_pair(Geom::Point(x,yn), width));
             yn -= space;
           }
-        } */
+        }
         int yn = roundup(r.ycenter());
         while (yn <= (r.ymax() - width/2)) {
-          if (r.width() > width) {
+          if (r.width() >= width) {
             points.insert(std::make_pair(Geom::Point(roundup(r.xmin() + width/2),yn), width));
             points.insert(std::make_pair(Geom::Point(roundup(r.xmax() - width/2),yn), width));
           } else {
@@ -468,7 +477,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         }
         yn = roundup(r.ycenter());
         while (yn >= (r.ymin() + width/2)) {
-          if (r.width() > width) {
+          if (r.width() >= width) {
             points.insert(std::make_pair(Geom::Point(roundup(r.xmin() + width/2),yn), width));
             points.insert(std::make_pair(Geom::Point(roundup(r.xmax() - width/2),yn), width));
           } else {
@@ -497,7 +506,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }*/
         int xn = roundup(r.xcenter());
         while (xn <= (r.xmax() - width/2)) {
-          if (r.height() > width) {
+          if (r.height() >= width) {
             points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymin() + width/2)), width));
             points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymax() - width/2)), width));
           } else {
@@ -508,7 +517,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         }
         xn = roundup(r.xcenter());
         while (xn >= (r.xmin() + width/2)) {
-          if (r.height() > width) {
+          if (r.height() >= width) {
             points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymin() + width/2)), width));
             points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymax() - width/2)), width));
           } else {
@@ -1039,6 +1048,23 @@ void Router::invertRange(IntRangeSet& s, const bool vert)
   s = sout;
 }
 
+Geom::Rects splitRects(const Geom::Rects& tobs)
+{
+    PolySet ps;
+    for (auto& obs : tobs) {
+        auto r = obs.bloatby(-1);
+        ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+    }
+    std::vector<PRect> prects;
+    get_max_rectangles(prects, ps);
+    Geom::Rects rects;
+    rects.reserve(prects.size());
+    for (auto& r : prects) {
+        rects.emplace_back(bp::xl(r) - 1, bp::yl(r) - 1, bp::xh(r) + 1, bp::yh(r) + 1);
+    }
+    return rects;
+}
+
 void Router::generateHananGrid()
 {
   _hanangridh.clear();
@@ -1059,6 +1085,9 @@ void Router::generateHananGrid()
     _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymin() - 100, box.xmax(), box.ymin() - 50));
     _tobstacles[l].push_back(Geom::Rect(box.xmax() + 50, box.ymin(), box.xmax() + 100, box.ymax()));
     _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymax() + 50, box.xmax(), box.ymax() + 100));
+  }
+  for (auto& l : _tobstacles) {
+    _tobstacles[l.first] = splitRects(l.second);
   }
   for (auto& l : _tobstacles) {
     if (l.first > _maxLayer) continue;

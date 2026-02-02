@@ -79,6 +79,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
         if (params != m.end()) {
           for (auto& p : *params) {
             modu->addPin(p);
+            COUT << p << '\n';
           }
         }
         for (auto& g : globalNets) {
@@ -102,12 +103,15 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
             Placement::Instance* instptr{nullptr};
             if (iname != inst.end() && mname != inst.end()) {
               instptr = modu->addInstance(*iname, *mname, tr);
+              COUT << *iname << ' ' << *mname << '\n';
             }
             if (instptr) {
               auto famap = inst.find("fa_map");
               if (famap != inst.end()) {
                 for (auto& pm : *famap) {
                   const Net* n = &(modu->addNet(pm["actual"]));
+                  COUT << "net : " << pm["actual"] << '\n';
+                  COUT << "pin : " << pm["formal"] << '\n';
                   modu->addTmpPin(n, instptr, pm["formal"]);
                 }
               }
@@ -197,6 +201,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     std::string str;
     std::stringstream ss(line);
     if (line.find("MACRO") != npos) {
+      units = _uu;
       ss >> str >> macroName;
       COUT << "macro " << macroName << '\n';
       if (_loadedMacros.find(macroName) != _loadedMacros.end()) {
@@ -254,10 +259,14 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
         inPin = true;
         continue;
       }
+      if (line.find("UNITS") != npos and line.find("DATABASE") == npos) {
+        inUnits = true;
+        continue;
+      }
     }
     if (inUnits && line.find("DATABASE") != npos) {
       ss >> str >> str >> str >> macroUnits;
-      units /= macroUnits;
+      if (units == 1) units /= macroUnits;
     }
     if (inPin && curr_pin && line.find("PORT") != npos) {
       inPort = true;
@@ -301,6 +310,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
       }
     }
   }
+  COUT << "units : " << units << '\n';
   ifs.close();
 }
 

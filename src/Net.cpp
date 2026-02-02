@@ -194,6 +194,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     COUT << "excluding net : " << _name << " from routing\n";
     return;
   }
+  COUT << "net : " << _name << " num pins : " << _pins.size() << '\n';
   if (_pins.size() > 1) {
     COUT << "routing net : " << _name << ' ' << halfpm() << '\n';
     /*for (int i : {0, 1}) {
