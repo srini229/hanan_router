@@ -11,6 +11,18 @@
 #include "Geom.h"
 #include "Layer.h"
 
+#include <boost/polygon/polygon.hpp>
+
+namespace bp = boost::polygon;
+typedef bp::polygon_90_set_data<int> PolySet;
+typedef bp::polygon_90_data<int> PPoly;
+typedef bp::polygon_90_with_holes_data<int> PPolyWH;
+typedef std::vector<PPoly> PPolys;
+typedef std::vector<PPolyWH> PPolyWHs;
+typedef bp::rectangle_data<int> PRect;
+typedef std::vector<PRect> PRects ;
+typedef std::map<int, PolySet> LayerPolySet ;
+
 #define COST_MAX 10000
 
 namespace Router {
@@ -228,9 +240,12 @@ class Router {
     std::set<Node*> _nodeset;
 #endif
     Geom::LayerRects _obstacles, _tobstacles;
+    LayerPolySet _pobstacles, _ptobstacles;
+    LayerPolySet _psources, _ptargets;
+
     CostFn _cf;
     std::vector<std::map<int, IntRangeSet>> _hanangridh, _hanangridv;
-    Geom::Rect _bbox;
+    Geom::Rect _bbox, _mbox;
     const Node *_sol;
     std::vector<int> _widthx, _ndrwidthx, _spacex, _ndrspacex;
     std::vector<int> _widthy, _ndrwidthy, _spacey, _ndrspacey;
@@ -349,7 +364,9 @@ class Router {
       _sources.clear();
       _targets.clear();
       _sourceshapes.clear();
+      _psources.clear();
       _targetshapes.clear();
+      _ptargets.clear();
       _endextnxmin.clear();
       _endextnymin.clear();
       _endextnxmax.clear();
@@ -360,13 +377,20 @@ class Router {
       _preflayers.clear();
     }
     Geom::LayerRects findSol();
+    void setMBox(const Geom::Rect& box) { _mbox = box; }
     void printSol() const;
     void plot() const;
     void writeSTO() const;
     void clearObstacles(bool temp = false)
     {
-      if(temp) _tobstacles.clear();
-      else _obstacles.clear();
+      if(temp) {
+          _tobstacles.clear();
+          _ptobstacles.clear();
+      }
+      else {
+          _obstacles.clear();
+          _pobstacles.clear();
+      }
       _ltree.clear();
     }
     void addObstacles(const Geom::LayerRects& lr, const bool temp = false);
