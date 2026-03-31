@@ -704,7 +704,7 @@ void Router::setexpand(Node* newn, const Node* parent) const
         newn->expand(UP, true);
       }
     }
-    if (newn->z() >= _minLayer) newn->expand(DOWN, false);
+    if (newn->z() <= _minLayer) newn->expand(DOWN, false);
     else if (newn->z() > _minLayer && newn->z() <= _maxLayer) {
       newn->expand(DOWN, false);
       auto v = isViaValid(newn, false);
@@ -1942,7 +1942,7 @@ void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
           _vias.push_back(via);
           _upVias[lp.first->index()].push_back(via);
           _dnVias[lp.second->index()].push_back(via);
-        } {
+        } else {
           auto vas = vl->viaArray();
           if (vas.empty()) {
             auto via = std::make_shared<Via>(lp.first->index(), lp.second->index(), v->index());
