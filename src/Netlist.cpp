@@ -196,7 +196,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
   while (std::getline(ifs, line)) {
     std::string str;
     std::stringstream ss(line);
-    if (line.find("MACRO") != npos) {
+    if (line.find("MACRO ") != npos) {
       ss >> str >> macroName;
       COUT << "macro " << macroName << '\n';
       if (_loadedMacros.find(macroName) != _loadedMacros.end()) {
@@ -235,11 +235,17 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
           inMacro = false;
           curr_module = nullptr;
           macroName.clear();
+          units = _uu;
         }
       } else if (inObs) {
         inObs = false;
         layer = -1;
       }
+      continue;
+    }
+    if (!inUnits && line.find("UNITS") != npos) {
+      inUnits = true;
+      std::cout << "in units\n";
       continue;
     }
     if (inMacro && curr_module) {
@@ -258,6 +264,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     if (inUnits && line.find("DATABASE") != npos) {
       ss >> str >> str >> str >> macroUnits;
       units /= macroUnits;
+      std::cout << "using scale : " << units << std::endl;
     }
     if (inPin && curr_pin && line.find("PORT") != npos) {
       inPort = true;
