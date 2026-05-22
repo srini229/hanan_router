@@ -11,7 +11,7 @@
 #include "Geom.h"
 #include "Layer.h"
 
-#include <boost/polygon/polygon.hpp>
+#include "polygon/polygon.hpp"
 
 namespace bp = boost::polygon;
 typedef bp::polygon_90_set_data<int> PolySet;
