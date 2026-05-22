@@ -482,10 +482,11 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }
           yn -= space;
         }
-      } else if (width == r.height()) {
+      }
+      //else if (width == r.height()) {
         points.insert(std::make_pair(Geom::Point(r.xmin(),r.ycenter()), width));
         points.insert(std::make_pair(Geom::Point(r.xmax(),r.ycenter()), width));
-      }
+      //}
     }
   } else if (dir == NORTH || dir == SOUTH) {
     if (vert) {
@@ -522,10 +523,11 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }
           xn -= space;
         }
-      } else if (width == r.width()) {
+      }
+      //else if (width == r.width()) {
         points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymin()), width));
         points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymax()), width));
-      }
+      //}
     }
   }
 
@@ -1179,6 +1181,7 @@ void Router::generateHananGrid()
       sy = spacey(layer) + (layer <= _maxLayer ? ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1)) : 0);
     }
     splitRects(_tobstacles[l.first], l.second, _bbox, sx, sy);
+    _tobstacles[l.first] = splitRects(_tobstacles[l.first]);
   }
   for (auto& it: _tobstacles) {
     _ltree.emplace(it.first, Geom::RTree2D(it.second));
@@ -1247,11 +1250,21 @@ Geom::LayerRects Router::findSol()
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
     for (auto attempt : {0}) {
-      if (_targets.size() < _sources.size()) std::swap(_sources,_targets);
+      if (_targets.size() < _sources.size()) {
+        std::swap(_sources,_targets);
+        std::swap(_sourceshapes,_targetshapes);
+      }
       if (attempt == 1) {
         std::swap(_sources,_targets);
+        std::swap(_sourceshapes,_targetshapes);
       }
       COUT << "num src : " << _sources.size() << " tgt : " << _targets.size() << std::endl;
+      for (auto& s : _sources) {
+        s->print("source : ");
+      }
+      for (auto& t : _targets) {
+        t->print("targets : ");
+      }
       for (auto& s : _sources) {
         evalTCost(s);
         if (!s->closed()) insertToPQ(s);
