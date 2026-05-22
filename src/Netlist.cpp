@@ -264,10 +264,6 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
         inPin = true;
         continue;
       }
-      if (line.find("UNITS") != npos and line.find("DATABASE") == npos) {
-        inUnits = true;
-        continue;
-      }
     }
     if (inUnits && line.find("DATABASE") != npos) {
       ss >> str >> str >> str >> macroUnits;
