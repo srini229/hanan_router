@@ -330,7 +330,7 @@ void Module::plot() const
 
 void Module::checkShort() const
 {
-  COUT << "Checking SHORT for module : " << _name << '\n';
+  COUT << "Checking SHORTS for module : " << _name << '\n';
   for (auto it1 = _nets.begin(); it1 != _nets.end(); ++it1) {
     for (auto it2 = std::next(it1); it2 != _nets.end(); ++it2) {
       auto& s1 = it1->second.routeShapesWithPins();
@@ -340,8 +340,8 @@ void Module::checkShort() const
         if (its2 == s2.end()) continue;
         for (auto& o1 : l.second) {
           for (auto& o2 : its2->second) {
-            if (o1.overlaps(o2)) {
-              COUT << "SHORT between " << it1->second.name() << " & " << it2->second.name() << " @ layer : " << l.first << '\n';
+            if (o1.overlaps(o2) && o1 != o2) {
+              COUT << "SHORT (router or pin) between " << it1->second.name() << " & " << it2->second.name() << " @ layer : " << l.first << '\n';
               COUT << o1.str() << ' ' << o2.str() << '\n';
             }
           }
@@ -355,9 +355,24 @@ void Module::checkShort() const
     for (auto& l : s1) {
       auto its2 = s2.find(l.first);
       if (its2 == s2.end()) continue;
-      for (auto& o1 : l.second) {
-        for (auto& o2 : its2->second) {
-          if (o1.overlaps(o2)) {
+      for (auto& o2 : its2->second) {
+        bool obsPinOverlapping{false};
+        for (auto& pin : _pins) {
+          for (auto& p : pin.second->ports()) {
+            const auto& s3 = p->shapes();
+            auto its3 = s3.find(l.first);
+            if (its3 == s3.end()) continue;
+            for (auto& o3 : its3->second) {
+              if (o3.overlaps(o2)) {
+                obsPinOverlapping = true;
+                break;
+              }
+            }
+          }
+        }
+        if (obsPinOverlapping) continue;
+        for (auto& o1 : l.second) {
+          if (o1.overlaps(o2) && o1 != o2) {
             COUT << "SHORT between " << it1->second.name() << " & obstacle @ layer : " << l.first << '\n';
             COUT << o1.str() << ' ' << o2.str() << '\n';
           }
