@@ -261,7 +261,6 @@ class Router {
     std::map<int, std::set<Geom::Rect>> _sourceshapes, _targetshapes;
     std::string _modname, _netname;
     int _uu;
-    int _precision{5};
     Geom::LayerTree _ltree;
     std::set<int> _preflayers;
     bool _usepinwidth{false}, _debugplot{false};
@@ -274,8 +273,52 @@ class Router {
       CostType fcost{0};
       if (n->parent()) {
         fcost = _cf.deltaCost(*n, *(n->parent())) + n->parent()->fcost();
+        auto p = n->parent();
+        auto gp = p->parent();
+        bool sameLayerBend{false};
+        if (gp && ((gp->x() != p->x() && p->x() == n->x()) || (gp->y() != p->y() && p->y() == n->y()))) {
+          fcost += 1;
+          sameLayerBend = true;
+        }
+        if (!sameLayerBend) {
+          auto ggp = gp ? gp->parent() : nullptr;
+          if (ggp && ((ggp->x() != p->x() && p->x() == n->x()) || (ggp->y() != p->y() && p->y() == n->y()))) {
+            fcost += 1;
+          }
+        }
       }
       n->setFCost(fcost);
+      /*CostType bends{0};
+      const Node* p = n;
+      int prev{0};
+      int count{0};
+      while (p) {
+        auto par = p->parent();
+        if (par) {
+          if (prev == 0) {
+            if (p->x() == par->x()) {
+              prev = 1;
+            } else if (p->y() == par->y()) {
+              prev = 2;
+            }
+          } else {
+            if (prev == 1) {
+              if (p->x() != par->x()) {
+                prev = 2;
+                ++bends;
+              }
+            } else {
+              if (p->y() != par->y()) {
+                prev = 1;
+                ++bends;
+              }
+            }
+          }
+        }
+        if (++count > 100) break;
+        p = par;
+      }
+      n->setBCost(bends);*/
     }
 
     void evalTCost(Node* n)
@@ -340,6 +383,7 @@ class Router {
     
   public:
     Router(const DRC::LayerInfo& lf);
+    static int _precision;
     ~Router()
     {
       flushNodes();
