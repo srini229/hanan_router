@@ -7,6 +7,8 @@ size_t Node::_nodectr = 0;
 #endif
 #define NUM_POINTS 1000
 
+int Router::_precision = 1;
+
 using namespace boost::polygon::operators;
 
 Via::Via(const Via& via, const Geom::Point& p) : _l{via._l}, _u{via._u}, _c{via._c}
@@ -385,6 +387,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
   auto x = roundup(r.xcenter()), y = roundup(r.ycenter()); 
   Geom::PointWidthSet points;
   COUT << _name << " points : \n";
+  //COUT << "x : " << x << " y : " << y << "\n";
 
   if (dir == DOWN || dir == UP) {
     auto adj = z;
@@ -484,8 +487,10 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         }
       }
       //else if (width == r.height()) {
+      if (width != r.width()) {
         points.insert(std::make_pair(Geom::Point(r.xmin(),r.ycenter()), width));
         points.insert(std::make_pair(Geom::Point(r.xmax(),r.ycenter()), width));
+      }
       //}
     }
   } else if (dir == NORTH || dir == SOUTH) {
@@ -525,8 +530,10 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         }
       }
       //else if (width == r.width()) {
+      if (width != r.height()) {
         points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymin()), width));
         points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymax()), width));
+      }
       //}
     }
   }
