@@ -32,7 +32,14 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
     _valid = 0;
     return;
   }
-  ordered_json oj = json::parse(ifs);
+  ordered_json oj;
+  try {
+    oj = json::parse(ifs);
+  } catch (const std::exception& e) {
+    CERR << e.what() << std::endl;
+    _valid = 0;
+    return;
+  }
   ifs.close();
   auto it = oj.find("modules");
   std::map<std::string, Geom::Rect> leafData;
@@ -228,7 +235,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
   while (std::getline(ifs, line)) {
     std::string str;
     std::stringstream ss(line);
-    if (line.find("MACRO") != npos) {
+    if (line.find("MACRO ") != npos) {
       ss >> str >> macroName;
       COUT << "macro " << macroName << '\n';
       if (_loadedMacros.find(macroName) != _loadedMacros.end()) {
@@ -267,11 +274,17 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
           inMacro = false;
           curr_module = nullptr;
           macroName.clear();
+          units = _uu;
         }
       } else if (inObs) {
         inObs = false;
         layer = -1;
       }
+      continue;
+    }
+    if (!inUnits && line.find("UNITS") != npos) {
+      inUnits = true;
+      COUT << "in units\n";
       continue;
     }
     if (inMacro && curr_module) {
@@ -290,6 +303,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     if (inUnits && line.find("DATABASE") != npos) {
       ss >> str >> str >> str >> macroUnits;
       units /= macroUnits;
+      COUT << "using scale : " << units << std::endl;
     }
     if (inPin && curr_pin && ((line.find("DIRECTION") != npos) || (line.find("USE") != npos))) {
       continue;
@@ -330,13 +344,13 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
         double llx{0}, lly{0}, urx{0}, ury{0};
         ss >> str >> llx >> lly >> urx >> ury;
         if (layer >= 0) {
-//          std::cout << layer << ' ' << str << ' ' << llx << ' ' << lly << ' ' << urx << ' ' << ury << ' ' << units << std::endl;
           curr_module->addObstacle(layer, Geom::Rect(round(llx * units), round(lly * units), round(urx * units), round(ury * units)));
         }
         continue;
       }
     }
   }
+  COUT << "units : " << units << '\n';
   ifs.close();
 }
 
@@ -349,7 +363,14 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
       _valid = 0;
       return;
     }
-    ordered_json oj = json::parse(ifs);
+    ordered_json oj;
+    try {
+      oj = json::parse(ifs);
+    } catch (const std::exception& e) {
+      CERR << e.what() << std::endl;
+      _valid = 0;
+      return;
+    }
     for (auto& m : oj) {
       auto it = m.find("module");
       if (it != m.end()) {

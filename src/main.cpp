@@ -9,7 +9,7 @@ int main(int argc, char* argv[])
   const std::string logfile = parseArgs(argc, argv, "-log", "route.log");
   if (argc <= 1) {
     std::cerr << "usage : " << argv[0] << "\n\t-d <layers.json>\n\t-p <placement file>\n\t-l <lef file>\n"
-      << "\t-s <lef scaling>\n\t-uu <user units scaling>\n\t-ndr <ndr constraints.json> -o <output dir> -t <top module name>\n";
+      << "\t-s <lef scaling>\n\t-uu <user units scaling>\n\t-ndr <ndr constraints.json> -o <output dir> -r <precision> -t <top module name>\n";
     exit(0);
   }
   SaveRestoreStream srs(logfile);
@@ -19,6 +19,7 @@ int main(int argc, char* argv[])
   std::string leffile = parseArgs(argc, argv, "-l");
   const bool uuflayer = checkArg(argc, argv, "-s");
   std::string ndrfile = parseArgs(argc, argv, "-ndr");
+  std::string prec = parseArgs(argc, argv, "-r");
   std::string topname = parseArgs(argc, argv, "-t");
   if (topname.empty()) topname = "CHIPTOP";
   SEPARATOR = parseArgs(argc, argv, "-sep", SEPARATOR);
@@ -44,8 +45,9 @@ int main(int argc, char* argv[])
   DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 1));
   if (!linfo.populated())  {
     CERR << "missing or unable to read layers.json file argument" << std::endl;
-    return 0;
+    return 1;
   }
+  Router::Router::_precision = prec.empty() ? 1 : std::stoi(prec);
   Router::Router hrdb{linfo};
   if (!plfile.empty() && !leffile.empty()) {
     Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile, interlefdir, topname);

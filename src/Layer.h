@@ -8,8 +8,6 @@
 
 namespace DRC {
 
-using namespace std; 
-
 enum class Direction {
   HORIZONTAL,
   VERTICAL,
@@ -40,7 +38,7 @@ class Layer {
     int index() const { return _index; }
     ~Layer()
     {
-      //std::cout << "layer : " << _name << ' ' << _gdsNo << " {" << _r[0] << ',' << _r[1] << ',' << _r[2] << "}\n";
+      //COUT << "layer : " << _name << ' ' << _gdsNo << " {" << _r[0] << ',' << _r[1] << ',' << _r[2] << "}\n";
     }
 };
 typedef std::vector<Layer*> Layers;
@@ -79,8 +77,8 @@ class MetalLayer : public Layer {
     bool isVertical() const { return _dir == Direction::VERTICAL || _dir == Direction::ORTHOGONAL; }
     ~MetalLayer()
     {
-      //std::cout << _pitch << ' ' << _width << ' ' << _minL << ' ' << _maxL << ' ' << _e2e << ' ' << _offset << ' ';
-      //std::cout << (_dir == Direction::HORIZONTAL ? "hor" : "ver") << ' ';
+      //COUT << _pitch << ' ' << _width << ' ' << _minL << ' ' << _maxL << ' ' << _e2e << ' ' << _offset << ' ';
+      //COUT << (_dir == Direction::HORIZONTAL ? "hor" : "ver") << ' ';
     }
 };
 typedef std::vector<MetalLayer*> MetalLayers;
@@ -132,10 +130,10 @@ class ViaLayer : public Layer {
     }
     ~ViaLayer()
     {
-      //std::cout << _sw._space[0] << ' ' << _sw._space[1] << " -- " << _width[0] << ' ' << _width[1] << ' ';
-      //std::cout << (_layerPair.first ? _layerPair.first->name() : " ") << ' ';
-      //std::cout << (_layerPair.second ? _layerPair.second->name() : " ") << ' ';
-      //std::cout << _coverl[0] << ' ' << _coverl[1] << " -- " << _coveru[0] << ' ' << _coveru[1] << ' ';
+      //COUT << _sw._space[0] << ' ' << _sw._space[1] << " -- " << _width[0] << ' ' << _width[1] << ' ';
+      //COUT << (_layerPair.first ? _layerPair.first->name() : " ") << ' ';
+      //COUT << (_layerPair.second ? _layerPair.second->name() : " ") << ' ';
+      //COUT << _coverl[0] << ' ' << _coverl[1] << " -- " << _coveru[0] << ' ' << _coveru[1] << ' ';
     }
     const std::vector<ViaArray>& viaArray() const { return _va; }
     const std::pair<const MetalLayer*, const MetalLayer*>& layers() const { return _layerPair; }
