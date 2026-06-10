@@ -7,11 +7,11 @@ namespace Placement {
 
 void Port::print() const
 {
-  std::cout << "port : " << _name << '\n';
+  COUT << "port : " << _name << '\n';
   for (const auto& l : _shapes) {
-    std::cout << "\tlayer : " << l.first << '\n';
+    COUT << "\tlayer : " << l.first << '\n';
     for (const auto& r : l.second) {
-      std::cout << "\t\t" << r.str() << '\n';
+      COUT << "\t\t" << r.str() << '\n';
     }
   }
 }
@@ -64,7 +64,7 @@ Port* Port::getTransformedPort(const Geom::Transform& tr) const
 
 void Pin::print() const
 {
-  std::cout << "pin : " << _name << '\n';
+  COUT << "pin : " << _name << '\n';
   for (auto& p : _ports) p->print();
 }
 
@@ -84,7 +84,7 @@ void Module::print() const
   for (const auto& n : _nets) {
     COUT << "\tnet : " << n.first << " : {";
     n.second.print();
-    std::cout << "}\n";
+    COUT << "}\n";
   }
   for (const auto& inst : _instances) {
     COUT << "\tinst : " ;
@@ -93,13 +93,13 @@ void Module::print() const
   for (const auto& l : _obstacles) {
     COUT << "\tobstacle : layer : " << l.first;
     for (const auto& r : l.second) {
-      std::cout << "\t\t" << r.str() << '\n';
+      COUT << "\t\t" << r.str() << '\n';
     }
   }
   for (const auto& l : _internalroutes) {
     COUT << "\tinternal routes : layer : " << l.first;
     for (const auto& r : l.second) {
-      std::cout << "\t\t" << r.str() << '\n';
+      COUT << "\t\t" << r.str() << '\n';
     }
   }
 }
@@ -201,10 +201,10 @@ void Module::route(Router::Router& router, const std::string& outdir)
     std::set<std::string> _addednets;
     for (auto& p : _pins) {
       auto itn = _nets.find(p.first);
-      //std::cout << "DEBUG pin name " << p.first << '\n';
+      //COUT << "DEBUG pin name " << p.first << '\n';
       if (itn != _nets.end()) {
         _addednets.insert(itn->first);
-        //std::cout << "DEBUG found net : " << itn->second.name() << ' ' << itn->second.routeShapesWithPins().size() << '\n';
+        //COUT << "DEBUG found net : " << itn->second.name() << ' ' << itn->second.routeShapesWithPins().size() << '\n';
         if (!itn->second.excluded()) p.second->copyRects(itn->second.routeShapesWithPins());
         else {
           COUT << "excluded : " << itn->second.name() << "\n";
@@ -220,7 +220,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
     }
     for (auto& n : _nets) {
       if (_addednets.find(n.first) == _addednets.end()) {
-        //std::cout << "unadded net : " << n.first << '\n';
+        //COUT << "unadded net : " << n.first << '\n';
         Geom::MergeLayerRects(_internalroutes, n.second.routeShapesWithPins());
       }
     }
@@ -423,7 +423,7 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
           ofs << "\n";
           for (auto& l : routeShapes) {
             for (auto& r : l.second) {
-              ofs << "  + RECT " << LAYER_NAMES[l.first];
+              ofs << "  + RECT " << layerName(l.first);
               ofs << " ( " << r.xmin() << ' ' << r.ymin() << " ) ( " << r.xmax() << ' ' << r.ymax() << " )\n";
             }
           }
@@ -434,8 +434,8 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
               const auto& shapes = p->shapes();
               if (!shapes.empty()) {
                 for (auto& l : shapes) {
-                  if (LAYER_NAMES[l.first][0] == 'M') {
-                    ofs << "  + RECT " << LAYER_NAMES[l.first];
+                  if (layerName(l.first)[0] == 'M') {
+                    ofs << "  + RECT " << layerName(l.first);
                     for (auto& r : l.second) {
                       ofs << " ( " << r.xmin() << ' ' << r.ymin() << " ) ( " << r.xmax() << ' ' << r.ymax() << " )\n";
                       break;
@@ -454,7 +454,7 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
     /*if (!_internalroutes.empty()) {
       ofs << "FILLS " << _internalroutes.size() << " ;\n ";
       for (auto& l : _internalroutes) {
-        ofs << "  - LAYER " << LAYER_NAMES[l.first] << "\n";
+        ofs << "  - LAYER " << layerName(l.first) << "\n";
         for (unsigned i = 0; i < l.second.size(); ++i) {
           auto& r = l.second[i];
           ofs << "    RECT ( " << r.xmin() << ' ' << r.ymin() << " ) ( " << r.xmax() << ' ' << r.ymax() << " )";
@@ -485,7 +485,7 @@ void Module::writeLEF(const std::string& outdir) const
           if (!shapes.empty()) {
             ofs << "    PORT\n";
             for (auto& l : shapes) {
-              ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+              ofs << "      LAYER " << layerName(l.first) << " ;\n";
               for (auto& r : l.second) {
                 ofs << "        RECT " << (r.xmin()*1.0/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
               }
@@ -499,13 +499,13 @@ void Module::writeLEF(const std::string& outdir) const
     if (!_obstacles.empty() || !_internalroutes.empty()) {
       ofs << "    OBS\n";
       for (auto& l : _obstacles) {
-        ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+        ofs << "      LAYER " << layerName(l.first) << " ;\n";
         for (auto& r : l.second) {
           ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
         }
       }
       for (auto& l : _internalroutes) {
-        ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+        ofs << "      LAYER " << layerName(l.first) << " ;\n";
         for (auto& r : l.second) {
           ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
         }

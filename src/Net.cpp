@@ -9,7 +9,7 @@ void Net::print() const
 {
   COUT << "pins :";
   for (const auto& p : _pins) {
-    std::cout << " " << p->name();
+    COUT << " " << p->name();
   }
   if (!_ndrwidths.empty()) {
     COUT << " ndr :";
@@ -322,7 +322,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         _unroute = 1;
       }
       if (!port1->isVirtualPort() || !_driver.empty()) {
-        std::cout << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;
+        COUT << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;
         Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), sol, &_bbox);
         if (port2->isVirtualPort()) {
           Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), port2->shapes(), &_bbox);
@@ -331,7 +331,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
       if (!port2->isVirtualPort() || !_driver.empty()) {
-        std::cout << "Adding routes to " << port2->name() << ' ' << sol.size() << std::endl;
+        COUT << "Adding routes to " << port2->name() << ' ' << sol.size() << std::endl;
         Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), sol, &_bbox);
         if (port1->isVirtualPort()) {
           Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), port1->shapes(), &_bbox);
@@ -361,7 +361,7 @@ void Net::writeLEF(const std::string& modname, const int uu, const Geom::Rect& b
         for (auto& pp : p->ports()) {
           ofs << "    PORT\n";
           for (auto& l : pp->shapes()) {
-            ofs << "      LAYER " << LAYER_NAMES[l.first] << "_PIN ;\n";
+            ofs << "      LAYER " << layerName(l.first) << "_PIN ;\n";
             for (auto& r : l.second) {
               ofs << "        RECT " << (1.*r.xmin()/uu) << ' ' << (1.*r.ymin()/uu) << ' ' << (1.*r.xmax()/uu) << ' ' << (1.*r.ymax()/uu) << " ;\n";
             }
@@ -375,9 +375,9 @@ void Net::writeLEF(const std::string& modname, const int uu, const Geom::Rect& b
     for (unsigned i = 0; i < 4; ++i) {
       if (obs[i]) {
         for (auto& l : (i < 3 ? *obs[i] : _obstacles)) {
-          ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
+          ofs << "      LAYER " << layerName(l.first) << " ;\n";
           for (auto r : l.second) {
-            //if (r.intersect(_bbox)) {
+            //if (r.AND(_bbox)) {
               ofs << "        RECT " << (1.*r.xmin()/uu) << ' ' << (1.*r.ymin()/uu) << ' ' << (1.*r.xmax()/uu) << ' ' << (1.*r.ymax()/uu) << " ;\n";
             //}
           }

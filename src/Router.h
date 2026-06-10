@@ -166,8 +166,22 @@ class Node {
 
     const Via* upVia() const { return _upVia; }
     const Via* dnVia() const { return _dnVia; }
-    void upVia(const Via* v) { _upVia = v; }
-    void dnVia(const Via* v) { _dnVia = v; }
+    void upVia(const Via* v) 
+    {
+        if (_upVia) {
+          delete _upVia;
+          _upVia = nullptr;
+        }
+        _upVia = v;
+    }
+    void dnVia(const Via* v)
+    {
+        if (_dnVia) {
+          delete _dnVia;
+          _dnVia = nullptr;
+        }
+        _dnVia = v;
+    }
 
     CostType fcost() const { return _fcost; }
     CostType tcost() const { return _tcost; }
@@ -376,6 +390,7 @@ class Router {
     void constructVias(const std::map<int, DRC::ViaArray>* ndrvias = nullptr);
     int roundup(const int x) const
     {
+      if (_precision <= 0) return x;
       auto r = x % _precision;
       return (r == 0) ? x : (x + _precision - r);
     }

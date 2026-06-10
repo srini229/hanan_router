@@ -201,7 +201,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
     auto hit{std::lower_bound(minHCostLayers.begin(), minHCostLayers.end(), minz - 1)};
     auto vit{std::lower_bound(minVCostLayers.begin(), minVCostLayers.end(), minz - 1)};
     bool hinbetween{hit != minHCostLayers.end() && *hit <= maxz};
-    bool vinbetween{hit != minVCostLayers.end() && *vit <= maxz};
+    bool vinbetween{vit != minVCostLayers.end() && *vit <= maxz};
     dc += (minHCost * std::abs(n1.x() - n2.x())) + (minVCost * std::abs(n1.y() - n2.y()));
     //case : minz <= minHCostLayers, minVCostLayers <= maxz
     for (int i = minz; i < maxz; ++i) {
@@ -1170,7 +1170,7 @@ void Router::generateHananGrid()
     bloat = std::max(_spacey[l], bloat);
   }
   _bbox.expand(bloat * 2);
-  _bbox.intersect(_mbox);
+  _bbox.AND(_mbox);
   _tobstacles.clear();
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
     auto box = _bbox;
@@ -1254,9 +1254,12 @@ Geom::LayerRects Router::findSol()
   TIME_M();
   COUT << "routing : " << _name << '\n';
   static std::string debugplot{getenv("HANAN_DEBUG_WIRE") ? getenv("HANAN_DEBUG_WIRE") : ""};
+  if (!debugplot.empty() && debugplot == _name) {
+    COUT << "debug plot enabled for wire : " << debugplot << '\n';
+  }
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
-    for (auto attempt : {0}) {
+    for (auto attempt : {0, 1}) {
       if (_targets.size() < _sources.size()) {
         std::swap(_sources,_targets);
         std::swap(_sourceshapes,_targetshapes);
@@ -1264,6 +1267,20 @@ Geom::LayerRects Router::findSol()
       if (attempt == 1) {
         std::swap(_sources,_targets);
         std::swap(_sourceshapes,_targetshapes);
+        _pq.clear();
+        _expansions = 0;
+        for (auto& s : _sources) {
+          s->_expanddir.reset();
+          s->_fcost = 0;
+          s->_tcost = 0;
+          s->_parent = nullptr;
+        }
+        for (auto& t : _targets) {
+          t->_expanddir.reset();
+          t->_fcost = 0;
+          t->_tcost = 0;
+          t->_parent = nullptr;
+        }
       }
       COUT << "num src : " << _sources.size() << " tgt : " << _targets.size() << std::endl;
       for (auto& s : _sources) {
@@ -1273,8 +1290,6 @@ Geom::LayerRects Router::findSol()
         t->print("targets : ");
       }
       for (auto& s : _sources) {
-        evalTCost(s);
-        if (!s->closed()) insertToPQ(s);
         _bbox.merge(s->x(), s->y(), s->x(), s->y());
 #if DEBUG
         s->print("src : ");
@@ -1301,8 +1316,10 @@ Geom::LayerRects Router::findSol()
         }
         }*/
       // merge _pobstacles and _ptobstacles
-      for (auto &l : _pobstacles) {
-        _ptobstacles[l.first] |= l.second;
+      if (attempt == 0) {
+          for (auto &l : _pobstacles) {
+              _ptobstacles[l.first] |= l.second;
+          }
       }
 #if DEBUG
 #else
@@ -1316,6 +1333,10 @@ Geom::LayerRects Router::findSol()
         }
         }*/
       generateHananGrid();
+      for (auto& s : _sources) {
+        evalTCost(s);
+        if (!s->closed()) insertToPQ(s);
+      }
 #if DEBUG
 #else
       if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
@@ -1328,9 +1349,9 @@ Geom::LayerRects Router::findSol()
         for (auto& pos : _hanangridh[l]) {
           COUT << "pos : " << pos.first << " : ";
           for (auto& r : pos.second) {
-            std::cout << "[" << r.first << ',' << r.second << "] ";
+            COUT << "[" << r.first << ',' << r.second << "] ";
           }
-          std::cout << '\n';
+          COUT << '\n';
         }
       }
       for (unsigned l = 0; l < _hanangridv.size(); ++l) {
@@ -1338,9 +1359,9 @@ Geom::LayerRects Router::findSol()
         for (auto& pos : _hanangridv[l]) {
           COUT << "pos : " << pos.first << " : ";
           for (auto& r : pos.second) {
-            std::cout << "[" << r.first << ',' << r.second << "] ";
+            COUT << "[" << r.first << ',' << r.second << "] ";
           }
-          std::cout << '\n';
+          COUT << '\n';
         }
       }
 #endif
@@ -1697,13 +1718,13 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         }
         if (olsrcortgt) break;
       }
-      if (!olsrcortgt) {
+      //if (!olsrcortgt) {
         if (temp) {
           _ptobstacles[layer] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
         } else {
           _pobstacles[layer] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
         }
-      }
+      //}
     }
   }
 }
@@ -1908,6 +1929,11 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
             }
           }
           if (via) {
+            //COUT << "verifying via : " << via->l() << ',' << via->u() << " lpad : " << via->lpad().str() << " upad : " << via->upad().str() << " cuts : ";
+            //for (auto& c : via->cuts()) {
+            //    COUT << c.str() << ' ';
+            //}
+            //COUT << '\n';
             for (bool lower : {true, false}) {
               auto l = (lower ? via->l() : via->u());
               it = _ltree.find(l);
@@ -1915,8 +1941,9 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
                 Geom::Rect p = (lower ? via->lpad() : via->upad());
                 Geom::Rects nbrs;
                 it->second.search(nbrs, p.bloatby(spacex(l), spacey(l)));
-                p.expand(-std::min(widthy(l), p.width())/2, -std::min(widthx(l), p.height())/2);
-                for (auto& o : nbrs) {
+                //p.expand(-std::min(widthy(l), p.width())/2, -std::min(widthx(l), p.height())/2);
+                for (auto o : nbrs) {
+                  o.expand(-widthy(l)/2, -widthx(l)/2);
                   if (o.overlaps(p, true)) {
                     //COUT << "obs viapad up : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;

@@ -21,7 +21,12 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
     CERR << "unable to open layers file " << ljfile <<std::endl;
     return;
   }
-  ordered_json oj = json::parse(ifs);
+  ordered_json oj;
+  try {
+    oj = json::parse(ifs);
+  } catch (const std::exception& e) {
+    std::cerr << e.what() << std::endl;
+  }
   auto itAbs = oj.find("Abstraction");
   if (itAbs != oj.end()) {
     for (auto& l : *itAbs) {
@@ -160,7 +165,7 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
                     if (itva != itvg.end() && itva->is_number_integer()) nx = static_cast<int>(*itva);
                     itva = itvg.find("NumY");
                     if (itva != itvg.end() && itva->is_number_integer()) ny = static_cast<int>(*itva);
-                    std::cout << wx << ' ' << wy << ' ' << sx << ' ' << sy << ' ' << nx << ' ' << ny <<std::endl;
+                    COUT << wx << ' ' << wy << ' ' << sx << ' ' << sy << ' ' << nx << ' ' << ny <<std::endl;
                     vlayer->addViaArray(wx, wy, sx, sy, nx, ny);
                   }
                 }

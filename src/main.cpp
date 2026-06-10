@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
   DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 1));
   if (!linfo.populated())  {
     CERR << "missing or unable to read layers.json file argument" << std::endl;
-    return 0;
+    return 1;
   }
   Router::Router::_precision = prec.empty() ? 1 : std::stoi(prec);
   Router::Router hrdb{linfo};

@@ -10,8 +10,9 @@
 
 namespace Geom {
 
-using namespace std;
-//using json = nlohmann::json;
+using std::string;
+using std::vector;
+using std::map;
 
 class Transform;
 
@@ -107,12 +108,12 @@ class Rect {
       return _ll != r._ll || _ur != r._ur;
     }
 
-    bool intersect(const Rect& r)
+    bool AND(const Rect& r)
     {
-      int x1 = max(xmin(), r.xmin());
-      int y1 = max(ymin(), r.ymin());
-      int x2 = min(xmax(), r.xmax());
-      int y2 = min(ymax(), r.ymax());
+      int x1 = std::max(xmin(), r.xmin());
+      int y1 = std::max(ymin(), r.ymin());
+      int x2 = std::min(xmax(), r.xmax());
+      int y2 = std::min(ymax(), r.ymax());
       xmin() = x1;
       ymin() = y1;
       xmax() = x2;
@@ -122,18 +123,18 @@ class Rect {
 
     void merge(const Rect& r)
     {
-      xmin() = min(xmin(), r.xmin());
-      ymin() = min(ymin(), r.ymin());
-      xmax() = max(xmax(), r.xmax());
-      ymax() = max(ymax(), r.ymax());
+      xmin() = std::min(xmin(), r.xmin());
+      ymin() = std::min(ymin(), r.ymin());
+      xmax() = std::max(xmax(), r.xmax());
+      ymax() = std::max(ymax(), r.ymax());
     }
 
     void merge(const int x1, const int y1, const int x2, const int y2)
     {
-      xmin() = min(xmin(), x1);
-      ymin() = min(ymin(), y1);
-      xmax() = max(xmax(), x2);
-      ymax() = max(ymax(), y2);
+      xmin() = std::min(xmin(), x1);
+      ymin() = std::min(ymin(), y1);
+      xmax() = std::max(xmax(), x2);
+      ymax() = std::max(ymax(), y2);
     }
 
     void expand(const int c) { _ll.translate(-c); _ur.translate(c); }
@@ -163,7 +164,7 @@ class Rect {
     }
 
     long area() const { return ((long)width()) * height(); }
-    string str() const { return "[" + _ll.str() + "," + _ur.str() + "]"; }
+    std::string str() const { return "[" + _ll.str() + "," + _ur.str() + "]"; }
     //const json toJSON() const { return json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}; }
 
     bool overlaps (const Geom::Rect& r, const bool strict = false) const 
@@ -216,7 +217,7 @@ class Rect {
     void snap(const int prec) { snap(prec, prec); }
     Rect snap(const int prec) const { auto x = Rect(_ll, _ur); x.snap(prec); return x; }
 };
-typedef vector<Rect> Rects;
+typedef std::vector<Rect> Rects;
 typedef map<int, Rects> LayerRects;
 
 class Transform {

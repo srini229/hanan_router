@@ -22,7 +22,14 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
     _valid = 0;
     return;
   }
-  ordered_json oj = json::parse(ifs);
+  ordered_json oj;
+  try {
+    oj = json::parse(ifs);
+  } catch (const std::exception& e) {
+    CERR << e.what() << std::endl;
+    _valid = 0;
+    return;
+  }
   ifs.close();
   auto it = oj.find("global_signals");
   std::vector<std::string> globalNets;
@@ -39,6 +46,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
   if (it != oj.end()) {
     for (auto& l : *it) {
       auto lname = l.find("concrete_name");
+      if (lname == l.end()) continue;
       if (_modules.find(*lname) != _modules.end()) continue;
       auto aname = l.find("abstract_name");
       if (lname != l.end()) {
@@ -55,7 +63,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
             auto nameit = term.find("name");
             if (nameit == term.end()) nameit = term.find("netName");
             if (nameit != term.end()) {
-                std::cout << *nameit << std::endl;
+                COUT << *nameit << std::endl;
                 auto p = modu->addPin(*nameit);
                 modu->addNet(*nameit);
                 modu->net(*nameit)->addPin(p);
@@ -249,7 +257,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     }
     if (!inUnits && line.find("UNITS") != npos) {
       inUnits = true;
-      std::cout << "in units\n";
+      COUT << "in units\n";
       continue;
     }
     if (inMacro && curr_module) {
@@ -268,7 +276,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     if (inUnits && line.find("DATABASE") != npos) {
       ss >> str >> str >> str >> macroUnits;
       units /= macroUnits;
-      std::cout << "using scale : " << units << std::endl;
+      COUT << "using scale : " << units << std::endl;
     }
     if (inPin && curr_pin && line.find("PORT") != npos) {
       inPort = true;
@@ -325,7 +333,14 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
       _valid = 0;
       return;
     }
-    ordered_json oj = json::parse(ifs);
+    ordered_json oj;
+    try {
+      oj = json::parse(ifs);
+    } catch (const std::exception& e) {
+      CERR << e.what() << std::endl;
+      _valid = 0;
+      return;
+    }
     for (auto& m : oj) {
       auto it = m.find("module");
       if (it != m.end()) {

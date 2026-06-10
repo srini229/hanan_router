@@ -7,22 +7,16 @@ namespace Geom {
 double Dist(const Geom::Rect& r1, const Geom::Rect& r2, const bool manh)
 {
   double dist{0.};
-  if (manh) {
-    if (!r1.overlaps(r2)) {
-      auto xdist{std::min(abs(r1.xmin() - r2.xmax()), abs(r1.xmax() - r2.xmin()))};
-      if (r1.xmin() <= r2.xmax() && r2.xmin() <= r1.xmax()) xdist = 0;
-      auto ydist{std::min(abs(r1.ymin() - r2.ymax()), abs(r1.ymax() - r2.ymin()))};
-      if (r1.ymin() <= r2.ymax() && r2.ymin() <= r1.ymax()) ydist = 0;
-      dist = (xdist + ydist);
-    }
-  } else {
-    if (!r1.overlaps(r2)) {
-      auto xdist{std::min(abs(r1.xmin() - r2.xmax()), abs(r1.xmax() - r2.xmin()))};
-      if (r1.xmin() <= r2.xmax() && r2.xmin() <= r1.xmax()) xdist = 0;
-      auto ydist{std::min(abs(r1.ymin() - r2.ymax()), abs(r1.ymax() - r2.ymin()))};
-      if (r1.ymin() <= r2.ymax() && r2.ymin() <= r1.ymax()) ydist = 0;
-      dist = sqrt(1.* xdist * xdist + 1. * ydist * ydist);
-    }
+  auto xdist{std::min(std::abs(r1.xmin() - r2.xmax()), std::abs(r1.xmax() - r2.xmin()))};
+  if (r1.xmin() <= r2.xmax() && r2.xmin() <= r1.xmax()) xdist = 0;
+  auto ydist{std::min(std::abs(r1.ymin() - r2.ymax()), std::abs(r1.ymax() - r2.ymin()))};
+  if (r1.ymin() <= r2.ymax() && r2.ymin() <= r1.ymax()) ydist = 0;
+  if (!r1.overlaps(r2)) {
+      if (manh) {
+          dist = (xdist + ydist);
+      } else {
+          dist = sqrt(1.* xdist * xdist + 1. * ydist * ydist);
+      }
   }
   return dist;
 }
@@ -32,7 +26,6 @@ void MergeLayerRects(Geom::LayerRects& l1, const Geom::LayerRects& l2, Geom::Rec
   for (auto& l : l2) {
     auto it = l1.find(l.first);
     if (it != l1.end()) {
-      Rects cprects;
       for (const auto& s : l.second) {
         bool pushed{false};
         for (auto& t : it->second) {

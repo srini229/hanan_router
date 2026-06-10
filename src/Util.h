@@ -26,7 +26,7 @@ class TimeMeasure {
       if (_rt) {
         (*_rt) += difft;
       } else {
-        std::cout << _name << " runtime : " << difft.count()/1.e9 << "(s)\n";
+        COUT << _name << " runtime : " << difft.count()/1.e9 << "(s)\n";
       }
     }
 };
@@ -71,5 +71,11 @@ std::set<std::string> splitString(const std::string& s, const char delim = ',');
 
 extern std::vector<std::string> LAYER_NAMES;
 extern std::string SEPARATOR;
+
+inline const std::string& layerName(const int idx) {
+    static const std::string unknown{"UNKNOWN"};
+    return (idx >= 0 && static_cast<size_t>(idx) < LAYER_NAMES.size())
+        ? LAYER_NAMES[idx] : unknown;
+}
 
 #endif
