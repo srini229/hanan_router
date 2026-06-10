@@ -7,6 +7,10 @@ size_t Node::_nodectr = 0;
 #endif
 #define NUM_POINTS 1000
 
+int Router::_precision = 1;
+
+using namespace boost::polygon::operators;
+
 Via::Via(const Via& via, const Geom::Point& p) : _l{via._l}, _u{via._u}, _c{via._c}
 {
   _center = via._center.trans(p);
@@ -382,6 +386,8 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
   auto hor = _cf.isHor(z);
   auto x = roundup(r.xcenter()), y = roundup(r.ycenter()); 
   Geom::PointWidthSet points;
+  COUT << _name << " points : \n";
+  //COUT << "x : " << x << " y : " << y << "\n";
 
   if (dir == DOWN || dir == UP) {
     auto adj = z;
@@ -412,6 +418,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         int yn = r.ymax() - dimy;
         while (yn >= (r.ymin() + dimy)) {
           points.insert(std::make_pair(Geom::Point(x,yn), widthy(z)));
+          COUT << "pointv : " << x << ',' << yn << ',' << widthy(z) << '\n';
           yn -= space;
         }
       }
@@ -425,6 +432,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         int xn = r.xmax() - dimx;
         while (xn >= (r.xmin() + dimx)) {
           points.insert(std::make_pair(Geom::Point(xn,y), widthx(z)));
+          COUT << "pointh : " << xn << ',' << y << ',' << widthx(z) << '\n';
           xn -= space;
         }
       }
@@ -437,7 +445,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
 #endif
       if (width < r.height()) {
         int space = roundup(std::max(spacex(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1)), r.height()/NUM_POINTS));
-        /* for (auto right : {true, false}) {
+        for (auto right : {true, false}) {
           int x = (right ? r.xmax() : r.xmin());
           int yn = y;
           while (yn < r.ymax()) {
@@ -454,10 +462,10 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
             points.insert(std::make_pair(Geom::Point(x,yn), width));
             yn -= space;
           }
-        } */
+        }
         int yn = roundup(r.ycenter());
         while (yn <= (r.ymax() - width/2)) {
-          if (r.width() > width) {
+          if (r.width() >= width) {
             points.insert(std::make_pair(Geom::Point(roundup(r.xmin() + width/2),yn), width));
             points.insert(std::make_pair(Geom::Point(roundup(r.xmax() - width/2),yn), width));
           } else {
@@ -468,7 +476,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         }
         yn = roundup(r.ycenter());
         while (yn >= (r.ymin() + width/2)) {
-          if (r.width() > width) {
+          if (r.width() >= width) {
             points.insert(std::make_pair(Geom::Point(roundup(r.xmin() + width/2),yn), width));
             points.insert(std::make_pair(Geom::Point(roundup(r.xmax() - width/2),yn), width));
           } else {
@@ -477,10 +485,13 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }
           yn -= space;
         }
-      } else if (width == r.height()) {
+      }
+      //else if (width == r.height()) {
+      if (width != r.width()) {
         points.insert(std::make_pair(Geom::Point(r.xmin(),r.ycenter()), width));
         points.insert(std::make_pair(Geom::Point(r.xmax(),r.ycenter()), width));
       }
+      //}
     }
   } else if (dir == NORTH || dir == SOUTH) {
     if (vert) {
@@ -497,7 +508,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }*/
         int xn = roundup(r.xcenter());
         while (xn <= (r.xmax() - width/2)) {
-          if (r.height() > width) {
+          if (r.height() >= width) {
             points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymin() + width/2)), width));
             points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymax() - width/2)), width));
           } else {
@@ -508,7 +519,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         }
         xn = roundup(r.xcenter());
         while (xn >= (r.xmin() + width/2)) {
-          if (r.height() > width) {
+          if (r.height() >= width) {
             points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymin() + width/2)), width));
             points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymax() - width/2)), width));
           } else {
@@ -517,10 +528,13 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }
           xn -= space;
         }
-      } else if (width == r.width()) {
+      }
+      //else if (width == r.width()) {
+      if (width != r.height()) {
         points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymin()), width));
         points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymax()), width));
       }
+      //}
     }
   }
 
@@ -531,6 +545,11 @@ void Router::addSourceTargetShapes(const Geom::Rect& r, const int z, const bool 
 {
   if (z >= _minLayer && z <= _maxLayer) {
     auto& shapes = (src ? _sourceshapes : _targetshapes);
+    if (src) {
+      _psources[z] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
+    } else {
+      _ptargets[z] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
+    }
     bool inserted{false};
     for (auto it = shapes[z].begin(); it != shapes[z].end(); ++it) {
       auto s = *it;
@@ -552,6 +571,7 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
 {
   if (z < _minLayer || z > _maxLayer) return;
   auto& shapes = (src ? _sourceshapes : _targetshapes);
+  auto& pshapes = (src ? _psources : _ptargets);
   auto& dest   = (src ? _sources : _targets);
   int fcost    = (src ? 0 : -1);
   int tcost    = (src ? -1 : 0);
@@ -569,11 +589,11 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
     }
   }
   if (!inserted) shapes[z].insert(r);
-#if DEBUG
-  COUT << "shape : " << r.str() << " z : " << z << '\n';
-#endif
+  pshapes[z] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
+  //COUT << "shape : " << r.str() << " z : " << z << '\n';
   for (auto dir : {UP, DOWN, EAST, NORTH}) {
     auto points = findValidPoints(r, z, dir);
+    //COUT << "num points : " << points.size() << ' ' << "dir : " << dir << '\n';
     for (auto& pp : points) {
       auto& p = pp.first;
       auto n = createNode(p.x(), p.y(), z, nullptr, fcost, tcost);
@@ -1039,8 +1059,106 @@ void Router::invertRange(IntRangeSet& s, const bool vert)
   s = sout;
 }
 
+void splitRects(Geom::Rects& rects, const PolySet& ps, const Geom::Rect& bbox, const int sx, const int sy)
+{
+  PRects prects;
+  get_max_rectangles(prects, ps);
+  rects.reserve(prects.size() + rects.size());
+  for (auto& r : prects) {
+    Geom::Rect rect(bp::xl(r) - sx, bp::yl(r) - sy, bp::xh(r) + sx, bp::yh(r) + sy);
+    if (rect.overlaps(bbox)) {
+      rects.emplace_back(rect);
+    }
+  }
+}
+
+Geom::Rects splitRects(const Geom::Rects& tobs)
+{
+  PolySet ps;
+  for (auto& obs : tobs) {
+    auto r = obs.bloatby(-1);
+    ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+  }
+  PRects prects;
+  get_max_rectangles(prects, ps);
+  Geom::Rects rects;
+  rects.reserve(prects.size());
+  for (auto& r : prects) {
+    rects.emplace_back(bp::xl(r) - 1, bp::yl(r) - 1, bp::xh(r) + 1, bp::yh(r) + 1);
+  }
+  return rects;
+}
+
+static bool overlaps(const PPoly& p1, const PPoly& p2)
+{
+  PolySet ps1;
+  ps1 = p1;
+  PRects rects1;
+  get_rectangles(rects1, ps1);
+  PolySet ps2;
+  ps2 = p2;
+  PRects rects2;
+  get_rectangles(rects2, ps2);
+  for (auto& r1 : rects1) {
+    for (auto& r2 : rects2) {
+      if (intersects(r1, r2)) return true;
+    }
+  }
+  return false;
+}
+
+void coverHoles(PolySet& ps, const PolySet& src, const PolySet& tgt)
+{
+  PPolyWHs pwhs;
+  ps.get(pwhs);
+  PRect bboxs, bboxt;
+  bool valids = extents(bboxs, src);
+  bool validh = extents(bboxt, tgt);
+  for (auto& pwh : pwhs) {
+    for (auto ith = pwh.begin_holes(); ith != pwh.end_holes(); ++ith) {
+      PRect bbox;
+      if (extents(bbox, *ith) && (!valids || !intersects(bbox, bboxs)) && (!validh || !intersects(bbox, bboxt))) {
+        ps += bbox;
+      }
+    }
+  }
+}
+
+void removeOverlappingPolygons(PolySet& ps, const PolySet& srctgt)
+{
+  PPolys polygons;
+  ps.get(polygons);
+  PPolys srctgtPolygons;
+  srctgt.get(srctgtPolygons);
+  PRect srctgtBBox;
+  if (!extents(srctgtBBox, srctgt)) return;
+  for (auto& p : polygons) {
+    PRect bbox;
+    if (extents(bbox, p) && intersects(bbox, srctgtBBox)) {
+      for (auto& stp : srctgtPolygons) {
+        if (overlaps(p, stp)) {
+          ps -= p;
+          break;
+        }
+      }
+    }
+  }
+}
+
 void Router::generateHananGrid()
 {
+  for (auto& l : _ptobstacles) {
+    auto its = _psources.find(l.first);
+    auto ith = _ptargets.find(l.first);
+    coverHoles(l.second, ((its != _psources.end()) ? its->second : PolySet()), 
+        ((ith != _ptargets.end()) ? ith->second : PolySet()));
+    if (its != _psources.end()) {
+      removeOverlappingPolygons(l.second, its->second);
+    }
+    if (ith != _ptargets.end()) {
+      removeOverlappingPolygons(l.second, ith->second);
+    }
+  }
   _hanangridh.clear();
   _hanangridh.resize(_maxLayer + 1);
   _hanangridv.clear();
@@ -1052,6 +1170,8 @@ void Router::generateHananGrid()
     bloat = std::max(_spacey[l], bloat);
   }
   _bbox.expand(bloat * 2);
+  _bbox.intersect(_mbox);
+  _tobstacles.clear();
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
     auto box = _bbox;
     //box.bloat(_bbox.width(), _bbox.height());
@@ -1059,6 +1179,19 @@ void Router::generateHananGrid()
     _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymin() - 100, box.xmax(), box.ymin() - 50));
     _tobstacles[l].push_back(Geom::Rect(box.xmax() + 50, box.ymin(), box.xmax() + 100, box.ymax()));
     _tobstacles[l].push_back(Geom::Rect(box.xmin(), box.ymax() + 50, box.xmax(), box.ymax() + 100));
+  }
+  for (auto& l : _ptobstacles) {
+    int sx{0}, sy{0};
+    auto& layer = l.first;
+    if (layer < static_cast<int>(_widthx.size())) {
+      sx = spacex(layer) + (layer <= _maxLayer ? ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1)) : 0);
+      sy = spacey(layer) + (layer <= _maxLayer ? ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1)) : 0);
+    }
+    splitRects(_tobstacles[l.first], l.second, _bbox, sx, sy);
+    _tobstacles[l.first] = splitRects(_tobstacles[l.first]);
+  }
+  for (auto& it: _tobstacles) {
+    _ltree.emplace(it.first, Geom::RTree2D(it.second));
   }
   for (auto& l : _tobstacles) {
     if (l.first > _maxLayer) continue;
@@ -1124,11 +1257,21 @@ Geom::LayerRects Router::findSol()
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
     for (auto attempt : {0}) {
-      if (_targets.size() < _sources.size()) std::swap(_sources,_targets);
+      if (_targets.size() < _sources.size()) {
+        std::swap(_sources,_targets);
+        std::swap(_sourceshapes,_targetshapes);
+      }
       if (attempt == 1) {
         std::swap(_sources,_targets);
+        std::swap(_sourceshapes,_targetshapes);
       }
       COUT << "num src : " << _sources.size() << " tgt : " << _targets.size() << std::endl;
+      for (auto& s : _sources) {
+        s->print("source : ");
+      }
+      for (auto& t : _targets) {
+        t->print("targets : ");
+      }
       for (auto& s : _sources) {
         evalTCost(s);
         if (!s->closed()) insertToPQ(s);
@@ -1144,12 +1287,12 @@ Geom::LayerRects Router::findSol()
 #endif
       }
 
-      for (auto& l : _tobstacles) {
-        for (auto& o : l.second) {
-          _bbox.merge(o.xmin(), o.ymin(), o.xmax(), o.ymax());
-        }
-      }
-      _bbox.expand(_bbox.width(), _bbox.height());
+      //for (auto& l : _tobstacles) {
+      //  for (auto& o : l.second) {
+      //    _bbox.merge(o.xmin(), o.ymin(), o.xmax(), o.ymax());
+      //  }
+      //}
+      _bbox.expand(_bbox.width() / 2, _bbox.height() / 2);
 
       /*for (auto& l : _tobstacles) {
         COUT << "layer before : " << l.first << '\n';
@@ -1157,9 +1300,9 @@ Geom::LayerRects Router::findSol()
         COUT << "o : " << o.str() << '\n';
         }
         }*/
-      Geom::MergeLayerRects(_tobstacles, _obstacles);
-      for (auto& it: _tobstacles) {
-        _ltree.emplace(it.first, Geom::RTree2D(it.second));
+      // merge _pobstacles and _ptobstacles
+      for (auto &l : _pobstacles) {
+        _ptobstacles[l.first] |= l.second;
       }
 #if DEBUG
 #else
@@ -1479,7 +1622,6 @@ void Router::writeSTO() const
   }
 }
 
-
 void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 {
   std::set<int> uselayers;
@@ -1541,73 +1683,6 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
     const auto& layer = l.first;
     if (!uselayers.empty() && uselayers.find(l.first) == uselayers.end()) continue;
     for (const auto& r : l.second) {
-      int sx{0}, sy{0};
-      if (layer < static_cast<int>(_widthx.size())) {
-        sx = spacex(layer) + (layer <= _maxLayer ? ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1)) : 0);
-        sy = spacey(layer) + (layer <= _maxLayer ? ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1)) : 0);
-      }
-#if DEBUG
-      COUT << "layer : " << layer << " obs : " << sx << ' ' << sy << ' ' << r.xmin() << ' ' << r.ymin() << ' ' << r.xmax() << ' ' << r.ymax() << '\n';
-#endif
-      auto obs = r.bloatby(sx, sy);
-      int x1 = sx, x2 = sx, y1 = sy, y2 = sy;
-      /*for (auto src : {true, false}) {
-        const auto it = src ? _sourceshapes.find(l.first) : _targetshapes.find(l.first);
-        const auto itend = src ? _sourceshapes.end() : _targetshapes.end();
-        const auto& nodes = src ? _sources : _targets;
-        if (it != itend) {
-          for (const auto& s : it->second) {
-            if (_cf.isVert(l.first)) {
-#if DEBUG
-              COUT << "source/target shape : " << s.str() << '\n';
-              COUT << "obs : " << obs.str() << '\n';
-              COUT << "r : " << r.str() << '\n';
-#endif
-              if (obs.ymin() <= s.ymin() && obs.ymax() >= s.ymax() && 
-                  obs.xmin() <= s.xmax() && obs.xmax() >= s.xmin()) {
-#if DEBUG
-                COUT << "overlapping : \n";
-#endif
-                if (r.ymin() >= s.ymax()) {
-                  for (auto& n : nodes) {
-                    if (n->z() == l.first && obs.contains(n->x(), n->y())) {
-                      _endextnymax[n] = 0;
-                    }
-                  }
-                  y1 = 0;
-                } else {
-                  for (auto& n : nodes) {
-                    if (n->z() == l.first && obs.contains(n->x(), n->y())) {
-                      _endextnymin[n] = 0;
-                    }
-                  }
-                  y2 = 0;
-                }
-              }
-            }
-            if (_cf.isHor(l.first)) {
-              if (obs.xmin() <= s.xmin() && obs.xmax() >= s.xmax() &&
-                  obs.ymin() <= s.ymax() && obs.ymax() >= s.ymin() ) {
-                if (r.xmin() >= s.xmax()) {
-                  for (auto& n : nodes) {
-                    if (n->z() == l.first && obs.contains(n->x(), n->y())) {
-                      _endextnxmax[n] = 0;
-                    }
-                  }
-                  x1 = 0;
-                } else {
-                  for (auto& n : nodes) {
-                    if (n->z() == l.first && obs.contains(n->x(), n->y())) {
-                      _endextnxmin[n] = 0;
-                    }
-                  }
-                  x2 = 0;
-                }
-              }
-            }
-          }
-        }
-      }*/
       bool olsrcortgt{false};
       for (auto src : {true, false}) {
         const auto& shapes = src ? _sourceshapes : _targetshapes;
@@ -1622,14 +1697,11 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         }
         if (olsrcortgt) break;
       }
-      obs = r.bloatby(x1, y1, x2, y2);
       if (!olsrcortgt) {
         if (temp) {
-          _tobstacles[layer].push_back(obs);
-          //COUT << "tobs : " << layer << ' ' << _tobstacles[layer].back().str() << '\n';
+          _ptobstacles[layer] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
         } else {
-          _obstacles[layer].push_back(obs);
-          //COUT << "obs : " << layer << ' ' << _obstacles[layer].back().str() << '\n';
+          _pobstacles[layer] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
         }
       }
     }
@@ -1779,9 +1851,12 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
       }
     }
   }
-  for (const auto& l : _sourceshapes) {
+  for (const auto& l : _psources) {
     if (prefLayerShape && _preflayers.find(l.first) == _preflayers.end()) continue;
-    for (auto& r : l.second) {
+    PRects prects;
+    get_rectangles(prects, l.second);
+    for (auto& pr : prects) {
+      Geom::Rect r(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
       //COUT << "source : " << l.first << ' ' << r.str() << '\n';
       addSource(r, l.first);
     }
@@ -1795,9 +1870,12 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
       }
     }
   }
-  for (const auto& l : _targetshapes) {
+  for (const auto& l : _ptargets) {
     if (prefLayerShape && _preflayers.find(l.first) == _preflayers.end()) continue;
-    for (auto& r : l.second) {
+    PRects prects;
+    get_rectangles(prects, l.second);
+    for (auto& pr : prects) {
+      Geom::Rect r(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
       //COUT << "target : " << l.first << ' ' << r.str() << '\n';
       addTarget(r, l.first);
     }
@@ -2066,6 +2144,19 @@ void Router::writeLEF(const Geom::LayerRects* sol) const
         for (auto& l : (temp ? _tobstacles : _obstacles)) {
           ofs << "      LAYER " << LAYER_NAMES[l.first] << " ;\n";
           for (auto& r : l.second) {
+            ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+          }
+        }
+      }
+    }
+    if (!_ptobstacles.empty() || !_pobstacles.empty()) {
+      for (auto temp : {true, false}) {
+        for (auto& l : (temp ? _ptobstacles : _pobstacles)) {
+          ofs << "      LAYER " << LAYER_NAMES[l.first] << "_p ;\n";
+          PRects prects;
+          get_rectangles(prects, l.second);
+          for (auto& pr : prects) {
+            Geom::Rect r(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
             ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
           }
         }

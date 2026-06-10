@@ -194,6 +194,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     COUT << "excluding net : " << _name << " from routing\n";
     return;
   }
+  COUT << "net : " << _name << " num pins : " << _pins.size() << '\n';
   if (_pins.size() > 1) {
     COUT << "routing net : " << _name << ' ' << halfpm() << '\n';
     /*for (int i : {0, 1}) {
@@ -210,9 +211,10 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.clearSourceTargets();
       COUT << "routing ports : " << port1->name() << ' ' << port2->name() << '\n';
       router.setName(_name + "__" + port1->name() + "__" + port2->name());
+      router.setMBox(bbox);
       const auto& p1 = port1->shapes();
       const auto& p2 = port2->shapes();
-      bool preflayersrctgt{true};
+      //bool preflayersrctgt{true};
       Geom::LayerRects samenetobst;
       for (auto src : {true, false}) {
         bool preflayer{false};
@@ -224,7 +226,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
             break;
           }
         }
-        preflayersrctgt &= preflayer;
+        //preflayersrctgt &= preflayer;
         if (!_preflayers.empty()) {
           COUT << "pref layer pin" << (preflayer ? "" : " not") << " found for " << (src ? port1->name() : port2->name()) << '\n';
         }

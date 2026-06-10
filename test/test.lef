@@ -4,17 +4,13 @@ MACRO BLOCK_A
   END UNITS 
   ORIGIN 0 0 ;
   FOREIGN BLOCK_A 0 0 ;
-  SIZE 100 BY 200 ;
+  SIZE 200 BY 200 ;
   PIN A
     DIRECTION INOUT ;
     USE SIGNAL ;
     PORT
       LAYER M1 ;
-        RECT 0 0 32 72 ;
-    END
-    PORT
-      LAYER M3 ;
-        RECT 0 0 32 72 ;
+        RECT 0 0 32 32 ;
     END
   END A
   PIN B
@@ -22,7 +18,7 @@ MACRO BLOCK_A
     USE SIGNAL ;
     PORT
       LAYER M1 ;
-        RECT 64 100 96 172 ;
+        RECT 120 120 152 152 ;
     END
   END B
 END BLOCK_A

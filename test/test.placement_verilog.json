@@ -3,11 +3,11 @@
   "leaves": [
     {
       "abstract_name": "BLOCK_A",
-      "bbox": [ 0, 0, 100, 200 ],
+      "bbox": [ 0, 0, 200, 200 ],
       "concrete_name": "BLOCK_A",
       "terminals": [
-        { "name": "A", "rect": [ 0, 0, 32, 100] },
-        { "name": "B", "rect": [ 64, 100, 96, 200 ] }
+        { "name": "A", "rect": [ 0, 0, 32, 32] },
+        { "name": "B", "rect": [ 168, 168, 200, 200 ] }
       ]
     }
   ],
@@ -35,7 +35,7 @@
             { "actual": "Y", "formal": "A" }
           ],
           "instance_name": "I_1",
-          "transformation": { "oX": 900, "oY": 800, "sX": 1, "sY": 1 }
+          "transformation": { "oX": 800, "oY": 800, "sX": 1, "sY": 1 }
         }
       ],
       "parameters": [
@@ -45,15 +45,15 @@
     },
     {
       "abstract_name": "TEST",
-      "bbox": [ 0, 0, 1000, 1000 ],
+      "bbox": [ 0, 0, 3000, 1000 ],
       "concrete_name": "TEST_CONC_0",
       "instances": [
         {
           "abstract_template_name": "BLOCK_B",
           "concrete_template_name": "BLOCK_B_CONC_0",
           "fa_map": [
-            { "actual": "C", "formal": "X" },
-            { "actual": "D", "formal": "Y" }
+            { "actual": "D", "formal": "X" },
+            { "actual": "C", "formal": "Y" }
           ],
           "instance_name": "J_0",
           "transformation": { "oX": 0, "oY": 0, "sX": 1, "sY": 1 }

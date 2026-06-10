@@ -11,6 +11,18 @@
 #include "Geom.h"
 #include "Layer.h"
 
+#include "polygon/polygon.hpp"
+
+namespace bp = boost::polygon;
+typedef bp::polygon_90_set_data<int> PolySet;
+typedef bp::polygon_90_data<int> PPoly;
+typedef bp::polygon_90_with_holes_data<int> PPolyWH;
+typedef std::vector<PPoly> PPolys;
+typedef std::vector<PPolyWH> PPolyWHs;
+typedef bp::rectangle_data<int> PRect;
+typedef std::vector<PRect> PRects ;
+typedef std::map<int, PolySet> LayerPolySet ;
+
 #define COST_MAX 10000
 
 namespace Router {
@@ -228,9 +240,12 @@ class Router {
     std::set<Node*> _nodeset;
 #endif
     Geom::LayerRects _obstacles, _tobstacles;
+    LayerPolySet _pobstacles, _ptobstacles;
+    LayerPolySet _psources, _ptargets;
+
     CostFn _cf;
     std::vector<std::map<int, IntRangeSet>> _hanangridh, _hanangridv;
-    Geom::Rect _bbox;
+    Geom::Rect _bbox, _mbox;
     const Node *_sol;
     std::vector<int> _widthx, _ndrwidthx, _spacex, _ndrspacex;
     std::vector<int> _widthy, _ndrwidthy, _spacey, _ndrspacey;
@@ -246,7 +261,6 @@ class Router {
     std::map<int, std::set<Geom::Rect>> _sourceshapes, _targetshapes;
     std::string _modname, _netname;
     int _uu;
-    int _precision{5};
     Geom::LayerTree _ltree;
     std::set<int> _preflayers;
     bool _usepinwidth{false}, _debugplot{false};
@@ -259,8 +273,52 @@ class Router {
       CostType fcost{0};
       if (n->parent()) {
         fcost = _cf.deltaCost(*n, *(n->parent())) + n->parent()->fcost();
+        auto p = n->parent();
+        auto gp = p->parent();
+        bool sameLayerBend{false};
+        if (gp && ((gp->x() != p->x() && p->x() == n->x()) || (gp->y() != p->y() && p->y() == n->y()))) {
+          fcost += 1;
+          sameLayerBend = true;
+        }
+        if (!sameLayerBend) {
+          auto ggp = gp ? gp->parent() : nullptr;
+          if (ggp && ((ggp->x() != p->x() && p->x() == n->x()) || (ggp->y() != p->y() && p->y() == n->y()))) {
+            fcost += 1;
+          }
+        }
       }
       n->setFCost(fcost);
+      /*CostType bends{0};
+      const Node* p = n;
+      int prev{0};
+      int count{0};
+      while (p) {
+        auto par = p->parent();
+        if (par) {
+          if (prev == 0) {
+            if (p->x() == par->x()) {
+              prev = 1;
+            } else if (p->y() == par->y()) {
+              prev = 2;
+            }
+          } else {
+            if (prev == 1) {
+              if (p->x() != par->x()) {
+                prev = 2;
+                ++bends;
+              }
+            } else {
+              if (p->y() != par->y()) {
+                prev = 1;
+                ++bends;
+              }
+            }
+          }
+        }
+        if (++count > 100) break;
+        p = par;
+      }
+      n->setBCost(bends);*/
     }
 
     void evalTCost(Node* n)
@@ -325,6 +383,7 @@ class Router {
     
   public:
     Router(const DRC::LayerInfo& lf);
+    static int _precision;
     ~Router()
     {
       flushNodes();
@@ -349,7 +408,9 @@ class Router {
       _sources.clear();
       _targets.clear();
       _sourceshapes.clear();
+      _psources.clear();
       _targetshapes.clear();
+      _ptargets.clear();
       _endextnxmin.clear();
       _endextnymin.clear();
       _endextnxmax.clear();
@@ -360,13 +421,20 @@ class Router {
       _preflayers.clear();
     }
     Geom::LayerRects findSol();
+    void setMBox(const Geom::Rect& box) { _mbox = box; }
     void printSol() const;
     void plot() const;
     void writeSTO() const;
     void clearObstacles(bool temp = false)
     {
-      if(temp) _tobstacles.clear();
-      else _obstacles.clear();
+      if(temp) {
+          _tobstacles.clear();
+          _ptobstacles.clear();
+      }
+      else {
+          _obstacles.clear();
+          _pobstacles.clear();
+      }
       _ltree.clear();
     }
     void addObstacles(const Geom::LayerRects& lr, const bool temp = false);

@@ -41,6 +41,10 @@ class Point {
     {
       return _x == p._x && _y == p._y;
     }
+    bool operator != (const Point& p) const
+    {
+      return _x != p._x || _y != p._y;
+    }
     void snap(const int precx, const int precy, bool down) 
     {
       auto rx = (precx != 0) ? _x % precx : 0;
@@ -94,6 +98,14 @@ class Rect {
     }
 
     bool valid() const { return _ll.x() <= _ur.x() && _ll.y() <= _ur.y(); }
+    bool operator == (const Rect& r) const
+    {
+      return _ll == r._ll && _ur == r._ur;
+    }
+    bool operator != (const Rect& r) const
+    {
+      return _ll != r._ll || _ur != r._ur;
+    }
 
     bool intersect(const Rect& r)
     {
@@ -276,6 +288,6 @@ class RTree2D {
     int search(Rects& s, const Rect& r) const;
 };
 typedef map<int, RTree2D> LayerTree;
-
 }
+bool operator == (const Geom::Rect& r1, const Geom::Rect& r2);
 #endif

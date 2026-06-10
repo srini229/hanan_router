@@ -143,6 +143,28 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
                 if (itv != it->end() && itv->is_number_integer()) ny = static_cast<int>(*itv);
                 vlayer->addViaArray(wx, wy, sx, sy, nx, ny);
               }
+              if (itv != it->end() && *itv == "ViaArrayGenerators") {
+                itv = it->find("Array");
+                if (itv != it->end()) {
+                  for (auto& itvg : *(itv)) {
+                    int wx{0}, wy{0}, sx{0}, sy{0}, nx{1}, ny{1};
+                    auto itva = itvg.find("WidthX");
+                    if (itva != itvg.end() && itva->is_number_integer()) wx = static_cast<int>(*itva) * uu;
+                    itva = itvg.find("WidthY");
+                    if (itva != itvg.end() && itva->is_number_integer()) wy = static_cast<int>(*itva) * uu;
+                    itva = itvg.find("SpaceX");
+                    if (itva != itvg.end() && itva->is_number_integer()) sx = static_cast<int>(*itva) * uu;
+                    itva = itvg.find("SpaceY");
+                    if (itva != itvg.end() && itva->is_number_integer()) sy = static_cast<int>(*itva) * uu;
+                    itva = itvg.find("NumX");
+                    if (itva != itvg.end() && itva->is_number_integer()) nx = static_cast<int>(*itva);
+                    itva = itvg.find("NumY");
+                    if (itva != itvg.end() && itva->is_number_integer()) ny = static_cast<int>(*itva);
+                    std::cout << wx << ' ' << wy << ' ' << sx << ' ' << sy << ' ' << nx << ' ' << ny <<std::endl;
+                    vlayer->addViaArray(wx, wy, sx, sy, nx, ny);
+                  }
+                }
+              }
             }
             _vlayers.push_back(vlayer);
           }
