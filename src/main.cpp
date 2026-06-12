@@ -33,7 +33,7 @@ int main(int argc, char* argv[])
   int uu{1};
   try {
     uu = std::stoi(parseArgs(argc, argv, "-uu"));
-  } catch (const std::invalid_argument& ia) {}
+  } catch (const std::exception& e) {}
   COUT << "Using options : -d " << layerJSONFile << " -p " << plfile << " -l " << leffile;
   COUT << (uuflayer  ? " -s " : "") << " -uu " << uu;
   COUT << (!ndrfile.empty() ? (" -ndr " + ndrfile) : "");
@@ -45,7 +45,12 @@ int main(int argc, char* argv[])
     CERR << "missing or unable to read layers.json file argument" << std::endl;
     return 1;
   }
-  Router::Router::_precision = prec.empty() ? 1 : std::stoi(prec);
+  try {
+    Router::Router::_precision = prec.empty() ? 1 : std::stoi(prec);
+  } catch (const std::exception& e) {
+    CERR << "invalid -r precision '" << prec << "', using 1" << std::endl;
+    Router::Router::_precision = 1;
+  }
   Router::Router hrdb{linfo};
   if (!plfile.empty() && !leffile.empty()) {
     Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile, interlefdir);

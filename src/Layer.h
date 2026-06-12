@@ -160,14 +160,12 @@ class LayerInfo {
     ViaLayers _vlayers;
     Layers _layers;
     std::map<std::string, int> _layerIndex;
-    std::map<const MetalLayer*, const ViaLayer*> _vldn, _vlup;
     std::map<std::string, MetalLayer*> _mlayerNameMap;
     MetalLayer *_sbottom, *_stop, *_cbottom, *_ctop, *_pbottom, *_ptop;
     int _topMetal;
     bool _populated;
   public:
     LayerInfo(const std::string& lj, const int uu);
-    void print() const;
     ~LayerInfo();
     const std::string& getLayerName(const int i) const { return _layers[i]->name(); }
     int getLayerIndex(const std::string& name) const

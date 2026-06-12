@@ -373,7 +373,7 @@ void Net::writeLEF(const std::string& modname, const int uu, const Geom::Rect& b
     }
     ofs << "  OBS\n";
     for (unsigned i = 0; i < 4; ++i) {
-      if (obs[i]) {
+      if (i == 3 || obs[i]) {
         for (auto& l : (i < 3 ? *obs[i] : _obstacles)) {
           ofs << "      LAYER " << layerName(l.first) << " ;\n";
           for (auto r : l.second) {

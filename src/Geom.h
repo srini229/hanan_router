@@ -284,6 +284,7 @@ class RTree2D {
     {
       ++(*_copies);
     }
+    RTree2D& operator=(const RTree2D&) = delete;
     ~RTree2D();
     void remove(const Rect& r, const int i);
     int search(Rects& s, const Rect& r) const;

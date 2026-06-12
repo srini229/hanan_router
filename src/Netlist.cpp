@@ -96,7 +96,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
           modu->net(g)->addPin(p);
         }
         auto bbox = m.find("bbox");
-        if (bbox != m.end()) {
+        if (bbox != m.end() && bbox->is_array() && bbox->size() >= 4) {
           const auto& b = (*bbox);
           modu->setBBox(Geom::Rect(b[0], b[1], b[2], b[3]));
         }
@@ -106,8 +106,8 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
             auto iname = inst.find("instance_name");
             auto mname = inst.find("concrete_template_name");
             auto tritr = inst.find("transformation");
-            auto tr = (tritr == inst.end()) ? Geom::Transform() :
-              Geom::Transform((*tritr)["oX"], (*tritr)["oY"], (*tritr)["sX"], (*tritr)["sY"]) ;
+            auto tr = (tritr == inst.end() || !tritr->is_object()) ? Geom::Transform() :
+              Geom::Transform(tritr->value("oX", 0), tritr->value("oY", 0), tritr->value("sX", 1), tritr->value("sY", 1)) ;
             Placement::Instance* instptr{nullptr};
             if (iname != inst.end() && mname != inst.end()) {
               instptr = modu->addInstance(*iname, *mname, tr);
@@ -117,10 +117,16 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
               auto famap = inst.find("fa_map");
               if (famap != inst.end()) {
                 for (auto& pm : *famap) {
-                  const Net* n = &(modu->addNet(pm["actual"]));
-                  COUT << "net : " << pm["actual"] << '\n';
-                  COUT << "pin : " << pm["formal"] << '\n';
-                  modu->addTmpPin(n, instptr, pm["formal"]);
+                  auto itact = pm.find("actual");
+                  auto itform = pm.find("formal");
+                  if (itact == pm.end() || itform == pm.end()) {
+                    CERR << "fa_map entry missing actual/formal for instance " << instptr->name() << std::endl;
+                    continue;
+                  }
+                  const Net* n = &(modu->addNet(*itact));
+                  COUT << "net : " << *itact << '\n';
+                  COUT << "pin : " << *itform << '\n';
+                  modu->addTmpPin(n, instptr, *itform);
                 }
               }
             } else {
@@ -204,7 +210,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
   std::string macroName, pinName;
   int layer{-1};
   double macroUnits{1.};
-  int units = _uu;
+  double units = _uu;
   while (std::getline(ifs, line)) {
     std::string str;
     std::stringstream ss(line);
@@ -215,6 +221,8 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
         while (std::getline(ifs, line)) {
           if (line.find("END") != npos && line.find(macroName) != npos) break;
         }
+        macroName.clear();
+        continue;
       }
       auto it = _modules.find(macroName);
       if (it != _modules.end()) {
@@ -227,14 +235,11 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     }
     if (line.find("FOREIGN ") != npos) continue;
     if (line.find("END") != npos) {
-      if (inUnits) {
-        if (line.find("UNITS") != npos) {
-          inUnits = false;
-        }
-      }
-      if (inPort) {
+      if (inUnits && line.find("UNITS") != npos) {
+        inUnits = false;
+      } else if (inPort) {
         inPort = false;
-        if (curr_port) curr_pin->addPort(curr_port);
+        if (curr_port && curr_pin) curr_pin->addPort(curr_port);
         curr_port = nullptr;
       } else if (inPin) {
         if (line.find(pinName) != npos) {
@@ -242,16 +247,17 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
           curr_pin = nullptr;
           pinName.clear();
         }
-      } else if (inMacro) {
-        if (line.find(macroName) != npos) {
+      } else {
+        if (inObs) {
+          inObs = false;
+          layer = -1;
+        }
+        if (inMacro && !macroName.empty() && line.find(macroName) != npos) {
           inMacro = false;
           curr_module = nullptr;
           macroName.clear();
           units = _uu;
         }
-      } else if (inObs) {
-        inObs = false;
-        layer = -1;
       }
       continue;
     }
@@ -264,7 +270,7 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
       if (line.find("SIZE") != npos) {
         double w{0.}, h{0.};
         ss >> str >> w >> str >> h;
-        curr_module->setBBox(Geom::Rect(0, 0, w * units, h * units));
+        curr_module->setBBox(Geom::Rect(0, 0, round(w * units), round(h * units)));
       }
       if (line.find("PIN") != npos) {
         ss >> str >> pinName;
@@ -275,7 +281,11 @@ void Netlist::loadLEF(const std::string& leffile, const DRC::LayerInfo& lf)
     }
     if (inUnits && line.find("DATABASE") != npos) {
       ss >> str >> str >> str >> macroUnits;
-      units /= macroUnits;
+      if (macroUnits > 0.) {
+        units /= macroUnits;
+      } else {
+        CERR << "ignoring invalid DATABASE units : " << macroUnits << std::endl;
+      }
       COUT << "using scale : " << units << std::endl;
     }
     if (inPin && curr_pin && line.find("PORT") != npos) {

@@ -1171,6 +1171,7 @@ void Router::generateHananGrid()
   }
   _bbox.expand(bloat * 2);
   _bbox.AND(_mbox);
+  _ltree.clear();
   _tobstacles.clear();
   for (auto l = _minLayer; l <= _maxLayer; ++l) {
     auto box = _bbox;
@@ -1263,24 +1264,17 @@ Geom::LayerRects Router::findSol()
       if (_targets.size() < _sources.size()) {
         std::swap(_sources,_targets);
         std::swap(_sourceshapes,_targetshapes);
+        std::swap(_psources,_ptargets);
       }
       if (attempt == 1) {
-        std::swap(_sources,_targets);
+        // retry in the reverse direction with fresh state : intermediate nodes
+        // from attempt 0 carry costs measured from the old sources
         std::swap(_sourceshapes,_targetshapes);
-        _pq.clear();
-        _expansions = 0;
-        for (auto& s : _sources) {
-          s->_expanddir.reset();
-          s->_fcost = 0;
-          s->_tcost = 0;
-          s->_parent = nullptr;
-        }
-        for (auto& t : _targets) {
-          t->_expanddir.reset();
-          t->_fcost = 0;
-          t->_tcost = 0;
-          t->_parent = nullptr;
-        }
+        std::swap(_psources,_ptargets);
+        _sources.clear();
+        _targets.clear();
+        flushNodes();
+        seedSourceTargets();
       }
       COUT << "num src : " << _sources.size() << " tgt : " << _targets.size() << std::endl;
       for (auto& s : _sources) {
@@ -1438,14 +1432,14 @@ Geom::LayerRects Router::findSol()
                 extnx2 = hwy2;
                 if (isSource(parent)) extny2 = 0;
                 else {
-                  auto it = _endextnymax.find(n);
+                  auto it = _endextnymax.find(parent);
                   if (it != _endextnymax.end()) {
                     extny2 = it->second;
                   }
                 }
                 if (isTarget(n)) extny1 = 0;
                 else {
-                  auto it = _endextnymin.find(parent);
+                  auto it = _endextnymin.find(n);
                   if (it != _endextnymin.end()) {
                     extny1 = it->second;
                   }
@@ -1863,42 +1857,29 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
     }
   }*/
   constructVias(&ndrvias);
-  bool prefLayerShape{false};
-  if (!_preflayers.empty()) {
-    for (const auto& l : _sourceshapes) {
-      if (_preflayers.find(l.first) != _preflayers.end()) {
-        prefLayerShape = true;
-        break;
+  seedSourceTargets();
+}
+
+void Router::seedSourceTargets()
+{
+  for (const bool src : {true, false}) {
+    bool prefLayerShape{false};
+    if (!_preflayers.empty()) {
+      for (const auto& l : (src ? _sourceshapes : _targetshapes)) {
+        if (_preflayers.find(l.first) != _preflayers.end()) {
+          prefLayerShape = true;
+          break;
+        }
       }
     }
-  }
-  for (const auto& l : _psources) {
-    if (prefLayerShape && _preflayers.find(l.first) == _preflayers.end()) continue;
-    PRects prects;
-    get_rectangles(prects, l.second);
-    for (auto& pr : prects) {
-      Geom::Rect r(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
-      //COUT << "source : " << l.first << ' ' << r.str() << '\n';
-      addSource(r, l.first);
-    }
-  }
-  prefLayerShape = false;
-  if (!_preflayers.empty()) {
-    for (const auto& l : _targetshapes) {
-      if (_preflayers.find(l.first) != _preflayers.end()) {
-        prefLayerShape = true;
-        break;
+    for (const auto& l : (src ? _psources : _ptargets)) {
+      if (prefLayerShape && _preflayers.find(l.first) == _preflayers.end()) continue;
+      PRects prects;
+      get_rectangles(prects, l.second);
+      for (auto& pr : prects) {
+        Geom::Rect r(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
+        addSourceTarget(r, l.first, src);
       }
-    }
-  }
-  for (const auto& l : _ptargets) {
-    if (prefLayerShape && _preflayers.find(l.first) == _preflayers.end()) continue;
-    PRects prects;
-    get_rectangles(prects, l.second);
-    for (auto& pr : prects) {
-      Geom::Rect r(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
-      //COUT << "target : " << l.first << ' ' << r.str() << '\n';
-      addTarget(r, l.first);
     }
   }
 }

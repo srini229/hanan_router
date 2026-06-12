@@ -371,6 +371,11 @@ class Router {
       }
       _nodes.clear();
       _nodes.resize(_maxLayer + 1);
+      // these maps are keyed by Node*, which are gone now
+      _endextnxmin.clear();
+      _endextnymin.clear();
+      _endextnxmax.clear();
+      _endextnymax.clear();
       COUT << "flushing nodes\n";
 #if DEBUG
       COUT << " remaining " << Node::_nodectr << ' ' << _nodeset.size() << "\n";
@@ -388,6 +393,7 @@ class Router {
     void setexpand(Node* newn, const Node* parent) const;
 
     void constructVias(const std::map<int, DRC::ViaArray>* ndrvias = nullptr);
+    void seedSourceTargets();
     int roundup(const int x) const
     {
       if (_precision <= 0) return x;

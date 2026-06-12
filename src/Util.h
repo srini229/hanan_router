@@ -30,8 +30,10 @@ class TimeMeasure {
       }
     }
 };
-#define TIME_MA(X) TimeMeasure __FUNC__##t(__PRETTY_FUNCTION__, X)
-#define TIME_M()  TimeMeasure __FUNC__##t(__PRETTY_FUNCTION__)
+#define TIME_CONCAT_(a, b) a##b
+#define TIME_CONCAT(a, b) TIME_CONCAT_(a, b)
+#define TIME_MA(X) TimeMeasure TIME_CONCAT(__timer_, __LINE__)(__PRETTY_FUNCTION__, X)
+#define TIME_M()  TimeMeasure TIME_CONCAT(__timer_, __LINE__)(__PRETTY_FUNCTION__)
 
 class SaveRestoreStream {
   private:
@@ -39,25 +41,25 @@ class SaveRestoreStream {
     std::streambuf *_ostream, *_estream;
   public:
     SaveRestoreStream(const std::string& logname, const std::string& errname = "err.log") : _ofs(logname), _efs(errname),
-    _ostream(std::cout.rdbuf()), _estream(std::cerr.rdbuf())
+    _ostream(nullptr), _estream(nullptr)
     {
       if (_ofs) {
-        std::cout.rdbuf(_ofs.rdbuf());
+        _ostream = std::cout.rdbuf(_ofs.rdbuf());
       } else {
         _ofs.close();
       }
       if (_efs) {
-        std::cerr.rdbuf(_efs.rdbuf());
+        _estream = std::cerr.rdbuf(_efs.rdbuf());
       } else {
         _efs.close();
       }
     }
     ~SaveRestoreStream()
     {
-      if (_ofs) {
+      if (_ostream) {
         std::cout.rdbuf(_ostream);
       }
-      if (_efs) {
+      if (_estream) {
         std::cerr.rdbuf(_estream);
       }
     }

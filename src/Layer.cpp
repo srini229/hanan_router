@@ -39,10 +39,10 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
           int gdsNo = (it != l.end()) ? static_cast<int>(*it) : -1;
           it = l.find("UnitR");
           float mur(0), lr(0), ur(0);
-          if (it != l.end()) {
-            mur = (*it)["Mean"];
-            lr = (*it)["L_3Sigma"];
-            ur = (*it)["U_3Sigma"];
+          if (it != l.end() && it->is_object()) {
+            mur = it->value("Mean", 0.f);
+            lr = it->value("L_3Sigma", 0.f);
+            ur = it->value("U_3Sigma", 0.f);
           }
           it = l.find("Pitch");
           MetalLayer* mlayer(nullptr);
@@ -97,10 +97,10 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
             int gdsNo = (it != l.end()) ? static_cast<int>(*it) : -1;
             it = l.find("R");
             float mur(0), lr(0), ur(0);
-            if (it != l.end()) {
-              mur = (*it)["Mean"];
-              lr = (*it)["L_3Sigma"];
-              ur = (*it)["U_3Sigma"];
+            if (it != l.end() && it->is_object()) {
+              mur = it->value("Mean", 0.f);
+              lr = it->value("L_3Sigma", 0.f);
+              ur = it->value("U_3Sigma", 0.f);
             }
             ViaLayer* vlayer = new ViaLayer(gdsNo, name, mur, lr, ur);
             vlayer->setLayerPair(layer1, layer2);
@@ -225,8 +225,6 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
 
 LayerInfo::~LayerInfo()
 {
-  _vldn.clear();
-  _vlup.clear();
   for (auto& v : _vlayers) delete v;
   for (auto& m : _mlayers) delete m;
 }
