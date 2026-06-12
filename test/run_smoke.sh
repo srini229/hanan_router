@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# Smoke tests for hanan_router using the example inputs in this directory.
+#
+# Usage: ./run_smoke.sh [path-to-hanan_router]
+#
+# Each case runs the router in its own directory under smoke_out/ and checks:
+#   - the router exits 0
+#   - every source/target pair found a solution (no "sol not found")
+#   - the expected DEF files were written and contain routed shapes
+#   - the number of reported SHORTs matches the recorded baseline
+# plus case-specific log checks (excluded nets, virtual pins, obstacles, ...).
+
+set -u
+cd "$(dirname "$0")"
+
+ROUTER=${1:-../hanan_router}
+if [ ! -x "$ROUTER" ]; then
+  echo "router binary not found: $ROUTER (run make first)" >&2
+  exit 2
+fi
+ROUTER=$(cd "$(dirname "$ROUTER")" && pwd)/$(basename "$ROUTER")
+
+OUTROOT=smoke_out
+rm -rf "$OUTROOT"
+mkdir -p "$OUTROOT"
+
+PASS=0
+FAIL=0
+ERRS=""
+
+# run_case <name> <expected-defs (comma separated, may be empty)> [router args...]
+run_case() {
+  local name=$1 expdefs=$2
+  shift 2
+  local dir="$OUTROOT/$name"
+  local errs=""
+  mkdir -p "$dir"
+  ( cd "$dir" && "$ROUTER" "$@" -o ./ >/dev/null 2>stderr.log )
+  local rc=$?
+  [ $rc -eq 0 ] || errs="$errs exit=$rc;"
+  local log="$dir/route.log"
+  if [ ! -f "$log" ]; then
+    errs="$errs no-route.log;"
+  else
+    # a pair is only unrouted if both the forward and the reversed attempt fail
+    local unrouted
+    unrouted=$(awk '/sol not found for/{print $5}' "$log" | sort | uniq -d | wc -l | tr -d ' ')
+    if [ "$unrouted" != "0" ]; then
+      errs="$errs unrouted-pairs=$unrouted;"
+    fi
+    if grep -q "unable to open\|missing " "$log" "$dir/err.log" 2>/dev/null; then
+      errs="$errs input-error;"
+    fi
+    # "Checking SHORTS" headers always appear; actual violations must not
+    local shorts
+    shorts=$(grep -c "SHORT.*between" "$log")
+    if [ "$shorts" != "0" ]; then
+      errs="$errs short-violations=$shorts;"
+    fi
+  fi
+  if [ -n "$expdefs" ]; then
+    local def
+    for def in ${expdefs//,/ }; do
+      if [ ! -s "$dir/$def" ]; then
+        errs="$errs missing-def:$def;"
+      elif ! grep -q "+ RECT M" "$dir/$def"; then
+        errs="$errs no-routes-in:$def;"
+      fi
+    done
+  fi
+  # extra per-case log checks: LOGMUST is a newline-free '|'-separated list
+  if [ -n "${LOGMUST:-}" ] && [ -f "$log" ]; then
+    local pat
+    IFS='|' read -ra pats <<< "$LOGMUST"
+    for pat in "${pats[@]}"; do
+      grep -q "$pat" "$log" || errs="$errs log-missing:'$pat';"
+    done
+  fi
+  if [ -z "$errs" ]; then
+    echo "PASS $name"
+    PASS=$((PASS+1))
+  else
+    echo "FAIL $name :$errs"
+    FAIL=$((FAIL+1))
+    ERRS="$ERRS$name:$errs\n"
+  fi
+  LOGMUST=""
+}
+
+IN=../..   # inputs relative to each case directory
+
+# 1. base testcase from the README
+run_case basic "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+
+# 2. the simple single-module test
+run_case simple "BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test1.placement_verilog.json -l $IN/test.lef
+
+# 3. NDR: per-module widths/spaces, preferred layers, virtual pin, clock driver
+LOGMUST="added virtual pin|clock net : D with driver : J_1/Y"
+run_case ndr_full "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/ndr.json
+
+# 4. NDR: do_not_route + per-net NDR + net-scoped obstacles
+LOGMUST="excluding net : Y|Adding obstacle to net : D"
+run_case ndr_donotroute "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr1.json
+
+# 5. NDR: module-level obstacles applied to all nets
+LOGMUST="Adding obstacle to module TEST_CONC_0"
+run_case ndr_obstacles "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr2.json
+
+# 6. NDR: module-wide preferred layers + custom via array
+run_case ndr_vias "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr3.json
+
+# 7. coordinate precision rounding
+run_case precision "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -r 4
+
+# 8. hierarchical reuse: route once, then reload the interim LEFs (-uil)
+run_case uil_stage "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+LOGMUST="loading macro BLOCK_B_CONC_0"
+run_case uil_reuse "" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -uil $IN/smoke_out/uil_stage
+
+echo
+echo "smoke tests : $PASS passed, $FAIL failed"
+if [ $FAIL -ne 0 ]; then
+  printf "$ERRS"
+  exit 1
+fi
+exit 0

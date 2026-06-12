@@ -1,0 +1,42 @@
+VERSION 5.8 ;
+DIVIDERCHAR "/" ;
+BUSBITCHARS "[]" ;
+DESIGN BLOCK_B_CONC_0 ;
+UNITS DISTANCE MICRONS 1 ;
+DIEAREA ( 0 0 ) ( 1000 1000 ) ; 
+
+COMPONENTS 2 ;
+- I_0 BLOCK_A_2 + PLACED ( 0 0 ) N ;
+- I_1 BLOCK_A_2 + PLACED ( 800 800 ) N ;
+END COMPONENTS
+
+NETS 4 ;
+ - W
+ ( I_1/C I_1/C )
+  + RECT M1 ( 864 800 ) ( 896 832 )
+ ;
+- X
+ ( I_0/A I_0/A ) ( I_1/B I_1/B )
+  + RECT M1 ( 0 0 ) ( 32 32 )
+  + RECT M1 ( 850 920 ) ( 882 952 )
+ ;
+- Y
+ ( I_0/B I_0/B ) ( I_1/A I_1/A )
+  + RECT M1 ( 50 136 ) ( 82 832 )
+  + RECT M1 ( -10 780 ) ( 142 852 )
+  + RECT M1 ( 740 780 ) ( 892 852 )
+  + RECT M2 ( -10 780 ) ( 142 852 )
+  + RECT M2 ( 50 800 ) ( 832 832 )
+  + RECT M2 ( 740 780 ) ( 892 852 )
+  + RECT V1 ( 10 800 ) ( 42 832 )
+  + RECT V1 ( 90 800 ) ( 122 832 )
+  + RECT V1 ( 760 800 ) ( 792 832 )
+  + RECT V1 ( 840 800 ) ( 872 832 )
+ ;
+- Z
+ ( I_0/C I_0/C )
+  + RECT M1 ( 64 0 ) ( 96 32 )
+ ;
+END NETS
+
+END DESIGN

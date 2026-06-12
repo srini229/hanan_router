@@ -1,0 +1,22 @@
+[
+  {
+    "module": "BLOCK_B_CONC_0",
+    "preferred_layers":["M1", "M2"]
+  },
+  {
+    "module": "TEST_CONC_0",
+    "preferred_layers":["M1", "M2"],
+    "vias":
+    {
+      "V1":
+      {
+        "WidthX": 16,
+        "WidthY": 16,
+        "SpaceX": 20,
+        "SpaceY": 20,
+        "NumX": 2,
+        "NumY": 2
+      }
+    }
+  }
+]
