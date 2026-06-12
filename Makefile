@@ -24,7 +24,7 @@ OPTFLAGS = -O3 -ffast-math
 ifeq ($(DEBUG), 1)
 OPTFLAGS = 
 endif
-.PHONY: depend clean
+.PHONY: depend clean test
 
 $(MAIN): $(OBJS) 
 	$(CPP) $(CCFLAGS) $(OPTFLAGS) -I$(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
@@ -32,6 +32,9 @@ $(MAIN): $(OBJS)
 $(BIN)/%.o: $(SRC)/%.cpp 
 	@mkdir -p $(BIN)
 	$(CPP) $(CCFLAGS) $(OPTFLAGS) -I$(INCLUDES) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
+
+test: $(MAIN)
+	cd test && ./run_smoke.sh ../$(MAIN)
 
 clean:
 	rm -rf $(MAIN) $(BIN)/*.o $(BIN)/*.d
