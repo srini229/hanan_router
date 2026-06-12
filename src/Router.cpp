@@ -1274,7 +1274,7 @@ Geom::LayerRects Router::findSol()
         _sources.clear();
         _targets.clear();
         flushNodes();
-        seedSourceTargets();
+        createSourceTargetNodes();
       }
       COUT << "num src : " << _sources.size() << " tgt : " << _targets.size() << std::endl;
       for (auto& s : _sources) {
@@ -1857,10 +1857,10 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
     }
   }*/
   constructVias(&ndrvias);
-  seedSourceTargets();
+  createSourceTargetNodes();
 }
 
-void Router::seedSourceTargets()
+void Router::createSourceTargetNodes()
 {
   for (const bool src : {true, false}) {
     bool prefLayerShape{false};

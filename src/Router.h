@@ -393,7 +393,7 @@ class Router {
     void setexpand(Node* newn, const Node* parent) const;
 
     void constructVias(const std::map<int, DRC::ViaArray>* ndrvias = nullptr);
-    void seedSourceTargets();
+    void createSourceTargetNodes();
     int roundup(const int x) const
     {
       if (_precision <= 0) return x;
