@@ -55,8 +55,6 @@ int main(int argc, char* argv[])
   if (!plfile.empty() && !leffile.empty()) {
     Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile, interlefdir);
     netlist.route(hrdb, outdir);
-    //netlist.print();
-    //netlist.plot();
     netlist.checkShort();
   }
 

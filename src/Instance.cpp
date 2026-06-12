@@ -36,25 +36,6 @@ void Instance::build(const bool rebuild)
 }
 
 
-void Instance::print(const std::string& prefix) const
-{
-  COUT << prefix << "name : " << _name << " module : " << _modname << '\n';
-  COUT << prefix << "\ttr : " << _tr.str() << '\n';
-  for (const auto& p : _pins) {
-    COUT << prefix << "\tpin : " << p.first << '\n';
-    for (const auto& port : p.second->ports()) {
-      COUT << prefix << "\tport : " << port->name() << '\n';
-      for (const auto& l : port->shapes()) {
-        COUT << prefix << "\t\t\tlayer : " << l.first << '\n';
-        for (const auto& r : l.second) {
-          COUT << prefix << "\t\t\t\t" << r.str() << '\n';
-        }
-      }
-    }
-  }
-}
-
-
 void Instance::setModule(const Module* m)
 {
   _m = m;

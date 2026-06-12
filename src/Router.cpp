@@ -41,34 +41,6 @@ void Via::addCuts(const Geom::Point& o, const int wx, const int wy, const int nr
   }
 }
 
-Via Via::translate(const Geom::Point& p) const
-{
-  Via v{_l, _u, _c, _center};
-  v._center = _center.trans(p);
-  v._lb = _lb.trans(p);
-  v._ub = _ub.trans(p);
-  v._cut = _cut.trans(p);
-  v._bbox = _bbox.trans(p);
-  for (auto& c : _cuts) {
-    v._cuts.emplace_back(c.trans(p));
-  }
-  return v;
-}
-
-Via Via::transform(const Geom::Transform& tr) const
-{
-  Via v{_l, _u, _c};
-  v._center = tr.transform(_center);
-  v._lb = tr.transform(_lb);
-  v._ub = tr.transform(_ub);
-  v._cut = tr.transform(_cut);
-  v._bbox = tr.transform(_bbox);
-  for (auto& c : _cuts) {
-    v._cuts.emplace_back(tr.transform(c));
-  }
-  return v;
-}
-
 std::string Via::str() const
 {
   return "l: " + std::to_string(_l) + " u: " + std::to_string(_u) + " c: " + std::to_string(_c) +
@@ -616,50 +588,6 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
       _bbox.merge(n->x(), n->y(), n->x(), n->y());
     }
   }
-}
-
-void Router::readDataFile(const std::string& ifile)
-{
-  setName(ifile.substr(0, ifile.find(".sto")));
-  COUT << "reading datafile : " << ifile << '\n';
-  std::ifstream ifs(ifile);
-  std::string tmps;
-  int zmax = -1, zmin = 100;
-  while (ifs) {
-    ifs >> tmps;
-    int x, y, z;
-    int w, h;
-    if (tmps.empty()) continue;
-    switch (tmps[0]) {
-      case 'S':
-        ifs >> x >> y >> z;
-        _sources.insert(createNode(x, y, z, nullptr, 0));
-        zmax = std::max(zmax, z);
-        zmin = std::min(zmin, z);
-        break;
-      case 'T':
-        ifs >> x >> y >> z;
-        _targets.insert(createNode(x, y, z, nullptr, -1, 0));
-        zmax = std::max(zmax, z);
-        zmin = std::min(zmin, z);
-        break;
-      case 'O':
-        ifs >> x >> y >> w >> h >> z;
-        _obstacles[z].push_back(Geom::Rect(x, y, x + w, y + h));
-        zmax = std::max(zmax, z);
-        zmin = std::min(zmin, z);
-        break;
-      default:
-        break;
-    };
-  }
-  //_cf = CostFn(zmax + 1, zmin + 1, zmin);
-  if (zmin == zmax) {
-    ++zmax;
-  }
-  _minLayer = zmin;
-  _maxLayer = zmax;
-  COUT << "min layer : " << _minLayer << " max layer : " << _maxLayer << '\n';
 }
 
 void Router::insertToPQ(const Node* n)

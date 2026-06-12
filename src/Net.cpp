@@ -5,26 +5,6 @@
 
 namespace Placement {
 
-void Net::print() const
-{
-  COUT << "pins :";
-  for (const auto& p : _pins) {
-    COUT << " " << p->name();
-  }
-  if (!_ndrwidths.empty()) {
-    COUT << " ndr :";
-    for (const auto& lw : _ndrwidths) {
-      COUT << "(layer : " << lw.first << " width : " << lw.second << ") ";
-    }
-  }
-  if (!_ndrvias.empty()) {
-    COUT << " ndr via :";
-    for (const auto& lv : _ndrvias) {
-      COUT << "(layer : " << lv.first << " width : " << lv.second.str() << ") ";
-    }
-  }
-}
-
 PortPairs Net::reorderPorts() const
 {
   PortCVec ports;

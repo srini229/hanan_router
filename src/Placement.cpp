@@ -76,34 +76,6 @@ Module::~Module()
   _instances.clear();
 }
 
-void Module::print() const
-{
-  for (const auto& p : _pins) {
-    p.second->print();
-  }
-  for (const auto& n : _nets) {
-    COUT << "\tnet : " << n.first << " : {";
-    n.second.print();
-    COUT << "}\n";
-  }
-  for (const auto& inst : _instances) {
-    COUT << "\tinst : " ;
-    inst->print("\t");
-  }
-  for (const auto& l : _obstacles) {
-    COUT << "\tobstacle : layer : " << l.first;
-    for (const auto& r : l.second) {
-      COUT << "\t\t" << r.str() << '\n';
-    }
-  }
-  for (const auto& l : _internalroutes) {
-    COUT << "\tinternal routes : layer : " << l.first;
-    for (const auto& r : l.second) {
-      COUT << "\t\t" << r.str() << '\n';
-    }
-  }
-}
-
 void Module::build()
 {
   for (auto& i : _instances) i->build();
@@ -231,101 +203,6 @@ void Module::route(Router::Router& router, const std::string& outdir)
   }
   _routed = 1;
   checkShort();
-}
-
-void Module::plot() const
-{
-  std::ofstream ofs(_name + ".gplt");
-  if (ofs.is_open()) {
-    COUT << "plotting module " << _name << " to " << _name << ".gplt\n";
-    ofs << "unset key\n";
-    ofs << "set title '" << _name << "' noenhanced\n";
-    unsigned cnt{1};
-    for (auto& l : _obstacles) {
-      const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
-      for (auto& b : l.second) {
-        if (b.valid() && b.width() && b.height()) {
-          ofs << "set object " << cnt++ << " rect from ";
-          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.25 fillcolor \"" << color << "\" behind\n";
-        }
-      }
-    }
-    for (const auto& p : _pins) {
-      for (auto& port : p.second->ports()) {
-        if (port->shapes().empty()) {
-          auto& b = p.second->bbox();
-          if (b.valid()) {
-            ofs << "set object " << cnt++ << " rect from ";
-            ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillcolor 'black' fillstyle pattern " << ((cnt % 2) + 5) << " transparent behind\n";
-            ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
-          }
-        }
-      }
-    }
-    for (auto& n : _nets) {
-      for (auto& l : n.second.routeShapesWithPins()) {
-        for (auto& b : l.second) {
-          const auto& color = LAYER_COLORS[l.first % LAYER_COLORS.size()];
-          if (b.valid()) {
-            //ofs << b.xmin() << " " << b.ymin() << "\n";
-            //ofs << b.xmax() << " " << b.ymin() << "\n";
-            //ofs << b.xmax() << " " << b.ymax() << "\n";
-            //ofs << b.xmin() << " " << b.ymax() << "\n";
-            //ofs << b.xmin() << " " << b.ymin() << "\n\n";
-            ofs << "set object " << cnt++ << " rect from ";
-            ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillstyle transparent solid 0.25 fillcolor \"" << color << "\" behind\n";
-          }
-        }
-      }
-    }
-    for (auto& i : _instances) {
-      auto& b = i->bbox();
-      if (b.valid()) {
-        ofs << "set label \"" << i->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center tc lt 3 font \",15\" noenhanced\n";
-      }
-      for (const auto& p : i->pins()) {
-        auto& b = p.second->bbox();
-        if (b.valid()) {
-          ofs << "set object " << cnt++ << " rect from ";
-          ofs << b.xmin() << "," << b.ymin() << " to " << b.xmax() << "," << b.ymax() << " fillcolor 'black' fillstyle pattern 2 transparent behind\n";
-          ofs << "set label \"" << p.second->name() << "\" at " << b.xcenter() << "," << b.ycenter() << " center noenhanced\n";
-        }
-      }
-    }
-    auto& b = _bbox;
-    ofs << "plot[:][:] '-' using 1:2 w l lt -1 lw 2 lc -1, '-' using 1:2 w l lt 1 lw 2 lc 1\n";
-    if (b.valid()) {
-      ofs << b.xmin() << " " << b.ymin() << "\n";
-      ofs << b.xmax() << " " << b.ymin() << "\n";
-      ofs << b.xmax() << " " << b.ymax() << "\n";
-      ofs << b.xmin() << " " << b.ymax() << "\n";
-      ofs << b.xmin() << " " << b.ymin() << "\n\n";
-    }
-    for (auto& i : _instances) {
-      auto& b = i->bbox();
-      if (b.valid()) {
-        ofs << b.xmin() << " " << b.ymin() << "\n";
-        ofs << b.xmax() << " " << b.ymin() << "\n";
-        ofs << b.xmax() << " " << b.ymax() << "\n";
-        ofs << b.xmin() << " " << b.ymax() << "\n";
-        ofs << b.xmin() << " " << b.ymin() << "\n\n";
-      }
-    }
-    ofs << "EOF\n";
-    for (auto& n : _nets) {
-      //if (!n.second.open()) continue;
-      for (auto& p : n.second.pins()) {
-        auto& b = p->bbox();
-        if (b.valid()) {
-          ofs << b.xcenter() << " " << b.ycenter() << "\n";
-        }
-      }
-      ofs << "\n";
-    }
-    ofs << "EOF\n";
-    ofs << "set size ratio GPVAL_DATA_Y_MAX/GPVAL_DATA_X_MAX\nrepl\npause -1";
-  }
-  ofs.close();
 }
 
 void Module::checkShort() const

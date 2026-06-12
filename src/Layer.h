@@ -29,7 +29,6 @@ class Layer {
   public:
     Layer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur, const LayerType type)
       : _gdsNo(gdsNo), _name(name), _r{mur, lr, ur}, _type{type}, _index{-1} {}
-    int gdsNo() const { return _gdsNo; }
     const std::string& name() const { return _name; }
     float meanR() const { return _r[0]; }
     bool isMetal() const { return _type == LayerType::METAL; }
@@ -52,13 +51,11 @@ class MetalLayer : public Layer {
   private:
     int _pitch, _width, _minL, _maxL;
     int _e2e, _offset;
-    float _c[3], _cc[3];
     Direction _dir;
   public:
     MetalLayer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur)
       : Layer(gdsNo, name, mur, lr, ur, LayerType::METAL), _pitch(0), _width(0), _minL(0), _maxL(0), _e2e(0), _offset(0),
-    _c{0,0,0}, _cc{0, 0, 0}, _dir(Direction::ORTHOGONAL) {}
-    int pitch() const { return _pitch;}
+    _dir(Direction::ORTHOGONAL) {}
     int width() const { return _width;}
     int space() const
     {
@@ -71,8 +68,6 @@ class MetalLayer : public Layer {
     void setE2E(const int e) {_e2e = e;}
     void setOffset(const int o) {_offset = o;}
     void setDirection(const int dir) { _dir = (dir == 0 ? Direction::HORIZONTAL : (dir == 1 ? Direction::VERTICAL : Direction::ORTHOGONAL)); }
-    void setC(const float muc, const float lc, const float uc) { _c[0] = muc; _c[1] = lc; _c[2] = uc; }
-    void setCC(const float muc, const float lc, const float uc) { _cc[0] = muc; _cc[1] = lc; _cc[2] = uc; }
     bool isHorizontal() const { return _dir == Direction::HORIZONTAL || _dir == Direction::ORTHOGONAL; }
     bool isVertical() const { return _dir == Direction::VERTICAL || _dir == Direction::ORTHOGONAL; }
     ~MetalLayer()
@@ -97,14 +92,6 @@ struct ViaArray {
     _sw._width = std::make_pair(wx, wy);
     _nx = nx;
     _ny = ny;
-  }
-  const std::string str() const
-  {
-    return std::string(
-        "w : " + std::to_string(_sw._width.first) + ", " + std::to_string(_sw._width.second) +
-        "s : " + std::to_string(_sw._space.first) + ", " + std::to_string(_sw._space.second) +
-        "n : " + std::to_string(_nx) + ", " + std::to_string(_ny)
-        );
   }
 };
 typedef std::vector<ViaArray> ViaArrays;
@@ -167,7 +154,6 @@ class LayerInfo {
   public:
     LayerInfo(const std::string& lj, const int uu);
     ~LayerInfo();
-    const std::string& getLayerName(const int i) const { return _layers[i]->name(); }
     int getLayerIndex(const std::string& name) const
     {
       auto it = _layerIndex.find(name);
@@ -206,20 +192,6 @@ class LayerInfo {
     }
     int signalTopLayer() const { return (_stop ? _stop->index() : _topMetal); }
     bool populated() const { return _populated; }
-    bool isVertical(const int z) const
-    {
-      if (z < static_cast<int>(_layers.size()) && _layers[z]->isMetal()) {
-        return static_cast<MetalLayer*>(_layers[z])->isVertical();
-      }
-      return true;
-    }
-    bool isHorizontal(const int z) const
-    {
-      if (z < static_cast<int>(_layers.size()) && _layers[z]->isMetal()) {
-        return static_cast<MetalLayer*>(_layers[z])->isHorizontal();
-      }
-      return true;
-    }
 };
 
 }

@@ -93,15 +93,6 @@ void RTree2D::insert(const Rect& r, const int i)
   static_cast<Tree*>(_rtree)->Insert(ll, ur, i);
 }
 
-void RTree2D::remove(const Rect& r, const int i)
-{
-  if (_rtree) {
-    const int ll[] = {r.xmin(), r.ymin()};
-    const int ur[] = {r.xmax(), r.ymax()};
-    static_cast<Tree*>(_rtree)->Remove(ll, ur, i);
-  }
-}
-
 static bool callback(int i, void *arg)
 {
   auto larg = static_cast<Rects**>(arg);

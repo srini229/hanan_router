@@ -49,16 +49,8 @@ class Via {
     const int u() const { return _u; }
     const int l() const { return _l; }
     void addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow = 1, const int ncol = 1, const int sx = 0, const int sy = 0);
-    Via translate(const Geom::Point& p) const;
-    Via transform(const Geom::Transform& tr) const;
     std::string str() const;
     void addShapes(Geom::LayerRects& lr) const;
-    Geom::LayerRects getShapes() const
-    {
-      Geom::LayerRects lr;
-      addShapes(lr);
-      return lr;
-    }
 };
 typedef std::vector<std::shared_ptr<Via>> Vias;
 
@@ -78,23 +70,6 @@ class CostFn {
 
     CostType hcost(int i) const { return _layerHCost[i]; }
     CostType vcost(int i) const { return _layerVCost[i]; }
-    CostFn(const int numLayers = 0, const int minHLayer = 1, const int minVLayer = 0): _topRoutingLayer(numLayers - 1), _layerHCost(numLayers, COST_MAX), _layerVCost(numLayers, COST_MAX),
-    _layerPairCost(numLayers, std::vector<CostType>(numLayers, COST_MAX))
-    {
-      for (int i = minHLayer; i < numLayers; i += 2) {
-        _layerHCost[i] = 1;
-      }
-      for (int i = minVLayer; i < numLayers; i += 2) {
-        _layerVCost[i] = 1;
-      }
-      for (int i = 0; i < numLayers; ++i) {
-        if (i > 0) _layerPairCost[i][i-1] = 2;
-        if (i < numLayers-1) _layerPairCost[i][i+1] = 2;
-      }
-      //for (int i = 0; i < numLayers; ++i) {
-      //  COUT << "layer : " << i << " cost : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
-      //}
-    }
     void updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::set<int>& preflayers);
     void resetdirs() {
       if (!_savedLayerHCost.empty()) _layerHCost = _savedLayerHCost;
@@ -184,7 +159,6 @@ class Node {
     }
 
     CostType fcost() const { return _fcost; }
-    CostType tcost() const { return _tcost; }
     CostType cost()  const { return _fcost + _tcost;  }
     void setFCost(CostType fcost) { _fcost = fcost; }
     void setTCost(CostType tcost) { _tcost = tcost; }
@@ -412,8 +386,6 @@ class Router {
       _targets.clear();
       _vias.clear();
     }
-    void readDataFile(const std::string& ifile);
-    const int maxRoutingLayer() const { return _maxRoutingLayer; }
     const int maxLayer() const { return _maxLayer; }
     const int minLayer() const { return _minLayer; }
     void setName(const std::string& n) { _name = n; }
@@ -464,8 +436,6 @@ class Router {
     void addSourceShapes(const Geom::Rect& r, const int z) { addSourceTargetShapes(r, z, true); }
     void addTargetShapes(const Geom::Rect& r, const int z) { addSourceTargetShapes(r, z, false); }
     void addSourceTarget(const Geom::Rect& r, const int z, const bool src);
-    void addSource(const Geom::Rect& r, const int z) { addSourceTarget(r, z, true); }
-    void addTarget(const Geom::Rect& r, const int z) { addSourceTarget(r, z, false); }
     const Via* isViaValid(const Node* n, const bool up) const;
     void updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
         const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs,

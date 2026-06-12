@@ -165,15 +165,6 @@ Netlist::~Netlist()
 }
 
 
-void Netlist::print() const
-{
-  for (const auto& m : _modules) {
-    COUT << "module : " << m.second->name() << '\n';
-    m.second->print();
-  }
-}
-
-
 void Netlist::build()
 {
   for (auto& m : _modules) {

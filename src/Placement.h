@@ -48,7 +48,6 @@ class Pin {
   public:
     Pin(const std::string& name = "", const bool virt = false) : _name{name}, _bbox{}, _virtual{static_cast<unsigned>(virt ? 1 : 0)} {}
     const std::string& name() const { return _name; }
-    const Geom::Rect& bbox() const { return _bbox; }
     bool isVirtualPin() const { return _virtual ? true : false; }
     void print() const;
     void addPort(Port* p) 
@@ -107,13 +106,10 @@ class Net {
       COUT << "Net : " << _name << " : added virtual pin : ";
       npin->print();
     }
-    void print() const;
     const std::string& name() const { return _name; }
     void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname);
     const Geom::LayerRects& routeShapesWithPins() const { return _routeshapeswithpins; }
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
-    const Geom::Rect& bbox() const { return _bbox; }
-    const bool open() const { return _unroute ? true : false; }
     void update()
     {
       for (auto virt : {true, false}) {
@@ -175,9 +171,7 @@ class Instance {
     const Geom::Transform& transform() const { return _tr; }
     Geom::Rect transform(const Geom::Rect& r) const { return _tr.transform(r); }
     void setModule(const Module* m);
-    void print(const std::string& prefix = "") const;
     const Geom::Rect& bbox() const { return _bbox; }
-    const Pins& pins() const { return _pins; }
 };
 
 
@@ -208,15 +202,11 @@ class Module {
       return _instances.back();
     }
     bool routed() const { return (_routed ? true : false); }
-    const std::string& absname() const { return _absname; }
     const std::string& name() const { return _name; }
-    const Instances& instances() const { return _instances; }
     Instances& instances() { return _instances; }
     const Geom::LayerRects& obstacles() const { return _obstacles; }
     const Geom::LayerRects& internalroutes() const { return _internalroutes; }
-    bool isLeaf() const { return _leaf ? true : false; }
     void setLeaf() { _leaf = 1; _routed = 1; }
-    const Nets& nets() const { return _nets; }
     const Pins& pins() const { return _pins; }
 
     void setBBox(const Geom::Rect& b) { _bbox = b; }
@@ -351,9 +341,7 @@ class Module {
 
     void setusepinwidth(int u) { _usepinwidth = u ? 1 : 0; }
 
-    void print() const;
     void route(Router::Router& r, const std::string& outdir);
-    void plot() const;
 
     const Geom::Rect& bbox() const { return _bbox; }
     void checkShort() const;
@@ -377,25 +365,15 @@ class Netlist {
   public:
     Netlist(const std::string& plfile, const::std::string& leffile, const DRC::LayerInfo& lf, const int uu, const std::string& ndrfile, const std::string& ildir);
     ~Netlist();
-    void print() const;
     void route(Router::Router& r, const std::string& outdir)
     {
       if (!_valid) return;
       for (auto& m : _modules) m.second->route(r, outdir);
     }
-    void plot() const
-    {
-      for (auto& m : _modules) m.second->plot();
-    }
     void checkShort() const
     {
       if (!_valid) return;
       for (auto& m : _modules) m.second->checkShort();
-    }
-    void writeDEF(const std::string& outdir) const
-    {
-      if (!_valid) return;
-      for (auto& m : _modules) if (!m.second->isLeaf()) m.second->writeDEF(outdir);
     }
 };
 

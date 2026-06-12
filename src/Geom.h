@@ -26,10 +26,8 @@ class Point {
     const int& y() const { return _y; }
     int& x() { return _x; }
     int& y() { return _y; }
-    void scale(int t) { _x *= t; _y *= t; }
     void translate(int x, int y) { _x += x; _y += y; }
     void translate(int c) { _x += c; _y += c; }
-    void translate(const Point& p) { _x += p.x(); _y += p.y(); }
     Point trans(const Point& p) const { return Point(_x + p.x(), _y + p.y()); }
     //const json toJSON() const { return json{{"x", _x}, {"y", _y}}; }
     const std::string str() const { return "(" + std::to_string(_x) + "," + std::to_string(_y) + ")"; }
@@ -46,7 +44,7 @@ class Point {
     {
       return _x != p._x || _y != p._y;
     }
-    void snap(const int precx, const int precy, bool down) 
+    void snap(const int precx, const int precy, bool down)
     {
       auto rx = (precx != 0) ? _x % precx : 0;
       auto ry = (precy != 0) ? _y % precy : 0;
@@ -92,17 +90,7 @@ class Rect {
     {
       fix();
     }
-    void set(int x1 = INT_MAX, int y1 = INT_MAX, int x2 = INT_MIN, int y2 = INT_MIN)
-    {
-      _ll.x() = x1; _ll.y() = y1; _ur.x() = x2; _ur.y() = y2;
-      fix();
-    }
-
     bool valid() const { return _ll.x() <= _ur.x() && _ll.y() <= _ur.y(); }
-    bool operator == (const Rect& r) const
-    {
-      return _ll == r._ll && _ur == r._ur;
-    }
     bool operator != (const Rect& r) const
     {
       return _ll != r._ll || _ur != r._ur;
@@ -150,11 +138,7 @@ class Rect {
     int height() const { return ymax()  - ymin(); }
     int halfpm() const { return width() + height(); }
 
-    bool isVert() const { return width() <= height(); }
-    bool isHor() const { return height() <= width(); }
-
     void translate(const int x, const int y) { _ll.translate(x, y); _ur.translate(x, y); }
-    void translate(const int c) { _ll.translate(c); _ur.translate(c); }
 
     Rect trans(const Point& pt) const
     {
@@ -163,7 +147,6 @@ class Rect {
       return r;
     }
 
-    long area() const { return ((long)width()) * height(); }
     std::string str() const { return "[" + _ll.str() + "," + _ur.str() + "]"; }
     //const json toJSON() const { return json{{"LL", _ll.toJSON()}, {"UR", _ur.toJSON()}}; }
 
@@ -179,14 +162,6 @@ class Rect {
           return true;
       }
       return false;
-    }
-
-    bool contains (const int x, const int y, bool strict = true) const
-    {
-      if (strict) {
-        return x > xmin() && x < xmax() && y > ymin()  && y < ymax();
-      }
-      return x >= xmin() && x <= xmax() && y >= ymin() && y <= ymax();
     }
 
     bool contains (const Geom::Point& p, bool strict = true) const
@@ -215,7 +190,6 @@ class Rect {
     }
 
     void snap(const int prec) { snap(prec, prec); }
-    Rect snap(const int prec) const { auto x = Rect(_ll, _ur); x.snap(prec); return x; }
 };
 typedef std::vector<Rect> Rects;
 typedef map<int, Rects> LayerRects;
@@ -228,7 +202,6 @@ class Transform {
   public:
     Transform(const int x = 0, const int y = 0, const int sx = 1, const int sy = 1) :
       _o{x, y}, _sX{sx}, _sY{sy} {}
-    const Point& origin() const { return _o; }
     const int x() const { return _o.x(); }
     const int y() const { return _o.y(); }
     int sX() const { return _sX; }
@@ -240,29 +213,15 @@ class Transform {
       if (_sX == 1 && _sY == -1) return "FS";
       return "S";
     }
-    void apply(Point& pt) const 
-    {
-      pt.x() = _o.x() + _sX * pt.x();
-      pt.y() = _o.y() + _sY * pt.y();
-    }
     Point transform(const Point& pt) const
     {
       return Point(_o.x() + _sX * pt.x(), _o.y() + _sY * pt.y());
-    }
-    void apply(Rect& r) const 
-    {
-      r.xmin() = _o.x() + _sX * r.xmin();
-      r.ymin() = _o.y() + _sY * r.ymin();
-      r.xmax() = _o.x() + _sX * r.xmax();
-      r.ymax() = _o.y() + _sY * r.ymax();
-      r.fix();
     }
     Rect transform(const Rect& r) const
     {
       return Rect(transform(r.ll()), transform(r.ur()));
     }
     //const json toJSON() const { return json{{"Origin", _o.toJSON()}, {"sX", _sX}, {"sY", _sY}}; }
-    const std::string str() const { return ("origin : {" + _o.str() + "} sX : " + std::to_string(_sX) + " sY : " + std::to_string(_sY)); }
 };
 
 double Dist(const Geom::Rect& r1, const Geom::Rect& r2, const bool manh = true);
@@ -286,10 +245,8 @@ class RTree2D {
     }
     RTree2D& operator=(const RTree2D&) = delete;
     ~RTree2D();
-    void remove(const Rect& r, const int i);
     int search(Rects& s, const Rect& r) const;
 };
 typedef map<int, RTree2D> LayerTree;
 }
-bool operator == (const Geom::Rect& r1, const Geom::Rect& r2);
 #endif

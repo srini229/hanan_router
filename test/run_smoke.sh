@@ -120,7 +120,37 @@ run_case ndr_vias "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
 run_case precision "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
   -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -r 4
 
-# 8. hierarchical reuse: route once, then reload the interim LEFs (-uil)
+# 8. debug plot outputs (HANAN_DEBUG_WIRE exercises the per-wire dump routines,
+#    HANAN_DEBUG_NET the per-net debug LEF dump)
+export HANAN_DEBUG_WIRE=1 HANAN_DEBUG_NET=X,Y
+LOGMUST="writing sto to|sol("
+run_case debug_plot "BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test1.placement_verilog.json -l $IN/test.lef
+unset HANAN_DEBUG_WIRE HANAN_DEBUG_NET
+
+# 9. NDR: per-layer directions, large_detour, routing_order, use_pin_width
+LOGMUST="use pin width : 1"
+run_case ndr_extras "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr4.json
+
+# 10. layers.json with the optional MinL/MaxL/EndToEnd/Offset keys
+run_case layers_ext "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/smoke_layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+
+# 11. leaf LEF with an OBS section (macro obstacles transformed into instances)
+run_case lef_obs "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/smoke_obs.lef
+
+# 12. mirrored instance placement (sX/sY = -1, orientation S in the DEF)
+run_case flipped "BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/smoke_flip.placement_verilog.json -l $IN/test.lef
+
+# 13. many obstacles on one layer (forces R-tree node splits)
+LOGMUST="Adding obstacle to module TEST_CONC_0"
+run_case many_obstacles "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr5.json
+
+# 14. hierarchical reuse: route once, then reload the interim LEFs (-uil)
 run_case uil_stage "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
   -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef
 LOGMUST="loading macro BLOCK_B_CONC_0"
