@@ -157,6 +157,10 @@ LOGMUST="loading macro BLOCK_B_CONC_0"
 run_case uil_reuse "" \
   -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -uil $IN/smoke_out/uil_stage
 
+# 15. ViaArrayGenerators testcase from the README
+run_case ViaArrayGenerators "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers_viagen.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+
 echo
 echo "smoke tests : $PASS passed, $FAIL failed"
 if [ $FAIL -ne 0 ]; then

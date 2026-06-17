@@ -1,2 +1,4 @@
 bin/*.d
 bin/*.o
+**/*_interim_hier.lef
+**/*.def
