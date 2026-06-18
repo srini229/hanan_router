@@ -49,7 +49,9 @@ run_case() {
       /sol found with pin width for/{f[$7]--}
       END{c=0; for(k in f) if(f[k]>=2) c++; print c+0}
     ' "$log")
-    if [ "$unrouted" != "0" ]; then
+    # ALLOW_UNROUTED marks a diagnostic case that is expected to leave a net
+    # open (e.g. proving the SAT escape check flags an unroutable boxed pin).
+    if [ "$unrouted" != "0" ] && [ -z "${ALLOW_UNROUTED:-}" ]; then
       errs="$errs unrouted-pairs=$unrouted;"
     fi
     if grep -q "unable to open\|missing " "$log" "$dir/err.log" 2>/dev/null; then
@@ -107,6 +109,7 @@ run_case() {
   fi
   LOGMUST=""
   NETROUTED=""
+  ALLOW_UNROUTED=""
 }
 
 IN=../..   # inputs relative to each case directory
@@ -213,6 +216,26 @@ LOGMUST="protecting unconnected pin I_U/P"
 NETROUTED="A"
 run_case unconnected_pin "UNCONN_CONC_0.def" \
   -d $IN/layers.json -p $IN/unconnected_pin.placement_verilog.json -l $IN/m1adj_escape.lef
+
+# 19. sat_pin_escape: pin I_A0 is fully boxed (M1 obstacles on all four sides +
+#     an M2 obstacle over it, and M1 is the bottom layer), so it has neither a
+#     via nor a same-layer escape. The pre-routing SAT feasibility check must
+#     prove this and report the stranded pin before any net is routed.
+LOGMUST="pin escape SAT : BOXEDPIN_CONC_0 is infeasible|no escape for pin : BOXEDPIN_CONC_0/I_A0/P"
+ALLOW_UNROUTED=1
+run_case sat_pin_escape "" \
+  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
+
+# 20. global_congestion: 8 nets are forced through one narrow gap in a wall that
+#     blocks every routing layer; the gap has far fewer tracks than nets. The
+#     coarse global-routing SAT (per-channel track-capacity clauses) must prove
+#     the channel overflows before routing wastes effort on it.
+LOGMUST="global routing SAT : CONGEST_CONC_0 : global routing congestion"
+ALLOW_UNROUTED=1
+run_case global_congestion "" \
+  -d $IN/layers.json -p $IN/congest.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/congest_ndr.json
 
 echo
 echo "smoke tests : $PASS passed, $FAIL failed"

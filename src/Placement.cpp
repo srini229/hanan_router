@@ -1,5 +1,7 @@
 #include "Util.h"
 #include "Placement.h"
+#include "Escape.h"
+#include "Congestion.h"
 
 #include <algorithm>
 
@@ -209,6 +211,81 @@ void Module::route(Router::Router& router, const std::string& outdir)
       }
       return anyUnrouted;
     };
+
+    // Before routing anything, prove with a SAT solver that every pin can be
+    // given a via or a same-layer escape without different nets' escapes
+    // clashing. A failure means a pin is bound to be stranded, so surface it.
+    {
+      std::vector<Escape::Pin> epins;
+      int netid = 0;
+      for (auto& nv : nets) {
+        if (!nv->excluded() && nv->pins().size() >= 2) {
+          for (auto& pin : nv->pins()) {
+            Escape::Pin ep;
+            ep.name = _name + SEPARATOR + pin->name();
+            ep.net = netid;
+            for (auto& port : pin->ports()) {
+              for (auto& l : port->shapes()) {
+                for (auto& r : l.second) ep.shapes[l.first].push_back(r);
+              }
+            }
+            if (!ep.shapes.empty()) epins.push_back(std::move(ep));
+          }
+        }
+        ++netid;
+      }
+      if (!epins.empty()) {
+        Escape::LayerModel lm;
+        lm.minLayer = router.minLayer();
+        lm.maxLayer = router.maxLayer();
+        lm.width   = [&router](int z) { return std::max(router.baseWidthX(z), router.baseWidthY(z)); };
+        lm.space   = [&router](int z) { return std::max(router.baseSpaceX(z), router.baseSpaceY(z)); };
+        lm.canUp   = [&router](int z) { return router.canViaUp(z); };
+        lm.canDown = [&router](int z) { return router.canViaDown(z); };
+        std::vector<std::string> blocked;
+        std::string reason;
+        if (Escape::feasible(epins, _obstacles, lm, &blocked, &reason)) {
+          COUT << "pin escape SAT : all " << epins.size() << " pins in " << _name
+               << " have a guaranteed escape\n";
+        } else {
+          COUT << "pin escape SAT : " << _name << " is infeasible (" << reason << ")\n";
+          for (auto& b : blocked) COUT << "  no escape for pin : " << b << '\n';
+        }
+      }
+    }
+
+    // Coarse global-routing congestion check (SAT, track-capacity per channel).
+    // Pin escape only guarantees each pin can leave its own cell; this verifies
+    // the channels between pins have enough tracks for every net at once.
+    {
+      std::vector<Congestion::Demand> demands;
+      for (auto& nv : nets) {
+        if (nv->excluded() || nv->pins().size() < 2) continue;
+        Geom::Rect box;
+        for (auto& pin : nv->pins())
+          for (auto& port : pin->ports())
+            for (auto& l : port->shapes())
+              for (auto& r : l.second) box.merge(r);
+        if (box.width() > 0 || box.height() > 0)
+          demands.push_back({nv->name(), box});
+      }
+      if (demands.size() >= 2) {
+        Congestion::Model cm;
+        cm.bbox = _bbox;
+        cm.minLayer = router.minLayer();
+        cm.maxLayer = router.maxLayer();
+        cm.pitchX = [&router](int z) { return router.baseWidthX(z) + router.baseSpaceX(z); };
+        cm.pitchY = [&router](int z) { return router.baseWidthY(z) + router.baseSpaceY(z); };
+        cm.obstacles = &_obstacles;
+        std::string reason;
+        if (Congestion::feasible(demands, cm, &reason)) {
+          COUT << "global routing SAT : " << _name << " channel capacity ok for "
+               << demands.size() << " nets\n";
+        } else {
+          COUT << "global routing SAT : " << _name << " : " << reason << '\n';
+        }
+      }
+    }
 
     for (auto& n : _nets) n.second.snapshotRoutes();
     if (routeAllNets(false)) {

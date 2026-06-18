@@ -6,10 +6,14 @@ ifeq (,$(findstring darwin,$(GCC_TARGET)))
 endif
 #CCFLAGS = -Wall -g -std=c++14 -D_GLIBCXX_PARALLEL -march=native -funroll-loops -fopenmp
 CCFLAGS = -Wall -g -std=c++14 -funroll-loops $(MARCH)
+# Kissat SAT solver (header + static lib). Override KISSAT_DIR if it lives elsewhere.
+KISSAT_DIR ?= /Users/ramprasath/scratch/kissat
+KISSAT_INC = $(KISSAT_DIR)/src
+KISSAT_LIB = $(KISSAT_DIR)/build/libkissat.a
 INCLUDES = ./include
-LFLAGS = 
+LFLAGS =
 DEBUG = 0
-LIBS = -lm
+LIBS = -lm $(KISSAT_LIB)
 BIN = bin
 SRC = src
 SRCS := $(wildcard $(SRC)/*.cpp)
@@ -49,7 +53,7 @@ $(MAIN): $(OBJS)
 
 $(BIN)/%.o: $(SRC)/%.cpp 
 	@mkdir -p $(BIN)
-	$(CPP) $(CCFLAGS) $(OPTFLAGS) -I$(INCLUDES) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
+	$(CPP) $(CCFLAGS) $(OPTFLAGS) -I$(INCLUDES) -I$(KISSAT_INC) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
 
 test: $(MAIN)
 	cd test && ./run_smoke.sh ../$(MAIN)
@@ -59,7 +63,7 @@ $(COVMAIN): $(COVOBJS)
 
 $(COVBIN)/%.o: $(SRC)/%.cpp
 	@mkdir -p $(COVBIN)
-	$(CPP) $(CCFLAGS) $(COVFLAGS) -I$(INCLUDES) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
+	$(CPP) $(CCFLAGS) $(COVFLAGS) -I$(INCLUDES) -I$(KISSAT_INC) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
 
 coverage: $(COVMAIN)
 	rm -rf $(COVDIR)
