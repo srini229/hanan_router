@@ -445,7 +445,7 @@ class Router {
     void setNetName(const std::string& n) { _netname = n; }
     void setuu(const int uu) { _uu = uu; }
     void allowDetour() { _bbox.expand(std::max(_bbox.width(), _bbox.height()) * 10); }
-    void writeLEF(const Geom::LayerRects* sol = nullptr) const;
+    void writeLEF(const std::string& prefix="DEBUG", const Geom::LayerRects* sol = nullptr) const;
     void setEnableDebug(const bool b) { _debugplot = b; }
     bool debug() const { return _debugplot; }
 };

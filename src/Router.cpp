@@ -1097,7 +1097,7 @@ void Router::generateHananGrid()
     bloat = std::max(_spacex[l], bloat);
     bloat = std::max(_spacey[l], bloat);
   }
-  _bbox.expand(bloat * 2);
+  _bbox.expand(bloat * 10);
   _bbox.AND(_mbox);
   _ltree.clear();
   _tobstacles.clear();
@@ -1296,7 +1296,7 @@ Geom::LayerRects Router::findSol()
   }
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
-    size_t lastExpansions{0};
+    size_t minExpansions{1000000};
     for (auto attempt : {0, 1}) {
       if (_targets.size() < _sources.size()) {
         std::swap(_sources,_targets);
@@ -1372,7 +1372,7 @@ Geom::LayerRects Router::findSol()
 #else
       if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
 #endif
-        writeLEF();
+        writeLEF(attempt ? "ATTEMPT_1" : "ATTEMPT_0");
 
 #if DEBUG
       for (unsigned l = 0; l < _hanangridh.size(); ++l) {
@@ -1420,15 +1420,21 @@ Geom::LayerRects Router::findSol()
           COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
         }
       }
-      lastExpansions = _expansions;
+      minExpansions = std::min(minExpansions, _expansions);
       _pq.clear();
       _hanangridv.clear();
       _hanangridh.clear();
       _expansions = 0;
       if (_sol) break;
     }
-    if (!_sol && _usepinwidth && lastExpansions < 100) {
+    if (!_sol && _usepinwidth && minExpansions < 1000) {
+      _bbox.expand(_bbox.width(), _bbox.height());
       COUT << "retrying " << _name << " with pin width escape\n";
+#if DEBUG
+#else
+      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
+#endif
+        writeLEF("ATTEMPT_2");
       auto savedNdrWidthx = _ndrwidthx;
       auto savedNdrWidthy = _ndrwidthy;
       for (auto src : {true, false}) {
@@ -1500,7 +1506,7 @@ Geom::LayerRects Router::findSol()
   {
     plot();
     printSol();
-    writeLEF(&sol);
+    writeLEF("SOL", &sol);
   }
   clearSourceTargets();
   return sol;
@@ -2061,9 +2067,9 @@ void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
   }
 }
 
-void Router::writeLEF(const Geom::LayerRects* sol) const
+void Router::writeLEF(const std::string& prefix, const Geom::LayerRects* sol) const
 {
-  auto name(_modname + "_" + _name);
+  auto name(prefix + "_" + _modname + "_" + _name);
   std::replace(name.begin(), name.end(), '/', '+');
   COUT << "writing LEF file : " << name << ".lef\n";
   std::ofstream ofs(name + (sol ? "_sol.lef" : ".lef"));
