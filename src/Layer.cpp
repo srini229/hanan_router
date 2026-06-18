@@ -35,8 +35,8 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
         std::string name = *it;
         it = l.find("Stack");
         if (it == l.end()) {
-          it = l.find("GdsLayerNo");
-          int gdsNo = (it != l.end()) ? static_cast<int>(*it) : -1;
+          //it = l.find("GdsLayerNo");
+          //int gdsNo = (it != l.end()) ? static_cast<int>(*it) : -1;
           it = l.find("UnitR");
           float mur(0), lr(0), ur(0);
           if (it != l.end() && it->is_object()) {
@@ -47,7 +47,7 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
           it = l.find("Pitch");
           MetalLayer* mlayer(nullptr);
           if (it != l.end() && it->is_number_integer()) {
-            mlayer = new MetalLayer(gdsNo, name, mur, lr, ur);
+            mlayer = new MetalLayer(name, mur, lr, ur);
             COUT << "layer resistance : " << name << ' ' << mur << ' ' << lr << ' ' << ur << std::endl;
             mlayer->setPitch(static_cast<int>(*it));
           }
@@ -93,8 +93,8 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
             }
           }
           if (layer1 != nullptr || layer2 != nullptr) {
-            it = l.find("GdsLayerNo");
-            int gdsNo = (it != l.end()) ? static_cast<int>(*it) : -1;
+            //it = l.find("GdsLayerNo");
+            //int gdsNo = (it != l.end()) ? static_cast<int>(*it) : -1;
             it = l.find("R");
             float mur(0), lr(0), ur(0);
             if (it != l.end() && it->is_object()) {
@@ -102,7 +102,7 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
               lr = it->value("L_3Sigma", 0.f);
               ur = it->value("U_3Sigma", 0.f);
             }
-            ViaLayer* vlayer = new ViaLayer(gdsNo, name, mur, lr, ur);
+            ViaLayer* vlayer = new ViaLayer(name, mur, lr, ur);
             vlayer->setLayerPair(layer1, layer2);
             int x(0), y(0);
             it = l.find("WidthX");

@@ -21,14 +21,13 @@ enum class LayerType {
 
 class Layer {
   private:
-    const int _gdsNo;
     const std::string _name;
     const float _r[3]; // mean, -3\sigma, 3\sigma
     const LayerType _type;
     int _index;
   public:
-    Layer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur, const LayerType type)
-      : _gdsNo(gdsNo), _name(name), _r{mur, lr, ur}, _type{type}, _index{-1} {}
+    Layer(const std::string& name, const float mur, const float lr, const float ur, const LayerType type)
+      : _name(name), _r{mur, lr, ur}, _type{type}, _index{-1} {}
     const std::string& name() const { return _name; }
     float meanR() const { return _r[0]; }
     bool isMetal() const { return _type == LayerType::METAL; }
@@ -37,15 +36,10 @@ class Layer {
     int index() const { return _index; }
     ~Layer()
     {
-      //COUT << "layer : " << _name << ' ' << _gdsNo << " {" << _r[0] << ',' << _r[1] << ',' << _r[2] << "}\n";
+      //COUT << "layer : " << _name << ' ' << " {" << _r[0] << ',' << _r[1] << ',' << _r[2] << "}\n";
     }
 };
 typedef std::vector<Layer*> Layers;
-
-class gdsDatatype {
-  public:
-    int _draw{0}, _pin{0}, _label{0}, _blockage{0};
-};
 
 class MetalLayer : public Layer {
   private:
@@ -53,8 +47,8 @@ class MetalLayer : public Layer {
     int _e2e, _offset;
     Direction _dir;
   public:
-    MetalLayer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur)
-      : Layer(gdsNo, name, mur, lr, ur, LayerType::METAL), _pitch(0), _width(0), _minL(0), _maxL(0), _e2e(0), _offset(0),
+    MetalLayer(const std::string& name, const float mur, const float lr, const float ur)
+      : Layer(name, mur, lr, ur, LayerType::METAL), _pitch(0), _width(0), _minL(0), _maxL(0), _e2e(0), _offset(0),
     _dir(Direction::ORTHOGONAL) {}
     int width() const { return _width;}
     int space() const
@@ -103,8 +97,8 @@ class ViaLayer : public Layer {
     int _coverl[2], _coveru[2]; // 0 : low, 1 : high
     ViaArrays _va;
   public:
-    ViaLayer(const int gdsNo, const std::string& name, const float mur, const float lr, const float ur)
-      : Layer(gdsNo, name, mur, lr, ur, LayerType::VIA), _sw{}, _layerPair(nullptr, nullptr),
+    ViaLayer(const std::string& name, const float mur, const float lr, const float ur)
+      : Layer(name, mur, lr, ur, LayerType::VIA), _sw{}, _layerPair(nullptr, nullptr),
       _coverl{0, 0}, _coveru{0, 0} {}
     void setSpace(const int x, const int y) {_sw._space.first = x; _sw._space.second = y;}
     void setWidth(const int x, const int y) {_sw._width.first = x; _sw._width.second = y;}

@@ -368,6 +368,7 @@ class Router {
 
     void constructVias(const std::map<int, DRC::ViaArray>* ndrvias = nullptr);
     void createSourceTargetNodes();
+    void buildSol(Geom::LayerRects& sol);
     int roundup(const int x) const
     {
       if (_precision <= 0) return x;

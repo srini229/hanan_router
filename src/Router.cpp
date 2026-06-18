@@ -1178,6 +1178,114 @@ void Router::generateHananGrid()
   }
 }
 
+void Router::buildSol(Geom::LayerRects& sol)
+{
+  if (!_sol) return;
+  const Node* n = _sol;
+  while (n) {
+    auto parent = n->parent();
+    if (parent) {
+      if (parent->z() == n->z()) {
+        const bool vert = (n->x() == parent->x());
+        while (true) {
+          auto p = parent->parent();
+          const bool pv = (p ? p->x() == parent->x() : !vert);
+          if (p && p->z() == parent->z() && pv == vert) {
+            parent = p;
+          } else {
+            break;
+          }
+        }
+        auto hwx1 = (n->hwx() == 0 ? widthx(n->z())/2 : n->hwx());
+        auto hwx2 = (n->hwx() == 0 ? (widthx(n->z()) - hwx1) : n->hwx());
+        auto hwy1 = (n->hwy() == 0 ? widthy(n->z())/2 : n->hwy());
+        auto hwy2 = (n->hwy() == 0 ? (widthy(n->z()) - hwy1) : n->hwy());
+        auto extnx1 = hwx1;
+        auto extnx2 = hwx2;
+        auto extny1 = hwy1;
+        auto extny2 = hwy2;
+        if (n->y() > parent->y()) {
+          extnx1 = hwy1;
+          extnx2 = hwy2;
+          if (isTarget(n)) extny2 = 0;
+          else {
+            auto it = _endextnymax.find(n);
+            if (it != _endextnymax.end()) extny2 = it->second;
+          }
+          if (isSource(parent)) extny1 = 0;
+          else {
+            auto it = _endextnymin.find(parent);
+            if (it != _endextnymin.end()) extny1 = it->second;
+          }
+        } else if (n->y() < parent->y()) {
+          extnx1 = hwy1;
+          extnx2 = hwy2;
+          if (isSource(parent)) extny2 = 0;
+          else {
+            auto it = _endextnymax.find(parent);
+            if (it != _endextnymax.end()) extny2 = it->second;
+          }
+          if (isTarget(n)) extny1 = 0;
+          else {
+            auto it = _endextnymin.find(n);
+            if (it != _endextnymin.end()) extny1 = it->second;
+          }
+        }
+        if (n->x() > parent->x()) {
+          extny1 = hwx1;
+          extny2 = hwx2;
+          if (isTarget(n)) extnx2 = 0;
+          else {
+            auto it = _endextnxmax.find(n);
+            if (it != _endextnxmax.end()) extnx2 = it->second;
+          }
+          if (isSource(parent)) extnx1 = 0;
+          else {
+            auto it = _endextnxmin.find(parent);
+            if (it != _endextnxmin.end()) extnx1 = it->second;
+          }
+        } else if (n->x() < parent->x()) {
+          extny1 = hwx1;
+          extny2 = hwx2;
+          if (isSource(parent)) extnx2 = 0;
+          else {
+            auto it = _endextnxmax.find(parent);
+            if (it != _endextnxmax.end()) extnx2 = it->second;
+          }
+          if (isTarget(n)) extnx1 = 0;
+          else {
+            auto it = _endextnxmin.find(n);
+            if (it != _endextnxmin.end()) extnx1 = it->second;
+          }
+        }
+        sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
+#if DEBUG
+        COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
+#endif
+      } else {
+        if (parent->z() < n->z() && n->dnVia()) {
+          n->dnVia()->addShapes(sol);
+        } else if (parent->z() > n->z() && n->upVia()) {
+          n->upVia()->addShapes(sol);
+        } else {
+          if (parent->z() < n->z()) {
+            if (!_dnVias[n->z()].empty()) {
+              Via v(*(_dnVias[n->z()][0]), Geom::Point(n->x(), n->y()));
+              v.addShapes(sol);
+            }
+          } else if (parent->z() > n->z()) {
+            if (!_upVias[n->z()].empty()) {
+              Via v(*(_upVias[n->z()][0]), Geom::Point(n->x(), n->y()));
+              v.addShapes(sol);
+            }
+          }
+        }
+      }
+    }
+    n = parent;
+  }
+}
+
 Geom::LayerRects Router::findSol()
 {
   TIME_M();
@@ -1188,6 +1296,7 @@ Geom::LayerRects Router::findSol()
   }
   Geom::LayerRects sol;
   if (!_sources.empty() && !_targets.empty()) {
+    size_t lastExpansions{0};
     for (auto attempt : {0, 1}) {
       if (_targets.size() < _sources.size()) {
         std::swap(_sources,_targets);
@@ -1311,131 +1420,75 @@ Geom::LayerRects Router::findSol()
           COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
         }
       }
+      lastExpansions = _expansions;
       _pq.clear();
       _hanangridv.clear();
       _hanangridh.clear();
       _expansions = 0;
-      if (_sol) {
-        const Node* n = _sol;
-        while (n) {
-          auto parent = n->parent();
-          if (parent) {
-            if (parent->z() == n->z()) {
-              const bool vert = (n->x() == parent->x());
-              while (true) {
-                auto p = parent->parent();
-                const bool pv = (p ? p->x() == parent->x() : !vert);
-                if (p && p->z() == parent->z() && pv == vert) {
-                  parent = p;
-                } else {
-                  break;
-                }
-              }
-              auto hwx1 = (n->hwx() == 0 ? widthx(n->z())/2 : n->hwx());
-              auto hwx2 = (n->hwx() == 0 ? (widthx(n->z()) - hwx1) : n->hwx());
-              auto hwy1 = (n->hwy() == 0 ? widthy(n->z())/2 : n->hwy());
-              auto hwy2 = (n->hwy() == 0 ? (widthy(n->z()) - hwy1) : n->hwy());
-              auto extnx1 = hwx1;
-              auto extnx2 = hwx2;
-              auto extny1 = hwy1;
-              auto extny2 = hwy2;
-              if (n->y() > parent->y()) {
-                extnx1 = hwy1;
-                extnx2 = hwy2;
-                if (isTarget(n)) extny2 = 0;
-                else {
-                  auto it = _endextnymax.find(n);
-                  if (it != _endextnymax.end()) {
-                    extny2 = it->second;
-                  }
-                }
-                if (isSource(parent)) extny1 = 0;
-                else {auto it = _endextnymin.find(parent);
-                  if (it != _endextnymin.end()) {
-                    extny1 = it->second;
-                  }
-                }
-              } else if (n->y() < parent->y()) {
-                extnx1 = hwy1;
-                extnx2 = hwy2;
-                if (isSource(parent)) extny2 = 0;
-                else {
-                  auto it = _endextnymax.find(parent);
-                  if (it != _endextnymax.end()) {
-                    extny2 = it->second;
-                  }
-                }
-                if (isTarget(n)) extny1 = 0;
-                else {
-                  auto it = _endextnymin.find(n);
-                  if (it != _endextnymin.end()) {
-                    extny1 = it->second;
-                  }
-                }
-              }
-              if (n->x() > parent->x()) {
-                extny1 = hwx1;
-                extny2 = hwx2;
-                if (isTarget(n)) extnx2 = 0;
-                else {auto it = _endextnxmax.find(n);
-                  if (it != _endextnxmax.end()) {
-                    extnx2 = it->second;
-                  }
-                }
-                if (isSource(parent)) extnx1 = 0;
-                else {
-                  auto it = _endextnxmin.find(parent);
-                  if (it != _endextnxmin.end()) {
-                    extnx1 = it->second;
-                  }
-                }
-              } else if (n->x() < parent->x()) {
-                extny1 = hwx1;
-                extny2 = hwx2;
-                if (isSource(parent)) extnx2 = 0;
-                else {
-                  auto it = _endextnxmax.find(parent);
-                  if (it != _endextnxmax.end()) {
-                    extnx2 = it->second;
-                  }
-                }
-                if (isTarget(n)) extnx1 = 0;
-                else {
-                  auto it = _endextnxmin.find(n);
-                  if (it!= _endextnxmin.end()) {
-                    extnx1 = it->second;
-                  }
-                }
-              }
-              sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
-#if DEBUG
-              //COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
-              COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
-#endif
-            } else {
-              if (parent->z() < n->z() && n->dnVia()) {
-                n->dnVia()->addShapes(sol);
-              } else if (parent->z() > n->z() && n->upVia()) {
-                n->upVia()->addShapes(sol);
-              } else {
-                if (parent->z() < n->z()) {
-                  if (!_dnVias[n->z()].empty()) {
-                    Via v(*(_dnVias[n->z()][0]), Geom::Point(n->x(), n->y()));
-                    v.addShapes(sol);
-                  }
-                } else if (parent->z() > n->z()) {
-                  if (!_upVias[n->z()].empty()) {
-                    Via v(*(_upVias[n->z()][0]), Geom::Point(n->x(), n->y()));
-                    v.addShapes(sol);
-                  }
-                }
-              }
+      if (_sol) break;
+    }
+    if (!_sol && _usepinwidth && lastExpansions < 100) {
+      COUT << "retrying " << _name << " with pin width escape\n";
+      auto savedNdrWidthx = _ndrwidthx;
+      auto savedNdrWidthy = _ndrwidthy;
+      for (auto src : {true, false}) {
+        for (auto& l : (src ? _sourceshapes : _targetshapes)) {
+          auto z = l.first;
+          if (z < 0 || z >= static_cast<int>(_ndrwidthx.size())) continue;
+          for (auto& r : l.second) {
+            if (_cf.isVert(z)) {
+              auto cur = (_ndrwidthy[z] != INT_MAX ? _ndrwidthy[z] : _widthy[z]);
+              _ndrwidthy[z] = std::min(cur, r.width());
+            }
+            if (_cf.isHor(z)) {
+              auto cur = (_ndrwidthx[z] != INT_MAX ? _ndrwidthx[z] : _widthx[z]);
+              _ndrwidthx[z] = std::min(cur, r.height());
             }
           }
-          n = parent;
         }
-        break;
       }
+      _sources.clear();
+      _targets.clear();
+      flushNodes();
+      _bbox = Geom::Rect();
+      createSourceTargetNodes();
+      for (auto& s : _sources) _bbox.merge(s->x(), s->y(), s->x(), s->y());
+      for (auto& t : _targets) _bbox.merge(t->x(), t->y(), t->x(), t->y());
+      _bbox.expand(_bbox.width() / 2, _bbox.height() / 2);
+      generateHananGrid();
+      for (auto& s : _sources) {
+        evalTCost(s);
+        if (!s->closed()) insertToPQ(s);
+      }
+      std::vector<unsigned> escLayerExpansions(_maxLayer + 1, 0);
+      while (!_pq.empty()) {
+        auto t = const_cast<Node*>(*_pq.begin());
+        if (_targets.find(t) != _targets.end()) {
+          _sol = t;
+          COUT << "sol found with pin width for " << _name << " after " << _expansions << " expansions!\n";
+          for (unsigned i = 0; i < escLayerExpansions.size(); ++i) {
+            COUT << "\texpanded : " << i << ' ' << escLayerExpansions[i] << '\n';
+          }
+          break;
+        }
+        _pq.erase(_pq.begin());
+        ++escLayerExpansions[t->z()];
+        expandNode(t);
+        ++_expansions;
+        if (_expansions >= _maxExpansions) break;
+      }
+      if (!_sol) {
+        COUT << "pin width also failed for " << _name << " after " << _expansions << " expansions!\n";
+      }
+      _pq.clear();
+      _hanangridv.clear();
+      _hanangridh.clear();
+      _expansions = 0;
+      if (_sol) buildSol(sol);
+      _ndrwidthx = savedNdrWidthx;
+      _ndrwidthy = savedNdrWidthy;
+    } else if (_sol) {
+      buildSol(sol);
     }
   } else {
     COUT << "source or target empty! " << _sources.empty() << ' ' << _targets.empty() << '\n';

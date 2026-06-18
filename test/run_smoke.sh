@@ -42,9 +42,15 @@ run_case() {
   if [ ! -f "$log" ]; then
     errs="$errs no-route.log;"
   else
-    # a pair is only unrouted if both the forward and the reversed attempt fail
+    # a pair is only unrouted if both the forward and the reversed attempt fail.
+    # pin width success ("sol found with pin width escape for <name>") cancels the
+    # two prior "sol not found for <name>" entries for that pair.
     local unrouted
-    unrouted=$(awk '/sol not found for/{print $5}' "$log" | sort | uniq -d | wc -l | tr -d ' ')
+    unrouted=$(awk '
+      /sol not found for/{f[$5]++}
+      /sol found with pin width for/{f[$7]--}
+      END{c=0; for(k in f) if(f[k]>=2) c++; print c+0}
+    ' "$log")
     if [ "$unrouted" != "0" ]; then
       errs="$errs unrouted-pairs=$unrouted;"
     fi
@@ -160,6 +166,14 @@ run_case uil_reuse "" \
 # 15. ViaArrayGenerators testcase from the README
 run_case ViaArrayGenerators "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
   -d $IN/layers_viagen.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+
+# 16. use_pin_width_escape: pins narrower than the layer width block standard routing
+#     (OBS column at x=36..80 bloats to cover pin centre x=4 with standard widthy=32,
+#     but not with narrow widthy=8 derived from the pin x-span)
+#LOGMUST="retrying.*with pin width escape|sol found with narrow escape for"
+run_case pin_width_escape "NARROW_M_CONC_0.def" \
+  -d $IN/layers_M1_O.json -p $IN/narrow_escape.placement_verilog.json \
+  -l $IN/narrow_escape.lef -ndr $IN/narrow_escape_ndr.json
 
 echo
 echo "smoke tests : $PASS passed, $FAIL failed"
