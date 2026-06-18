@@ -43,8 +43,6 @@ run_case() {
     errs="$errs no-route.log;"
   else
     # a pair is only unrouted if both the forward and the reversed attempt fail.
-    # pin width success ("sol found with pin width escape for <name>") cancels the
-    # two prior "sol not found for <name>" entries for that pair.
     local unrouted
     unrouted=$(awk '
       /sol not found for/{f[$5]++}
