@@ -128,15 +128,35 @@ void Module::route(Router::Router& router, const std::string& outdir)
     nets.insert(nets.begin(), _routeorder.begin(), _routeorder.end());
     COUT << " routing : " << _name << "; num nets : " << nets.size() << "; use pin width : " << ((_usepinwidth == 1) ? 1 : 0) << '\n';
     //router.addObstacles(_obstacles);
-    Geom::LayerRects netObstaclesRouted, netObstaclesUnrouted;
     router.setModName(_name);
     COUT << "setting module name : " << _name << '\n';
     router.setusepinwidth((_usepinwidth == 1) ? true : false);
     static std::set<std::string> debugnet(splitString((getenv("HANAN_DEBUG_NET") ? std::string(getenv("HANAN_DEBUG_NET")) : std::string("")), ','));
-    for (auto it = nets.begin(); it != nets.end(); ++it) {
-      netObstaclesUnrouted.clear();
-      for (auto itn = nets.begin(); itn != it; ++itn) {
-        if ((*itn)->excluded()) {
+    static const int m1Layer = []() {
+      for (int i = 0; i < static_cast<int>(LAYER_NAMES.size()); ++i) {
+        if (LAYER_NAMES[i] == "M1") return i;
+      }
+      return -1;
+    }();
+
+    auto routeAllNets = [&](const bool addAdjObstacles) -> bool {
+      Geom::LayerRects netObstaclesRouted, netObstaclesUnrouted;
+      bool anyUnrouted{false};
+      for (auto it = nets.begin(); it != nets.end(); ++it) {
+        netObstaclesUnrouted.clear();
+        for (auto itn = nets.begin(); itn != it; ++itn) {
+          if ((*itn)->excluded()) {
+            for (auto virt : {true, false}) {
+              const auto& pins = virt ? (*itn)->virtualpins() : (*itn)->pins();
+              for (auto& pin : pins) {
+                for (auto& p : pin->ports()) {
+                  Geom::MergeLayerRects(netObstaclesUnrouted, p->shapes());
+                }
+              }
+            }
+          }
+        }
+        for (auto itn = std::next(it); itn != nets.end(); ++itn) {
           for (auto virt : {true, false}) {
             const auto& pins = virt ? (*itn)->virtualpins() : (*itn)->pins();
             for (auto& pin : pins) {
@@ -146,28 +166,34 @@ void Module::route(Router::Router& router, const std::string& outdir)
             }
           }
         }
-      }
-      for (auto itn = std::next(it); itn != nets.end(); ++itn) {
-        for (auto virt : {true, false}) {
-          const auto& pins = virt ? (*itn)->virtualpins() : (*itn)->pins();
-          for (auto& pin : pins) {
-            for (auto& p : pin->ports()) {
-              Geom::MergeLayerRects(netObstaclesUnrouted, p->shapes());
-            }
+        if (addAdjObstacles && m1Layer >= 0 && layerName(m1Layer + 1)[0] == 'M') {
+          auto itm1 = netObstaclesUnrouted.find(m1Layer);
+          if (itm1 != netObstaclesUnrouted.end() && !itm1->second.empty()) {
+            auto& adj = netObstaclesUnrouted[m1Layer + 1];
+            adj.insert(adj.end(), itm1->second.begin(), itm1->second.end());
           }
         }
+        router.setNetName((*it)->name());
+        if (debugnet.find(_name + "__" + (*it)->name()) != debugnet.end()
+            || debugnet.find((*it)->name()) != debugnet.end()
+            || debugnet.find(_name) != debugnet.end()) {
+          router.setEnableDebug(true);
+        } else {
+          router.setEnableDebug(false);
+        }
+        (*it)->route(router, netObstaclesRouted, netObstaclesUnrouted, _obstacles, true, _uu, _bbox, _name);
+        //writeDEF("_" + (*it)->name(), (*it)->name());
+        if ((*it)->unrouted()) anyUnrouted = true;
+        Geom::MergeLayerRects(netObstaclesRouted, (*it)->routeShapesWithPins());
       }
-      router.setNetName((*it)->name());
-      if (debugnet.find(_name + "__" + (*it)->name()) != debugnet.end()
-          || debugnet.find((*it)->name()) != debugnet.end()
-          || debugnet.find(_name) != debugnet.end()) {
-        router.setEnableDebug(true);
-      } else {
-        router.setEnableDebug(false);
-      }
-      (*it)->route(router, netObstaclesRouted, netObstaclesUnrouted, _obstacles, true, _uu, _bbox, _name);
-      //writeDEF("_" + (*it)->name(), (*it)->name());
-      Geom::MergeLayerRects(netObstaclesRouted, (*it)->routeShapesWithPins());
+      return anyUnrouted;
+    };
+
+    for (auto& n : _nets) n.second.snapshotRoutes();
+    if (routeAllNets(false)) {
+      COUT << "module " << _name << " has unrouted nets; retrying with adjacent-layer pin obstacles\n";
+      for (auto& n : _nets) n.second.clearRoutes();
+      routeAllNets(true);
     }
     router.clearObstacles();
     std::set<std::string> _addednets;

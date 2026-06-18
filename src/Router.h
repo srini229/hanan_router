@@ -2,6 +2,7 @@
 #define ROUTER_H_
 #include <set>
 #include <map>
+#include <deque>
 #include <queue>
 #include <bitset>
 #include <limits>
@@ -98,6 +99,10 @@ class Node {
     Node const* _parent;
     const Via *_upVia, *_dnVia;
     std::bitset<MAXDIR> _expanddir;
+    bool _popped{false};   // set once the node has been expanded (lazy-pq guard)
+  public:
+    // ctor/dtor are public so Nodes can live in a bulk arena (std::deque) owned
+    // by the Router; nodes are still only ever created through createNode().
     Node(const int x = 0, const int y = 0, const int z = -1,
         const CostType fcost = -1, const CostType tcost = -1, Node const* parent = nullptr)
       : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _fcost(fcost), _tcost(tcost),
@@ -117,7 +122,6 @@ class Node {
       --_nodectr;
 #endif
     }
-  public:
     bool closed() const { return _expanddir.none(); }
     int x() const { return _x; }
     int y() const { return _y; }
@@ -217,13 +221,36 @@ struct IntPairComp {
 };
 typedef std::set<IntPair, IntPairComp> IntRangeSet;
 typedef std::set<Node*, NodeComp> NodeSet;
-typedef std::multiset<const Node*, NodeCostComp> PriorityQueue;
+// Open-list entry for a binary-heap priority queue with lazy deletion. cost and
+// fcost are snapshotted at push time so a re-pushed (improved) node's older
+// entries can be detected as stale and skipped, avoiding the O(log n) std::set
+// find/erase that decrease-key otherwise needs.
+struct HeapEntry {
+  CostType cost, fcost;
+  const Node* n;
+};
+struct HeapCmp {
+  // std::*_heap build a max-heap by this comparator; we want the best node
+  // (smallest by the NodeCostComp order: cost asc, fcost desc, then x,y,z) on
+  // top, so report the worse element as "greater".
+  bool operator() (const HeapEntry& a, const HeapEntry& b) const
+  {
+    if (a.cost != b.cost) return a.cost > b.cost;
+    if (a.fcost != b.fcost) return a.fcost < b.fcost;
+    return NodeComp()(b.n, a.n);
+  }
+};
+typedef std::vector<HeapEntry> PriorityQueue;
 typedef std::vector<std::map<IntPair, Node*, IntPairComp>> NodeMap;
 class Router {
   private:
     PriorityQueue _pq;
     NodeSet _sources, _targets;
     NodeMap _nodes;
+    // bulk storage for all search nodes; freed in one shot by flushNodes().
+    // std::deque keeps element addresses stable as it grows, so the Node*
+    // stored in _nodes / _pq stay valid.
+    std::deque<Node> _nodeArena;
 #if DEBUG
     std::set<Node*> _nodeset;
 #endif
@@ -321,6 +348,8 @@ class Router {
     void evalCost(Node* n) { evalFCost(n); evalTCost(n); }
 
     void insertToPQ(const Node* n);
+    // pop and return the best non-stale, not-yet-expanded node, or nullptr.
+    Node* popBestValid();
 
     void invertRange(IntRangeSet& s, const bool vert);
     void insertRange(IntRangeSet& s, const IntPair& r);
@@ -330,21 +359,19 @@ class Router {
     int snap(const Node* n, const bool vert, const bool up) const;
     void getTargetGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc);
     void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);
+    void getCrossGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc);
     void flushNodes()
     {
       _pq.clear();
-      for (auto& l : _nodes) {
-        for (auto& n : l) {
-          delete n.second;
 #if DEBUG
-          _nodeset.erase(n.second);
+      for (auto& l : _nodes) for (auto& n : l) _nodeset.erase(n.second);
 #endif
-          n.second = nullptr;
-        }
-        l.clear();
-      }
+      for (auto& l : _nodes) l.clear();
       _nodes.clear();
       _nodes.resize(_maxLayer + 1);
+      // destroys every Node (and its owned vias) in one pass instead of
+      // per-node delete.
+      _nodeArena.clear();
       // these maps are keyed by Node*, which are gone now
       _endextnxmin.clear();
       _endextnymin.clear();

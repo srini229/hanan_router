@@ -333,12 +333,13 @@ Node* Router::createNode(const int x, const int y, const int z,
   Node* n = nullptr;
   if (z < _minLayer || z > _maxLayer) COUT << "ERROR in layer no : " << z << '\n';
   if (it == _nodes[z].end()) {
-    n = new Node(x, y, z, fcost, tcost, parent);
+    _nodeArena.emplace_back(x, y, z, fcost, tcost, parent);
+    n = &_nodeArena.back();
     auto itr = _nodes[z].emplace(std::make_pair(coord, n));
     it = itr.first;
     if (!itr.second) {
-      COUT << "ERROR adding node to nz "; n->print("n : ");
-      delete n;
+      // already present (should not happen given the find above); leave the
+      // spare arena node unused (reclaimed at flush) and use the existing one.
       n = itr.first->second;
 #if DEBUG
     } else {
@@ -593,11 +594,28 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
 void Router::insertToPQ(const Node* n)
 {
   setexpand(const_cast<Node*>(n), n->parent());
-  _pq.insert(n);
+  _pq.push_back({n->cost(), n->fcost(), n});
+  std::push_heap(_pq.begin(), _pq.end(), HeapCmp{});
 #if DEBUG
   n->print("\tadding to pq :");
   if (n->parent()) n->parent()->print("\t\tparent:");
 #endif
+}
+
+Node* Router::popBestValid()
+{
+  while (!_pq.empty()) {
+    HeapEntry e = _pq.front();
+    std::pop_heap(_pq.begin(), _pq.end(), HeapCmp{});
+    _pq.pop_back();
+    auto n = const_cast<Node*>(e.n);
+    // skip already-expanded nodes and stale entries left behind by a
+    // decrease-key (the node's fcost no longer matches this snapshot).
+    if (n->_popped || e.fcost != n->fcost()) continue;
+    n->_popped = true;
+    return n;
+  }
+  return nullptr;
 }
 
 void Router::setexpand(Node* newn, const Node* parent) const
@@ -698,7 +716,6 @@ void Router::checkAndInsert(Node* newn, const Node* n)
   } else if (newn->parent() != n) {
     auto oldfcost = newn->fcost();
     auto oldparent = newn->parent();
-    auto it = _pq.find(newn);
     newn->setParent(n);
     if (n->z() == newn->z()) {
       if (n->x() == newn->x()) {
@@ -711,8 +728,9 @@ void Router::checkAndInsert(Node* newn, const Node* n)
     if (newn->fcost() > oldfcost) {
       newn->setParent(oldparent);
       newn->setFCost(oldfcost);
-    } else if (it != _pq.end()) {
-      _pq.erase(it);
+    } else if (!newn->_popped) {
+      // still queued (not yet expanded): re-push with the improved cost; the
+      // older entry is left to be skipped as stale when it surfaces.
       insertToPQ(newn);
     }
   }
@@ -774,11 +792,29 @@ void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, 
     const auto& grid = (vert ? _hanangridh[adjLayer] : _hanangridv[adjLayer]);
     if (!grid.empty()) {
       auto coord = (vert ? n->y() : n->x());
-      for (auto& pos : grid) {
-        if ((up && pos.first > coord && pos.first < snapc) || (!up && pos.first < coord && pos.first > snapc)) {
-          s.insert(pos.first);
-        }
+      // ordered map: walk only the open interval the directional test accepts
+      // ((coord,snapc) for up, (snapc,coord) for down) instead of every key.
+      if (up) {
+        for (auto it = grid.upper_bound(coord); it != grid.end() && it->first < snapc; ++it) s.insert(it->first);
+      } else {
+        for (auto it = grid.upper_bound(snapc); it != grid.end() && it->first < coord; ++it) s.insert(it->first);
       }
+    }
+  }
+}
+
+void Router::getCrossGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc)
+{
+  const auto& grid = vert ? _hanangridh[n->z()] : _hanangridv[n->z()];
+  if (grid.empty()) return;
+  const int from = vert ? n->y() : n->x();
+  const int lkp = vert ? n->x() : n->y();
+  const int lo = std::min(from, snapc);
+  const int hi = std::max(from, snapc);
+  for (auto it = grid.lower_bound(lo); it != grid.end() && it->first < hi; ++it) {
+    if (it->first <= lo) continue;
+    for (const auto& r : it->second) {
+      if (lkp >= r.first && lkp <= r.second) { s.insert(it->first); break; }
     }
   }
 }
@@ -849,6 +885,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, true, false, snapc);
     getAdjacentGrid(gridpos, n, false, false, snapc);
     getTargetGrid(gridpos, n, false, snapc);
+    getCrossGrid(gridpos, n, false, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -877,6 +914,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, true, true, snapc);
     getAdjacentGrid(gridpos, n, false, true, snapc);
     getTargetGrid(gridpos, n, false, snapc);
+    getCrossGrid(gridpos, n, false, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -904,6 +942,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, true, false, snapc);
     getAdjacentGrid(gridpos, n, false, false, snapc);
     getTargetGrid(gridpos, n, true, snapc);
+    getCrossGrid(gridpos, n, true, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -932,6 +971,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, true, true, snapc);
     getAdjacentGrid(gridpos, n, false, true, snapc);
     getTargetGrid(gridpos, n, true, snapc);
+    getCrossGrid(gridpos, n, true, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -1398,8 +1438,9 @@ Geom::LayerRects Router::findSol()
 #endif
 
       std::vector<unsigned> layerExpansions(_maxLayer + 1, 0);
-      while (!_pq.empty()) {
-        auto t = const_cast<Node*>(*_pq.begin());
+      while (true) {
+        auto t = popBestValid();
+        if (!t) break;
         if (_targets.find(t) != _targets.end()) {
           _sol = t;
           COUT << "sol found with " << _expansions << " expansions!" << std::endl;
@@ -1408,7 +1449,6 @@ Geom::LayerRects Router::findSol()
           }
           break;
         }
-        _pq.erase(_pq.begin());
         ++layerExpansions[t->z()];
         expandNode(t);
         ++_expansions;
@@ -1467,8 +1507,9 @@ Geom::LayerRects Router::findSol()
         if (!s->closed()) insertToPQ(s);
       }
       std::vector<unsigned> escLayerExpansions(_maxLayer + 1, 0);
-      while (!_pq.empty()) {
-        auto t = const_cast<Node*>(*_pq.begin());
+      while (true) {
+        auto t = popBestValid();
+        if (!t) break;
         if (_targets.find(t) != _targets.end()) {
           _sol = t;
           COUT << "sol found with pin width for " << _name << " after " << _expansions << " expansions!\n";
@@ -1477,7 +1518,6 @@ Geom::LayerRects Router::findSol()
           }
           break;
         }
-        _pq.erase(_pq.begin());
         ++escLayerExpansions[t->z()];
         expandNode(t);
         ++_expansions;
