@@ -117,6 +117,27 @@ void Module::route(Router::Router& router, const std::string& outdir)
       }
     }
     updateNets();
+    {
+      std::set<const Pin*> connectedPins;
+      for (auto& n : _nets) {
+        for (auto& p : n.second.pins()) connectedPins.insert(p);
+      }
+      for (auto& inst : _instances) {
+        for (auto& pp : inst->_pins) {
+          const Pin* pin = pp.second;
+          if (connectedPins.count(pin)) continue;
+          for (auto& port : pin->ports()) {
+            for (auto& l : port->shapes()) {
+              for (auto& r : l.second) {
+                COUT << "protecting unconnected pin " << pin->name() << " : adding obstacle layer "
+                     << l.first << ' ' << r.str() << '\n';
+                _obstacles[l.first].push_back(r);
+              }
+            }
+          }
+        }
+      }
+    }
     NetsVec nets;
     for (auto &n : _nets) {
       if (std::find(_routeorder.begin(), _routeorder.end(), &n.second) == _routeorder.end()) {

@@ -204,6 +204,16 @@ run_case m1_pin_adj_obstacle "M1ADJ_CONC_0.def" \
   -d $IN/layers.json -p $IN/m1adj_escape.placement_verilog.json \
   -l $IN/m1adj_escape.lef -ndr $IN/m1adj_escape_ndr.json
 
+# 18. unconnected_pin: instance I_U has a pin (M1) that is not wired to any net,
+#     sitting directly in net A's straight M1 column. Such pins are otherwise
+#     invisible to the router; they must be added as obstacles so no route lands
+#     on them. With the protection, A detours (off M1 over the pin) yet still
+#     connects; LOGMUST checks the pin was recognised, NETROUTED that A routed.
+LOGMUST="protecting unconnected pin I_U/P"
+NETROUTED="A"
+run_case unconnected_pin "UNCONN_CONC_0.def" \
+  -d $IN/layers.json -p $IN/unconnected_pin.placement_verilog.json -l $IN/m1adj_escape.lef
+
 echo
 echo "smoke tests : $PASS passed, $FAIL failed"
 if [ $FAIL -ne 0 ]; then
