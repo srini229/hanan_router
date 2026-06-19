@@ -278,7 +278,7 @@ class Router {
     int _uu;
     Geom::LayerTree _ltree;
     std::set<int> _preflayers;
-    bool _usepinwidth{false}, _debugplot{false};
+    bool _usepinwidth{false}, _debugplot{false}, _useCpSat{false};
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -484,6 +484,8 @@ class Router {
     void writeLEF(const std::string& prefix="DEBUG", const Geom::LayerRects* sol = nullptr) const;
     void setEnableDebug(const bool b) { _debugplot = b; }
     bool debug() const { return _debugplot; }
+    void setUseCpSat(const bool b) { _useCpSat = b; }
+    bool useCpSat() const { return _useCpSat; }
 };
 
 }

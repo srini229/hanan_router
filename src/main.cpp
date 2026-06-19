@@ -3,6 +3,7 @@
 #include "Layer.h"
 #include "Placement.h"
 #include "Router.h"
+#include "CpRoute.h"
 
 int main(int argc, char* argv[])
 {
@@ -52,6 +53,15 @@ int main(int argc, char* argv[])
     Router::Router::_precision = 1;
   }
   Router::Router hrdb{linfo};
+  if (checkArg(argc, argv, "-cpsat")) {
+    if (CpRoute::available()) {
+      hrdb.setUseCpSat(true);
+      COUT << "using CP-SAT (OR-Tools) router\n";
+    } else {
+      CERR << "-cpsat requested but binary was built without OR-Tools; "
+              "rebuild with: make CPSAT=1" << std::endl;
+    }
+  }
   if (!plfile.empty() && !leffile.empty()) {
     Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile, interlefdir);
     netlist.route(hrdb, outdir);

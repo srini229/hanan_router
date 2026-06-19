@@ -14,6 +14,21 @@ INCLUDES = ./include
 LFLAGS =
 DEBUG = 0
 LIBS = -lm $(KISSAT_LIB)
+# Optional CP-SAT (Google OR-Tools) alternative router: build with CPSAT=1.
+# Override ORTOOLS_DIR if it lives elsewhere.
+ORTOOLS_DIR ?= /opt/ortools
+ifeq ($(CPSAT),1)
+  CPSAT_STD  = -std=c++17
+  CPSAT_DEF  = -DUSE_ORTOOLS -DOR_PROTO_DLL=
+  CPSAT_INC  = -I$(ORTOOLS_DIR)/include
+  ORTOOLS_LIBS = -L$(ORTOOLS_DIR)/lib -lortools $(wildcard $(ORTOOLS_DIR)/lib/libabsl_*.dylib) -Wl,-rpath,$(ORTOOLS_DIR)/lib
+else
+  CPSAT_STD  = -std=c++14
+  CPSAT_DEF  =
+  CPSAT_INC  =
+  ORTOOLS_LIBS =
+endif
+LIBS += $(ORTOOLS_LIBS)
 BIN = bin
 SRC = src
 SRCS := $(wildcard $(SRC)/*.cpp)
@@ -46,17 +61,26 @@ else
     LLVM_COV = xcrun llvm-cov
 endif
 
-.PHONY: depend clean test coverage
+.PHONY: depend clean test coverage cpsat
 
 $(MAIN): $(OBJS) 
 	$(CPP) $(CCFLAGS) $(OPTFLAGS) -I$(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
 
-$(BIN)/%.o: $(SRC)/%.cpp 
+$(BIN)/%.o: $(SRC)/%.cpp
 	@mkdir -p $(BIN)
 	$(CPP) $(CCFLAGS) $(OPTFLAGS) -I$(INCLUDES) -I$(KISSAT_INC) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
 
+# CpRoute pulls in OR-Tools (C++17) when CPSAT=1; otherwise it is a small stub.
+$(BIN)/CpRoute.o: $(SRC)/CpRoute.cpp
+	@mkdir -p $(BIN)
+	$(CPP) -Wall -g $(CPSAT_STD) -funroll-loops $(MARCH) $(OPTFLAGS) $(CPSAT_DEF) -I$(INCLUDES) -I$(KISSAT_INC) $(CPSAT_INC) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
+
 test: $(MAIN)
 	cd test && ./run_smoke.sh ../$(MAIN)
+
+# CP-SAT alternative router validation (needs a CPSAT=1 build).
+cpsat: $(MAIN)
+	cd test && ./run_cpsat.sh ../$(MAIN)
 
 $(COVMAIN): $(COVOBJS)
 	$(CPP) $(CCFLAGS) $(COVFLAGS) -I$(INCLUDES) -o $(COVMAIN) $(COVOBJS) $(LFLAGS) $(LIBS)

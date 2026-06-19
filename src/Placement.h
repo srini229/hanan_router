@@ -144,6 +144,17 @@ class Net {
         ps.first->setShapes(ps.second);
       }
     }
+    // install a route produced by an external router (e.g. the CP-SAT solver):
+    // record the solution shapes together with the pin shapes.
+    void installRoute(const Geom::LayerRects& sol)
+    {
+      _unroute = sol.empty() ? 1 : 0;
+      for (auto& pin : _pins)
+        for (auto& p : pin->ports())
+          Geom::MergeLayerRects(_routeshapeswithpins, p->shapes(), &_bbox);
+      Geom::MergeLayerRects(_routeshapeswithpins, sol, &_bbox);
+      Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
+    }
     void update()
     {
       for (auto virt : {true, false}) {

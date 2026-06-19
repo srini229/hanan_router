@@ -2,6 +2,7 @@
 #include "Placement.h"
 #include "Escape.h"
 #include "Congestion.h"
+#include "CpRoute.h"
 
 #include <algorithm>
 
@@ -140,6 +141,38 @@ void Module::route(Router::Router& router, const std::string& outdir)
         }
       }
     }
+    if (router.useCpSat()) {
+      // Optional alternative: route the whole module as one CP-SAT problem.
+      std::vector<CpRoute::Net> cnets;
+      std::vector<Net*> netptr;
+      for (auto& nv : _nets) {
+        if (nv.second.excluded() || nv.second.pins().size() < 2) continue;
+        CpRoute::Net cn;
+        cn.name = nv.second.name();
+        for (auto& pin : nv.second.pins()) {
+          Geom::LayerRects ps;
+          for (auto& port : pin->ports())
+            for (auto& l : port->shapes())
+              for (auto& r : l.second) ps[l.first].push_back(r);
+          if (!ps.empty()) cn.pins.push_back(std::move(ps));
+        }
+        if (cn.pins.size() >= 2) { cnets.push_back(std::move(cn)); netptr.push_back(&nv.second); }
+      }
+      if (!cnets.empty()) {
+        CpRoute::LayerModel lm;
+        lm.bbox = _bbox;
+        lm.minLayer = router.minLayer();
+        lm.maxLayer = router.maxLayer();
+        lm.width = [&router](int z) { return std::max(router.baseWidthX(z), router.baseWidthY(z)); };
+        lm.canUp = [&router](int z) { return router.canViaUp(z); };
+        std::vector<Geom::LayerRects> routes;
+        std::string m;
+        const bool ok = CpRoute::route(cnets, _obstacles, lm, 15.0, routes, &m);
+        COUT << "CP-SAT router : " << _name << " : " << m << '\n';
+        if (ok)
+          for (size_t i = 0; i < netptr.size(); ++i) netptr[i]->installRoute(routes[i]);
+      }
+    } else {
     NetsVec nets;
     for (auto &n : _nets) {
       if (std::find(_routeorder.begin(), _routeorder.end(), &n.second) == _routeorder.end()) {
@@ -293,6 +326,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
       for (auto& n : _nets) n.second.clearRoutes();
       routeAllNets(true);
     }
+    }  // end !useCpSat routing
     router.clearObstacles();
     std::set<std::string> _addednets;
     for (auto& p : _pins) {
