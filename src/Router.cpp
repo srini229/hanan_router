@@ -783,6 +783,22 @@ void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, 
   }
 }
 
+void Router::getCrossGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc)
+{
+  const auto& grid = vert ? _hanangridh[n->z()] : _hanangridv[n->z()];
+  if (grid.empty()) return;
+  const int from = vert ? n->y() : n->x();
+  const int lkp = vert ? n->x() : n->y();
+  const int lo = std::min(from, snapc);
+  const int hi = std::max(from, snapc);
+  for (auto it = grid.lower_bound(lo); it != grid.end() && it->first < hi; ++it) {
+    if (it->first <= lo) continue;
+    for (const auto& r : it->second) {
+      if (lkp >= r.first && lkp <= r.second) { s.insert(it->first); break; }
+    }
+  }
+}
+
 void Router::expandNode(const Node* n1)
 {
   auto n = const_cast<Node*>(n1);
@@ -849,6 +865,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, true, false, snapc);
     getAdjacentGrid(gridpos, n, false, false, snapc);
     getTargetGrid(gridpos, n, false, snapc);
+    getCrossGrid(gridpos, n, false, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -877,6 +894,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, true, true, snapc);
     getAdjacentGrid(gridpos, n, false, true, snapc);
     getTargetGrid(gridpos, n, false, snapc);
+    getCrossGrid(gridpos, n, false, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -904,6 +922,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, true, false, snapc);
     getAdjacentGrid(gridpos, n, false, false, snapc);
     getTargetGrid(gridpos, n, true, snapc);
+    getCrossGrid(gridpos, n, true, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -932,6 +951,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, true, true, snapc);
     getAdjacentGrid(gridpos, n, false, true, snapc);
     getTargetGrid(gridpos, n, true, snapc);
+    getCrossGrid(gridpos, n, true, snapc);
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -1097,7 +1117,7 @@ void Router::generateHananGrid()
     bloat = std::max(_spacex[l], bloat);
     bloat = std::max(_spacey[l], bloat);
   }
-  _bbox.expand(bloat * 10);
+  _bbox.expand(bloat * 4);
   _bbox.AND(_mbox);
   _ltree.clear();
   _tobstacles.clear();

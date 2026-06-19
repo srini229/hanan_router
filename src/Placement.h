@@ -30,6 +30,12 @@ class Port {
     {
       Geom::MergeLayerRects(_shapes, lr, &_bbox);
     }
+    void setShapes(const Geom::LayerRects& s)
+    {
+      _shapes = s;
+      _bbox = Geom::Rect();
+      for (const auto& l : _shapes) for (const auto& r : l.second) _bbox.merge(r);
+    }
     Port* getTransformedPort(const Geom::Transform& tr) const;
     void print() const;
     bool isVirtualPort() const { return _virtual ? true : false; }
@@ -88,6 +94,7 @@ class Net {
     std::set<int> _preflayers;
     std::string _driver;
     std::map<int, DRC::ViaArray> _ndrvias;
+    std::vector<std::pair<Port*, Geom::LayerRects>> _pinSnapshot;
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0}, _detour{0}, _driver{} {}
     ~Net()
@@ -110,6 +117,33 @@ class Net {
     void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname);
     const Geom::LayerRects& routeShapesWithPins() const { return _routeshapeswithpins; }
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
+    bool unrouted() const { return _unroute ? true : false; }
+    // Snapshot the pristine (pre-routing) shapes of all pin/virtual-pin ports so
+    // they can be restored if the module needs to be re-routed from scratch.
+    void snapshotRoutes()
+    {
+      _pinSnapshot.clear();
+      for (auto virt : {true, false}) {
+        auto& pins = virt ? _vpins : _pins;
+        for (auto& pin : pins) {
+          for (auto& port : pin->ports()) {
+            _pinSnapshot.emplace_back(port, port->shapes());
+          }
+        }
+      }
+    }
+    // Remove all routed connections: drop the route shapes, restore the ports to
+    // their snapshotted pin-only shapes and mark the net unrouted again.
+    void clearRoutes()
+    {
+      _routeshapes.clear();
+      _routeshapeswithpins.clear();
+      _bbox = Geom::Rect();
+      _unroute = 1;
+      for (auto& ps : _pinSnapshot) {
+        ps.first->setShapes(ps.second);
+      }
+    }
     void update()
     {
       for (auto virt : {true, false}) {

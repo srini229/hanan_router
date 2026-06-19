@@ -49,7 +49,9 @@ run_case() {
       /sol found with pin width for/{f[$7]--}
       END{c=0; for(k in f) if(f[k]>=2) c++; print c+0}
     ' "$log")
-    if [ "$unrouted" != "0" ]; then
+    # ALLOW_UNROUTED marks a diagnostic case that is expected to leave a net
+    # open (e.g. proving the SAT escape check flags an unroutable boxed pin).
+    if [ "$unrouted" != "0" ] && [ -z "${ALLOW_UNROUTED:-}" ]; then
       errs="$errs unrouted-pairs=$unrouted;"
     fi
     if grep -q "unable to open\|missing " "$log" "$dir/err.log" 2>/dev/null; then
@@ -80,6 +82,23 @@ run_case() {
       grep -q "$pat" "$log" || errs="$errs log-missing:'$pat';"
     done
   fi
+  # NETROUTED is a '|'-separated list of net names whose DEF block in the first
+  # expected DEF must contain actual routing (a via). A net that only fell back
+  # to its pin shapes has no "+ RECT V*", so this catches a specific net that
+  # was left unrouted even when the rest of the design routed.
+  if [ -n "${NETROUTED:-}" ] && [ -n "$expdefs" ]; then
+    local ndef=${expdefs%%,*} net
+    IFS='|' read -ra nets <<< "$NETROUTED"
+    for net in "${nets[@]}"; do
+      if [ -f "$dir/$ndef" ]; then
+        awk -v n="$net" '
+          $0 ~ "^ *- "n"$"{p=1; next}
+          p && /^ *- /{p=0}
+          p && /\+ RECT V/{f=1}
+          END{exit !f}' "$dir/$ndef" || errs="$errs net-unrouted:$net;"
+      fi
+    done
+  fi
   if [ -z "$errs" ]; then
     echo "PASS $name"
     PASS=$((PASS+1))
@@ -89,6 +108,8 @@ run_case() {
     ERRS="$ERRS$name:$errs\n"
   fi
   LOGMUST=""
+  NETROUTED=""
+  ALLOW_UNROUTED=""
 }
 
 IN=../..   # inputs relative to each case directory
@@ -173,6 +194,38 @@ run_case pin_width_escape "NARROW_M_CONC_0.def" \
   -d $IN/layers_M1_O.json -p $IN/narrow_escape.placement_verilog.json \
   -l $IN/narrow_escape.lef -ndr $IN/narrow_escape_ndr.json
 
+# 17. m1_pin_adj_obstacle: net A (routed first, smaller HPWL) would naturally run
+#     a straight M2 wire directly over net B's wide M1 pin. That M2 covers B's
+#     whole pin footprint, so B (routed second) cannot drop a via up off M1 and
+#     is left unrouted. The fix projects every other unrouted net's M1 pins onto
+#     the adjacent metal (M2) as obstacles for the current net, so A is forced to
+#     detour around B's pin, leaving the footprint free for B to escape upward.
+#     NETROUTED=B asserts B actually routed (has a via) -- it would be only pin
+#     shapes, i.e. unrouted, without the fix.
+NETROUTED="B"
+run_case m1_pin_adj_obstacle "M1ADJ_CONC_0.def" \
+  -d $IN/layers.json -p $IN/m1adj_escape.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/m1adj_escape_ndr.json
+
+# 18. unconnected_pin: instance I_U has a pin (M1) that is not wired to any net,
+#     sitting directly in net A's straight M1 column. Such pins are otherwise
+#     invisible to the router; they must be added as obstacles so no route lands
+#     on them. With the protection, A detours (off M1 over the pin) yet still
+#     connects; LOGMUST checks the pin was recognised, NETROUTED that A routed.
+LOGMUST="protecting unconnected pin I_U/P"
+NETROUTED="A"
+run_case unconnected_pin "UNCONN_CONC_0.def" \
+  -d $IN/layers.json -p $IN/unconnected_pin.placement_verilog.json -l $IN/m1adj_escape.lef
+
+# 19. sat_pin_escape: pin I_A0 is fully boxed (M1 obstacles on all four sides +
+#     an M2 obstacle over it, and M1 is the bottom layer), so it has neither a
+#     via nor a same-layer escape. The pre-routing SAT feasibility check must
+#     prove this and report the stranded pin before any net is routed.
+LOGMUST="pin escape SAT : BOXEDPIN_CONC_0 is infeasible|no escape for pin : BOXEDPIN_CONC_0/I_A0/P"
+ALLOW_UNROUTED=1
+run_case sat_pin_escape "" \
+  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
 echo
 echo "smoke tests : $PASS passed, $FAIL failed"
 if [ $FAIL -ne 0 ]; then

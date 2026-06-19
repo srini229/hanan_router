@@ -330,6 +330,7 @@ class Router {
     int snap(const Node* n, const bool vert, const bool up) const;
     void getTargetGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc);
     void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);
+    void getCrossGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc);
     void flushNodes()
     {
       _pq.clear();
@@ -389,6 +390,10 @@ class Router {
     }
     const int maxLayer() const { return _maxLayer; }
     const int minLayer() const { return _minLayer; }
+    bool canViaUp(const int z) const
+    { return z >= 0 && z < static_cast<int>(_aboveViaLayer.size()) && _aboveViaLayer[z] >= 0; }
+    bool canViaDown(const int z) const
+    { return z >= 0 && z < static_cast<int>(_belowViaLayer.size()) && _belowViaLayer[z] >= 0; }
     void setName(const std::string& n) { _name = n; }
     void setusepinwidth(const bool u) { _usepinwidth = u; }
 
@@ -396,6 +401,11 @@ class Router {
     int widthy(const int z) const { return (_ndrwidthy[z] != INT_MAX ? _ndrwidthy[z] : _widthy[z]); }
     int spacex(const int z) const { return (_ndrspacex[z] != INT_MAX ? _ndrspacex[z] : _spacex[z]); }
     int spacey(const int z) const { return (_ndrspacey[z] != INT_MAX ? _ndrspacey[z] : _spacey[z]); }
+    // base (non-NDR) width/space, valid before any net's updatendr() runs.
+    int baseWidthX(const int z) const { return (z >= 0 && z < static_cast<int>(_widthx.size())) ? _widthx[z] : 0; }
+    int baseWidthY(const int z) const { return (z >= 0 && z < static_cast<int>(_widthy.size())) ? _widthy[z] : 0; }
+    int baseSpaceX(const int z) const { return (z >= 0 && z < static_cast<int>(_spacex.size())) ? _spacex[z] : 0; }
+    int baseSpaceY(const int z) const { return (z >= 0 && z < static_cast<int>(_spacey.size())) ? _spacey[z] : 0; }
 
     void clearSourceTargets() {
       _cf.resetdirs();
