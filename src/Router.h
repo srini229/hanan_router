@@ -252,6 +252,7 @@ class Router {
     Geom::LayerTree _ltree;
     std::set<int> _preflayers;
     bool _usepinwidth{false}, _debugplot{false};
+    int _reorderPasses{10};
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -458,6 +459,8 @@ class Router {
     void writeLEF(const std::string& prefix="DEBUG", const Geom::LayerRects* sol = nullptr) const;
     void setEnableDebug(const bool b) { _debugplot = b; }
     bool debug() const { return _debugplot; }
+    void setReorderPasses(const int n) { _reorderPasses = n; }
+    int reorderPasses() const { return _reorderPasses; }
 };
 
 }

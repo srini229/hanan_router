@@ -251,10 +251,74 @@ void Module::route(Router::Router& router, const std::string& outdir)
     }
 
     for (auto& n : _nets) n.second.snapshotRoutes();
-    if (routeAllNets(false)) {
-      COUT << "module " << _name << " has unrouted nets; retrying with adjacent-layer pin obstacles\n";
+
+    auto countUnrouted = [&]() -> int {
+      int c = 0;
+      for (auto& n : _nets)
+        if (!n.second.excluded() && n.second.unrouted()) ++c;
+      return c;
+    };
+
+    // one full routing attempt on the current 'nets' ordering: route once, and
+    // if anything is open retry with adjacent-layer pin obstacles. Always starts
+    // from a clean (snapshot-restored) state so attempts are independent.
+    auto attempt = [&]() -> int {
       for (auto& n : _nets) n.second.clearRoutes();
-      routeAllNets(true);
+      if (routeAllNets(false)) {
+        COUT << "module " << _name << " has unrouted nets; retrying with adjacent-layer pin obstacles\n";
+        for (auto& n : _nets) n.second.clearRoutes();
+        routeAllNets(true);
+      }
+      return countUnrouted();
+    };
+
+    int bestUnrouted = attempt();
+
+    const int passes = router.reorderPasses();
+    const size_t pinned = _routeorder.size();
+    if (bestUnrouted > 0 && passes > 0 && nets.size() > pinned + 1) {
+      COUT << "module " << _name << " has " << bestUnrouted
+           << " unrouted net(s); reordering blocked nets ahead of their blockers (up to "
+           << passes << " pass(es))\n";
+      NetsVec bestOrder = nets;
+      std::unordered_map<const Net*, int> blockCount;   // times a net was left open
+      std::unordered_map<const Net*, int> baseIdx;      // original tail position (tie-break)
+      for (size_t i = pinned; i < nets.size(); ++i) baseIdx[nets[i]] = static_cast<int>(i);
+
+      for (int pass = 0; pass < passes && bestUnrouted > 0; ++pass) {
+        // charge every net the latest attempt left open: these are the nets in
+        // conflict, and each gets a higher priority for the next ordering.
+        bool any = false;
+        for (size_t i = pinned; i < nets.size(); ++i) {
+          Net* v = nets[i];
+          if (!v->excluded() && v->unrouted()) { ++blockCount[v]; any = true; }
+        }
+        if (!any) break;
+
+        // re-sort the orderable tail: most-blocked nets first, original order on
+        // ties. Blocked nets thus move ahead of the routed nets that blocked them.
+        NetsVec newOrder = nets;
+        std::stable_sort(newOrder.begin() + pinned, newOrder.end(),
+          [&](const Net* a, const Net* b) {
+            const int ba = blockCount[a], bb = blockCount[b];
+            if (ba != bb) return ba > bb;
+            return baseIdx[a] < baseIdx[b];
+          });
+        if (newOrder == nets) break;              // order already converged; no progress
+
+        nets = std::move(newOrder);
+        const int u = attempt();
+        COUT << "  reorder pass " << (pass + 1) << "/" << passes << " : "
+             << u << " unrouted (best so far " << std::min(u, bestUnrouted) << ")\n";
+        if (u < bestUnrouted) { bestUnrouted = u; bestOrder = nets; }
+      }
+      // reproduce the best ordering found unless the last attempt already was it.
+      if (nets != bestOrder) {
+        COUT << "module " << _name << " : re-routing with best ordering ("
+             << bestUnrouted << " unrouted)\n";
+        nets = bestOrder;
+        attempt();
+      }
     }
     router.clearObstacles();
     std::set<std::string> _addednets;
