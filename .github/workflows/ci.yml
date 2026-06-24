@@ -24,6 +24,29 @@ jobs:
         run: make -j"$(nproc)"
 
       - name: Run smoke tests
+        id: smoke
         run: |
           chmod +x test/run_smoke.sh
-          make test
+          set -o pipefail
+          make test 2>&1 | tee smoke.log
+
+      # Publish the pass/fail status of the smoke suite as a check summary so the
+      # result (and any failing cases) is visible on the run page, regardless of
+      # whether the suite passed. The job already fails above if any case fails.
+      - name: Smoke test status
+        if: always()
+        run: |
+          line=$(grep -E 'smoke tests :' smoke.log | tail -1)
+          {
+            echo "## Smoke tests"
+            if echo "$line" | grep -q '0 failed'; then
+              echo "✅ **$line**"
+            else
+              echo "❌ **${line:-no summary line found}**"
+              echo ""
+              echo "Failing cases:"
+              echo '```'
+              grep -E '^FAIL ' smoke.log || echo "(see log)"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
