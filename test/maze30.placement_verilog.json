@@ -30,7 +30,7 @@
     0,
     0,
     1400,
-    3760
+    4200
    ],
    "concrete_name": "MAZE_CONC_0",
    "instances": [
@@ -947,7 +947,7 @@
      "instance_name": "I_R26",
      "transformation": {
       "oX": 1308,
-      "oY": 3648,
+      "oY": 3680,
       "sX": 1,
       "sY": 1
      }
@@ -981,7 +981,7 @@
      "instance_name": "I_R27",
      "transformation": {
       "oX": 1308,
-      "oY": 3648,
+      "oY": 3800,
       "sX": 1,
       "sY": 1
      }
@@ -1015,7 +1015,7 @@
      "instance_name": "I_R28",
      "transformation": {
       "oX": 1308,
-      "oY": 3648,
+      "oY": 3920,
       "sX": 1,
       "sY": 1
      }
@@ -1049,7 +1049,7 @@
      "instance_name": "I_R29",
      "transformation": {
       "oX": 1308,
-      "oY": 3648,
+      "oY": 4040,
       "sX": 1,
       "sY": 1
      }
