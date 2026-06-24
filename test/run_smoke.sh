@@ -42,12 +42,35 @@ run_case() {
   if [ ! -f "$log" ]; then
     errs="$errs no-route.log;"
   else
-    # a pair is only unrouted if both the forward and the reversed attempt fail.
+    # Count unrouted pairs, scoped to the FINAL routing sub-pass of each module.
+    # A module is routed in sub-passes: a base pass, then (if anything is open) an
+    # adjacent-obstacle retry, and the whole thing may repeat for several -reorder
+    # net-ordering attempts. The router logs "sol not found for <pair>" once per
+    # failing pair per sub-pass and is silent on success, so the authoritative
+    # final state is the failures in the very last sub-pass that ran:
+    #   * "num nets :" starts a new module (finalise the previous one);
+    #   * "retrying with adjacent-layer pin obstacles" means the adj retry now
+    #     supersedes the base pass -- discard the base pass tally;
+    #   * the reorder markers end an attempt; because such a marker trails its
+    #     attempt, keep that attempt's tally and fall back to it when no sol lines
+    #     follow the last marker (the search stopped on a good pass, no re-route);
+    #   * a pair counts as unrouted if it failed (>=1) in that final sub-pass, net
+    #     of any "sol found with pin width" recovery.
     local unrouted
     unrouted=$(awk '
-      /sol not found for/{f[$5]++}
-      /sol found with pin width for/{f[$7]--}
-      END{c=0; for(k in f) if(f[k]>=2) c++; print c+0}
+      function tally(a,   k,c){c=0; for(k in a) if(a[k]>=1) c++; return c}
+      function clearcur(   k){for(k in cur) delete cur[k]; haveCur=0}
+      function subpass(){clearcur()}                              # base pass superseded by adj retry
+      function attemptend(   k){for(k in prev) delete prev[k];
+                                for(k in cur) prev[k]=cur[k]; havePrev=1; clearcur()}
+      function endmodule(   k){if(modValid) total += (haveCur?tally(cur):(havePrev?tally(prev):0));
+                               clearcur(); for(k in prev) delete prev[k]; havePrev=0}
+      /num nets :/ { endmodule(); modValid=1; next }
+      /retrying with adjacent/ { subpass(); next }
+      /reordering blocked nets|reorder pass|re-routing with best ordering/ { attemptend(); next }
+      /sol not found for/ { cur[$5]++; haveCur=1; next }
+      /sol found with pin width for/ { cur[$7]--; haveCur=1; next }
+      END { endmodule(); print total+0 }
     ' "$log")
     # ALLOW_UNROUTED marks a diagnostic case that is expected to leave a net
     # open (e.g. proving the SAT escape check flags an unroutable boxed pin).
@@ -236,6 +259,20 @@ ALLOW_UNROUTED=1
 run_case global_congestion "" \
   -d $IN/layers.json -p $IN/congest.placement_verilog.json \
   -l $IN/m1adj_escape.lef -ndr $IN/congest_ndr.json
+
+# 21. reorder: 5 nets criss-cross through one capacity-limited gap in a wall (left
+#     pins top->down, right pins bottom->up). The default HPWL net order strands
+#     one net; the conflict-driven reorder promotes blocked nets ahead of their
+#     blockers (priority grows each pass a net stays open) and routes all five.
+#     Built by gen_reorder.py (N=5 GAP=280,540). LOGMUST proves the default order
+#     failed (that message only prints when the first attempt leaves nets open);
+#     the final-attempt unrouted-pair counter (0) and NETROUTED (every net has a
+#     via) both confirm the reorder routed the whole module.
+LOGMUST="reordering blocked nets ahead of their blockers"
+NETROUTED="N0|N1|N2|N3|N4"
+run_case reorder "REORDER_CONC_0.def" \
+  -d $IN/layers.json -p $IN/reorder.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json
 
 echo
 echo "smoke tests : $PASS passed, $FAIL failed"

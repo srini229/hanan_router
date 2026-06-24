@@ -279,6 +279,7 @@ class Router {
     Geom::LayerTree _ltree;
     std::set<int> _preflayers;
     bool _usepinwidth{false}, _debugplot{false}, _useCpSat{false};
+    int _reorderPasses{10};
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
@@ -486,6 +487,8 @@ class Router {
     bool debug() const { return _debugplot; }
     void setUseCpSat(const bool b) { _useCpSat = b; }
     bool useCpSat() const { return _useCpSat; }
+    void setReorderPasses(const int n) { _reorderPasses = n; }
+    int reorderPasses() const { return _reorderPasses; }
 };
 
 }
