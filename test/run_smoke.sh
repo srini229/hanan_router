@@ -347,7 +347,7 @@ if [ -n "${MAZE_STRESS:-}" ]; then
   ALLOW_UNROUTED=1
   run_case maze30 "MAZE_CONC_0.def" \
     -d $IN/layers.json -p $IN/maze30.placement_verilog.json \
-    -l $IN/m1adj_escape.lef -ndr $IN/maze30_ndr.json -reorder 50
+    -l $IN/m1adj_escape.lef -ndr $IN/maze30_ndr.json
 fi
 
 echo

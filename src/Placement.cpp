@@ -1,6 +1,7 @@
 #include "Util.h"
 #include "Placement.h"
 #include "Escape.h"
+#include <unordered_map>
 
 #include <algorithm>
 
