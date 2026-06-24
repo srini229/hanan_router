@@ -205,7 +205,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
         }
         (*it)->route(router, netObstaclesRouted, netObstaclesUnrouted, _obstacles, true, _uu, _bbox, _name);
         //writeDEF("_" + (*it)->name(), (*it)->name());
-        if ((*it)->unrouted()) anyUnrouted = true;
+        if ((*it)->routable() && (*it)->unrouted()) anyUnrouted = true;
         Geom::MergeLayerRects(netObstaclesRouted, (*it)->routeShapesWithPins());
       }
       return anyUnrouted;
@@ -252,10 +252,11 @@ void Module::route(Router::Router& router, const std::string& outdir)
 
     for (auto& n : _nets) n.second.snapshotRoutes();
 
+    // single-pin (and excluded) nets have nothing to route, so they never count.
     auto countUnrouted = [&]() -> int {
       int c = 0;
       for (auto& n : _nets)
-        if (!n.second.excluded() && n.second.unrouted()) ++c;
+        if (!n.second.excluded() && n.second.routable() && n.second.unrouted()) ++c;
       return c;
     };
 
@@ -296,7 +297,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
         bool any = false;
         for (size_t i = pinned; i < nets.size(); ++i) {
           Net* v = nets[i];
-          if (!v->excluded() && v->unrouted()) { ++blockCount[v]; any = true; }
+          if (!v->excluded() && v->routable() && v->unrouted()) { ++blockCount[v]; any = true; }
         }
         if (!any) break;
 

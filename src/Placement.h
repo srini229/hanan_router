@@ -118,6 +118,11 @@ class Net {
     const Geom::LayerRects& routeShapesWithPins() const { return _routeshapeswithpins; }
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
     bool unrouted() const { return _unroute ? true : false; }
+    // A net needs at least two connection points (real or virtual pins) before
+    // there is anything to route; single-pin nets (e.g. a global signal that
+    // lands on only one instance) have no source/target pair and must not be
+    // counted as unrouted.
+    bool routable() const { return _pins.size() + _vpins.size() >= 2; }
     // Snapshot the pristine (pre-routing) shapes of all pin/virtual-pin ports so
     // they can be restored if the module needs to be re-routed from scratch.
     void snapshotRoutes()
