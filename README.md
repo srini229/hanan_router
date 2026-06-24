@@ -1,111 +1,173 @@
 # Hanan Grid Router
-This is a rectilinear detail router useful for routing and visualizing signal nets on few blocks (both digital and analog).
-It uses a modified version of [A* search aglorithm](https://en.wikipedia.org/wiki/A*_search_algorithm) at its core with the routes on the [Hanan grid](https://doi.org/10.1137/0114025).
 
-For now, the following sets of back-end of line design rules are honored:
+[![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+
+This is a rectilinear detail router useful for routing and visualizing signal nets on a few blocks (both digital and analog).
+It uses a modified version of the [A\* search algorithm](https://en.wikipedia.org/wiki/A*_search_algorithm) at its core, with the routes laid on the [Hanan grid](https://doi.org/10.1137/0114025).
+
+The following back-end-of-line design rules are honored:
 * Manhattan spacing between metal and via shapes on each layer.
-* Metal widths per layer
-* Single/mult-cut vias
-* User-specified non-default rules at a block level or net level. User can override the following
-  - metal spacing and widths in any layer
-  - restrict the use of certain routing layers for certain nets
-  - net/block specific routing obstacle
+* Metal widths per layer.
+* Single / multi-cut vias.
+* User-specified non-default rules (NDR) at a block or net level. A user can override:
+  - metal spacing and widths on any layer,
+  - the set of routing layers allowed for a net,
+  - per-layer routing direction,
+  - net/block specific routing obstacles.
+
+Beyond the core router it also provides:
+* a **pre-routing pin-escape feasibility check** that proves (via a small SAT solver) that every pin can leave its cell before any net is routed;
+* an **automatic net-ordering search** that, when nets are left open, promotes the blocked nets up the routing order and retries (reorder);
+* an **adjacent-obstacle retry** that frees a blocked pin's escape layer;
 
 
 # Building the router
+
 Requirements:
-  * A C++ compiler with support for C++14 or higher
-  * `make` system
-  
+  * A C++ compiler with support for C++14 or higher (GCC or Clang).
+  * `make`.
+  * Boost development headers (used by `boost.polygon`); e.g. `libboost-dev` on Debian/Ubuntu.
+
+The router has **no other external dependencies** — the JSON parser, LEF parser and R-Tree are vendored in the repository.
+
 Steps to clone and build:
   ```
   git clone https://github.com/srini229/hanan_router.git
   cd hanan_router
   make -j4
   ```
-The build commands have been verified on: Ubuntu 18.04 (GCC 6), Fedora  36 (GCC 12), Debian 10 on WSL (GCC 8), and Mac OS 10.15 (Clang 11).
-  
- Make generates a binary `hanan_router` on the cloned directory. 
- The repository has a frozen copy of the [`nlohmann/JSON`](https://github.com/nlohmann/json) parser packaged with it to parse the netlist, layer information and user constraints.
- It has a small version of LEF parser that understands basic LEF syntax for now. The router uses `RTree` data structure to quickly accessing the geometric structures from memory.
- It has a copy of the [`RTree`](https://superliminal.com/sources/RTreeTemplate.zip). 
- Migration of the JSON/RTree APIs to [Boost](https://www.boost.org/) libraries is a work in progress. This will eliminate the need for these separate thirdparty libraries.
- 
- The JSON file formats reuse the syntax from the [ALIGN](https://github.com/ALIGN-analoglayout/ALIGN-public) project. A generic version to use LEF/DEF files of the netlist/design rules is a work in progress.
+The build has been verified on Ubuntu (GCC), Fedora (GCC), Debian on WSL (GCC) and macOS (Clang).
 
-# Interface
-The router syntax is:
-```
-usage : hanan_router
-	-d <layers.json> ; # Abstracted information for each layer metal/via layer used in a technology
-	-p <placement file> ; # Placement information in JSON format
-	-l <lef file> ; # LEF file containing the pin/blockage information for each leaf cell
-	-s <lef scaling> ; # units used in the LEF file
-	-uu <user units scaling> ; # user units scaling for placement file (e.g. nm/um)
-	-ndr <ndr constraints.json> -o <output dir> ; # user specified non-default rules
-```
-The router generates one LEF and one DEF for each hierarchy in the placement. The LEF file has the suffix `_interim_hier.lef`.
-There is also a `route.log` created which has a detailed log of the routers activity.
+`make` produces a `hanan_router` binary in the repository root.
+The repository bundles a frozen copy of the [`nlohmann/JSON`](https://github.com/nlohmann/json) parser (netlist, layers and constraints) and a copy of the [`RTree`](https://superliminal.com/sources/RTreeTemplate.zip) template used for fast geometric queries. It also has a small LEF parser that understands basic LEF syntax.
 
-There is also a GDSII file generator available in the `bin/` directory.
-It is written in python and requires the the following packages `numpy`, `gdspy`, `json`, and `argparse`.
-Any missing package can be installed using the command `pip install <package>`.
-The syntax to generate the GDSII files using the LEF/DEF files is:
-```
-usage: gen_rt_gds.py [-h] [-p PL_FILE] [-g GDS_DIR] [-t TOP_CELL] [-u UNITS] [-s SCALE] [-l LAYERS] [-d DEFF]
+The JSON file formats reuse the syntax from the [ALIGN](https://github.com/ALIGN-analoglayout/ALIGN-public) project. A generic version using standard LEF/DEF for the netlist/design rules is a work in progress.
 
-options:
-  -h, --help            show this help message and exit
-  -p PL_FILE, --pl_file PL_FILE
-                        <filename.placement_verilog.json>
-  -g GDS_DIR, --gds_dir GDS_DIR
-                        <dir with all leaf gds files>
-  -t TOP_CELL, --top_cell TOP_CELL
-                        <top cell>
-  -u UNITS, --units UNITS
-                        <units in m>
-  -s SCALE, --scale SCALE
-                        <scale>
-  -l LAYERS, --layers LAYERS
-                        <layers.json>
-  -d DEFF, --deff DEFF  <route def file>
+
+# Usage
 
 ```
+hanan_router -d <layers.json> -p <placement file> -l <lef file> [options]
+```
 
-# Test directory
-There is a small unit test directory `test/`.
-To run the test:
-```
-./hanan_router -d layers.json -p test.placement_verilog.json -l test.lef
+| Option | Required | Description |
+|--------|----------|-------------|
+| `-d <layers.json>` | yes | Abstracted information for each metal/via layer of the technology. |
+| `-p <placement file>` | yes | Placement / netlist in JSON (ALIGN `placement_verilog.json` format). |
+| `-l <lef file>` | yes | LEF with the pin/blockage (OBS) information for each leaf cell. |
+| `-ndr <ndr.json>` | no | User-specified non-default rules (see [NDR constraints](#ndr-constraints)). |
+| `-o <output dir>` | no | Output directory for the generated LEF/DEF (default `./`). |
+| `-r <precision>` | no | Coordinate precision / rounding (default `1`). |
+| `-reorder <N>` | no | Max alternate net-ordering passes to try when nets remain unrouted (default `10`; `0` disables the search). |
+| `-uu <scale>` | no | User-units scaling for the placement file (e.g. nm/um). |
+| `-s` | no | Treat the LEF as scaled by `-uu`. |
+| `-uil <dir>` | no | Reuse previously-generated interim LEFs from `<dir>` for hierarchical blocks. |
+| `-sep <str>` | no | Hierarchy name separator. |
+| `-log <file>` | no | Log file name (default `route.log`). |
 
-```
-The `ndr1.json`, `ndr2.json` and `ndr3.json` demonstrate different user constraints. To run the router with the user constraints:
-```
-./hanan_router -d layers.json -p test.placement_verilog.json -l test.lef.
 
+## Output
+
+The router generates one LEF and one DEF for each hierarchy in the placement; the interim per-block LEF has the suffix `_interim_hier.lef`. A `route.log` with a detailed activity log is also written.
+
+For every routed module the log contains an authoritative summary line:
 ```
-A smoke test suite covering the example configurations (basic routing, NDR
-widths/spaces, directions, preferred layers, virtual pins, clock nets,
-do-not-route, routing order, pin-width matching, large detours, obstacles
-(NDR and LEF OBS), custom via arrays, precision rounding, mirrored
-placements, debug dumps and interim LEF reuse) can be run with:
+ROUTE_SUMMARY module=<name> nets=<routable nets> unrouted=<count>
+```
+`unrouted=0` means the module routed completely. Single-pin nets (nothing to route) are excluded from both counts. This line is the recommended hook for scripts/CI; the smoke harness reads it directly.
+
+The LEF/DEF can be visualized with [`klayout`](https://klayout.de/).
+
+
+# Routing behavior
+
+* **Pin-escape feasibility (SAT).** Before routing, the router proves each pin has at least one legal escape (a via up/down or a same-layer stub) without different nets' escapes clashing. Infeasible pins are reported up front (`pin escape SAT : ...`).
+* **Net ordering search.** If a first pass leaves nets open, the router retries with the nets that were blocked promoted up the order (`promoting blocked nets up the routing order`), iterating up to `-reorder N` passes and keeping the order that routes the most nets. It re-routes the best order found if needed (`re-routing with best ordering`).
+* **Adjacent-obstacle retry.** When a net's straight wire would cap another net's M1 pin, the blocking pin is projected onto the adjacent metal as an obstacle so the first net detours and leaves the escape free.
+* **Coincident-pin merge.** Two different nets whose pins sit on the same point are physically one node; the router warns (`... has pin(s) coincident with net ...; merging them into one connected net`) and merges them so they route connected instead of shorting.
+* **Unconnected-pin protection.** Instance pins not wired to any net are added as obstacles so no route lands on them.
+
+
+# NDR constraints
+
+The optional `-ndr <file>` is a JSON array of per-module objects. Module-level keys apply to all of a module's nets; a `nets` list overrides per net.
+
+```json
+[
+  {
+    "module": "BLOCK_CONC_0",
+    "directions":   { "M3": "H", "M4": "V" },
+    "use_pin_width": 1,
+    "routing_order": ["CLK", "D"],
+    "obstacles": [ { "shapes": { "M2": [[100, 0, 160, 400]] } } ],
+    "nets": [
+      {
+        "name": "CLK",
+        "widths":           { "M3": 60, "M4": 72 },
+        "spaces":           { "M3": 60, "M4": 72 },
+        "preferred_layers": ["M3", "M4"],
+        "large_detour":     "allowed",
+        "virtual_pins":     [ { "M3": [[1250, 190, 1282, 222]] } ]
+      },
+      { "name": "D", "do_not_route": 1 }
+    ],
+    "clock_nets": [ { "name": "CLK", "driver": "U1/Y" } ]
+  }
+]
+```
+
+| Key | Scope | Meaning |
+|-----|-------|---------|
+| `widths` / `spaces` | module / net | Per-layer non-default metal width / spacing. |
+| `preferred_layers` | module / net | Restrict routing to these layers (raises the cost of others). |
+| `directions` | module / net | Per-layer routing direction (`H`/`V`/`O`). |
+| `large_detour` | net | `"allowed"` lets the net route well outside its pin bounding box. |
+| `routing_order` | module | Pin/route these nets first, in the given order. |
+| `use_pin_width` | module | Match wire width to the pin width where it helps escape. |
+| `do_not_route` | net | Exclude the net from routing (kept as an obstacle). |
+| `obstacles` | module / net | Extra routing blockages, as per-layer rectangle lists. |
+| `virtual_pins` | net | Additional routing targets (e.g. a clock spine entry). |
+| `clock_nets` | module | Mark a net as a clock with a named driver for ordering. |
+
+
+# Tests
+
+A smoke-test suite under `test/` exercises the example configurations: basic routing, NDR widths/spaces/directions/preferred-layers, virtual pins, clock nets, do-not-route, routing order, pin-width matching, large detours, NDR and LEF-OBS obstacles, custom via arrays, precision rounding, mirrored placements, debug dumps, interim-LEF reuse, the pin-escape SAT check, the net-ordering reorder search, coincident-pin merging, CLI/error-handling paths and a 30-net throughput case.
+
+Run it with:
 ```
 make test
 ```
-Outputs of the smoke test will be in `test/smoke_out/<case>/`.
+Each case runs in `test/smoke_out/<case>/`. The harness checks the exit code, that the expected DEFs contain routes, that there are **no shorts**, and the per-module `ROUTE_SUMMARY` unrouted count, plus case-specific log assertions.
 
-Code coverage of the smoke suite (clang source-based instrumentation) can be
-generated with:
+A slow (~25 s) 30-net **maze** stress case is gated off by default; enable it with:
+```
+MAZE_STRESS=1 make test
+```
+`test/maze_quality.py <module.def> <placement.json>` reports solution quality (completion, wirelength, via count and detour ratio) for a routed DEF.
+
+Code coverage of the smoke suite (Clang source-based instrumentation):
 ```
 make coverage
 ```
-This builds an instrumented `hanan_router_cov`, runs the smoke tests with it
-and writes the reports under `coverage/` : `summary.txt` (per-file),
-`functions.txt` (per-routine) and `html/index.html` (annotated sources).
-The LEF/DEF outputs generated by the router can be visualized using [`klayout`](https://klayout.de/).
+This builds an instrumented `hanan_router_cov`, runs the suite with it, and writes reports under `coverage/`: `summary.txt` (per file), `functions.txt` (per routine) and `html/index.html` (annotated sources).
 
-To generate GDSII file from the LEF/DEF files use:
+
+# Continuous integration
+
+`.github/workflows/ci.yml` builds the router and runs the smoke suite on every push to `master` and on pull requests targeting it. The job status is reported as the commit's check, and a pass/fail summary of the smoke suite (with any failing cases) is published to the run page.
+
+
+# Visualization and GDSII
+
+A GDSII generator is available in `bin/`. It is written in Python and requires `numpy`, `gdspy`, `json` and `argparse` (`pip install <package>` for any missing one):
+
 ```
-../bin/gen_rt_gds.py -p test.placement_verilog.json -g . -t TEST_CONC_0  -l layers.json -d TEST_CONC_0.def 
+usage: gen_rt_gds.py [-h] [-p PL_FILE] [-g GDS_DIR] [-t TOP_CELL] [-u UNITS] [-s SCALE] [-l LAYERS] [-d DEFF]
 ```
-The GDSII files can be visualized in klayout as well. The GDSII file can be imported into commercial PnR tools using the stream in function.
+
+For example:
+```
+../bin/gen_rt_gds.py -p test.placement_verilog.json -g . -t TEST_CONC_0 -l layers.json -d TEST_CONC_0.def
+```
+The generated GDSII can be viewed in klayout and streamed into commercial P&R tools.
