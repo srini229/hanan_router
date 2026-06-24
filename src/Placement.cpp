@@ -2,6 +2,7 @@
 #include "Placement.h"
 #include "Escape.h"
 #include <unordered_map>
+#include <tuple>
 
 #include <algorithm>
 
@@ -92,6 +93,69 @@ void Module::build()
   _tmpnetpins.clear();
 }
 
+int Module::mergeCoincidentNets()
+{
+  // Index every real-pin footprint as (layer, rect). When a footprint is already
+  // owned by a different net, the two nets occupy the same physical point and are
+  // electrically one -- union them (union-find over Net*).
+  std::map<std::tuple<int, int, int, int, int>, Net*> owner;
+  std::map<Net*, Net*> uf;
+  for (auto& np : _nets) uf[&np.second] = &np.second;
+  auto find = [&](Net* n) -> Net* {
+    Net* r = n;
+    while (uf[r] != r) r = uf[r];
+    while (uf[n] != r) { Net* nx = uf[n]; uf[n] = r; n = nx; }  // path-halve
+    return r;
+  };
+  for (auto& np : _nets) {
+    Net* net = &np.second;
+    for (auto pin : net->pins())
+      for (auto port : pin->ports())
+        for (auto& l : port->shapes())
+          for (auto& r : l.second) {
+            auto key = std::make_tuple(l.first, r.xmin(), r.ymin(), r.xmax(), r.ymax());
+            auto it = owner.find(key);
+            if (it == owner.end()) { owner.emplace(key, net); continue; }
+            Net* a = find(it->second), *b = find(net);
+            if (a != b) uf[b] = a;
+          }
+  }
+  // Move every merged net's pins into its representative and empty the originals
+  // so they route as a single connected net (and cannot short each other). Skip
+  // pins whose footprint the representative already covers -- two pins on the
+  // exact same point would otherwise become a degenerate (zero-length) routing
+  // pair that the maze router cannot solve.
+  using FP = std::tuple<int, int, int, int, int>;
+  auto pinFootprints = [](const Pin* p, std::set<FP>& s) {
+    for (auto port : p->ports())
+      for (auto& l : port->shapes())
+        for (auto& r : l.second)
+          s.emplace(l.first, r.xmin(), r.ymin(), r.xmax(), r.ymax());
+  };
+  int merges = 0;
+  for (auto& np : _nets) {
+    Net* net = &np.second;
+    Net* rep = find(net);
+    if (rep == net) continue;
+    std::set<FP> have;
+    for (auto pin : rep->pins()) pinFootprints(pin, have);
+    COUT << "WARNING: net " << net->name() << " has pin(s) coincident with net "
+         << rep->name() << "; merging them into one connected net\n";
+    for (auto pin : net->pins()) {
+      std::set<FP> fp;
+      pinFootprints(pin, fp);
+      bool dup = false;
+      for (const auto& f : fp) if (have.count(f)) { dup = true; break; }
+      if (!dup) { rep->addPin(pin); have.insert(fp.begin(), fp.end()); }
+    }
+    net->clearPins();
+    ++merges;
+  }
+  if (merges)
+    COUT << "merged " << merges << " coincident-pin net(s) in module " << _name << '\n';
+  return merges;
+}
+
 void Module::route(Router::Router& router, const std::string& outdir)
 {
   TIME_M();
@@ -119,6 +183,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
       }
     }
     updateNets();
+    mergeCoincidentNets();   // warn + merge nets whose pins sit on the same point
     {
       std::set<const Pin*> connectedPins;
       for (auto& n : _nets) {

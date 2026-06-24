@@ -105,6 +105,7 @@ class Net {
     const std::set<const Pin*>& pins() const { return _pins; }
     const std::set<const Pin*>& virtualpins() const { return _vpins; }
     void addPin(const Pin* p) { _pins.insert(p); }
+    void clearPins() { _pins.clear(); }
     void addVirtualPin(const Geom::LayerRects& r)
     {
       Pin *npin = new Pin(_name + "_vp_" + std::to_string(_vpins.size()), true);
@@ -290,6 +291,11 @@ class Module {
         n.second.update();
       }
     }
+    // Different nets whose pins share an identical footprint are physically the
+    // same point (e.g. two instance pins placed on top of each other). Routing
+    // them as separate nets must short. Instead, warn and merge them into one
+    // net so they are routed connected. Returns the number of merges performed.
+    int mergeCoincidentNets();
 
     void addNDRWidth(const int layer, const int ws, const std::string& netName = "")
     {

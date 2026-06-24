@@ -331,7 +331,17 @@ LOGMUST="net : VDD num pins"
 run_case global_net "GLOB_CONC_0.def" \
   -d $IN/layers.json -p $IN/global_net.placement_verilog.json -l $IN/m1adj_escape.lef
 
-# 30. net30: a 30-net module (30 parallel 2-pin nets on a 120-unit pitch) -- a
+# 30. coincident_pin: nets A and B have a pin at the IDENTICAL location (700,300)
+#     -- physically one point. Routing them separately must short; instead the
+#     router warns and merges them into one connected net (dropping the redundant
+#     coincident pin). LOGMUST checks the warning; the suite's short check (must be
+#     0) and ROUTE_SUMMARY unrouted=0 confirm the merged net routes cleanly.
+LOGMUST="has pin(s) coincident with net|merging them into one connected net"
+NETROUTED="A"
+run_case coincident_pin "COIN_CONC_0.def" \
+  -d $IN/layers.json -p $IN/coincident_pin.placement_verilog.json -l $IN/m1adj_escape.lef
+
+# 31. net30: a 30-net module (30 parallel 2-pin nets on a 120-unit pitch) -- a
 #     larger throughput check. All thirty route; the harness flags any unrouted
 #     net via ROUTE_SUMMARY. LOGMUST asserts the full 30-net, 0-unrouted summary.
 LOGMUST="ROUTE_SUMMARY module=NET30_CONC_0 nets=30 unrouted=0"
