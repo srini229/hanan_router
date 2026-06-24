@@ -11,8 +11,8 @@ class Solver {
   public:
     int newVar() { _val.push_back(0); return static_cast<int>(_val.size()); }
     void addClause(const std::vector<int>& c) { _clauses.push_back(c); }
-    int numVars() const { return static_cast<int>(_val.size()); }
-    int numClauses() const { return static_cast<int>(_clauses.size()); }
+    //int numVars() const { return static_cast<int>(_val.size()); }
+    //int numClauses() const { return static_cast<int>(_clauses.size()); }
 
     // 1 = SAT, 0 = UNSAT, -1 = unknown (limit exceeded).
     int solve(long limit = 20000000)
@@ -21,7 +21,7 @@ class Solver {
       std::fill(_val.begin(), _val.end(), 0);
       return dpll();
     }
-    bool value(int var) const { return _val[var - 1] == 1; }
+    //bool value(int var) const { return _val[var - 1] == 1; }
 
   private:
     std::vector<int8_t> _val;

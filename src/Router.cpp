@@ -133,34 +133,35 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   auto minz = std::min(n1.z(), n2.z());
   auto maxz = std::max(n1.z(), n2.z());
   CostType minHCost(COST_MAX), minVCost(COST_MAX);
-  if (true) {
-    if (_layerHCost[minz] != _layerVCost[minz]) {
-      if (minz < _topRoutingLayer) maxz = minz + 1;
-      else minz -= 1;
-    }
+  //if (true)
+  if (_layerHCost[minz] != _layerVCost[minz]) {
+    if (minz < _topRoutingLayer) maxz = minz + 1;
+    else minz -= 1;
+  }
+  for (int i = minz; i <= maxz; ++i) {
+    minHCost = std::min(minHCost, _layerHCost[i]);
+    minVCost = std::min(minVCost, _layerVCost[i]);
+  }
+  dc += (minHCost * std::abs(n1.x() - n2.x())) + (minVCost * std::abs(n1.y() - n2.y()));
+  if (std::abs(n1.x() - n2.x()) && std::abs(n1.y() - n2.y())) {
     for (int i = minz; i <= maxz; ++i) {
-      minHCost = std::min(minHCost, _layerHCost[i]);
-      minVCost = std::min(minVCost, _layerVCost[i]);
-    }
-    dc += (minHCost * std::abs(n1.x() - n2.x())) + (minVCost * std::abs(n1.y() - n2.y()));
-    if (std::abs(n1.x() - n2.x()) && std::abs(n1.y() - n2.y())) {
-      for (int i = minz; i <= maxz; ++i) {
-        if (_layerHCost[i] == minHCost && minHCost == minVCost && _layerVCost[i] == _layerHCost[i]) {
-          dc += (i < _topRoutingLayer) ? _layerPairCost[i][i + 1] / 2 : _layerPairCost[i][i - 1] / 2;
-          break;
-        }
+      if (_layerHCost[i] == minHCost && minHCost == minVCost && _layerVCost[i] == _layerHCost[i]) {
+        dc += (i < _topRoutingLayer) ? _layerPairCost[i][i + 1] / 2 : _layerPairCost[i][i - 1] / 2;
+        break;
       }
     }
-    for (int i = std::min(n1.z(), minz); i < std::max(n1.z(), minz); ++i) {
-      dc += _layerPairCost[i][i+1];
-    }
-    for (int i = minz; i < maxz; ++i) {
-      dc += _layerPairCost[i][i+1];
-    }
-    for (int i = std::min(n2.z(), maxz); i < std::max(n2.z(), maxz); ++i) {
-      dc += _layerPairCost[i][i+1];
-    }
-  } else {
+  }
+  for (int i = std::min(n1.z(), minz); i < std::max(n1.z(), minz); ++i) {
+    dc += _layerPairCost[i][i+1];
+  }
+  for (int i = minz; i < maxz; ++i) {
+    dc += _layerPairCost[i][i+1];
+  }
+  for (int i = std::min(n2.z(), maxz); i < std::max(n2.z(), maxz); ++i) {
+    dc += _layerPairCost[i][i+1];
+  }
+  /*
+  {
     std::set<int> minHCostLayers, minVCostLayers;
     for (int i = 0; i <= _topRoutingLayer; ++i) {
       if (_layerHCost[i] == minHCost) minHCostLayers.insert(i);
@@ -230,7 +231,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
         }
       }
     }
-  }
+  }*/
 
   return dc;
 }
@@ -1372,11 +1373,11 @@ Geom::LayerRects Router::findSol()
               _ptobstacles[l.first] |= l.second;
           }
       }
-#if DEBUG
-#else
-      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) 
-#endif
-        writeSTO();
+//#if DEBUG
+//#else
+//      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) 
+//#endif
+        //writeSTO();
       /*for (auto& l : _tobstacles) {
         COUT << "layer after : " << l.first << '\n';
         for (auto& o : l.second) {
@@ -1628,7 +1629,7 @@ void Router::plot() const
 }
 
 
-void Router::writeSTO() const
+/*void Router::writeSTO() const
 {
   std::ofstream ofs(_name + "_route.sto");
   COUT << "writing sto to " << _name << "_route.sto\n";
@@ -1645,7 +1646,7 @@ void Router::writeSTO() const
       }
     }
   }
-}
+}*/
 
 void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
 {

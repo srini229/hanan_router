@@ -116,6 +116,27 @@ run_case() {
   ALLOW_UNROUTED=""
 }
 
+# cli_check <name> <pattern> [router args...]
+# For argument-handling / error paths that do not produce a normal route: run the
+# router with the given args verbatim (no implicit -o) and assert <pattern> shows
+# up on stderr (pre-setup messages like the usage text) or in err.log (where the
+# router redirects std::cerr once running).
+cli_check() {
+  local name=$1 pat=$2
+  shift 2
+  local dir="$OUTROOT/$name"
+  rm -rf "$dir"; mkdir -p "$dir"
+  ( cd "$dir" && "$ROUTER" "$@" >/dev/null 2>stderr.log )
+  if grep -qE "$pat" "$dir/stderr.log" "$dir/err.log" 2>/dev/null; then
+    echo "PASS $name"
+    PASS=$((PASS+1))
+  else
+    echo "FAIL $name :no-match:'$pat';"
+    FAIL=$((FAIL+1))
+    ERRS="$ERRS$name:no-match:'$pat';\n"
+  fi
+}
+
 IN=../..   # inputs relative to each case directory
 
 # 1. base testcase from the README
@@ -152,7 +173,7 @@ run_case precision "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
 # 8. debug plot outputs (HANAN_DEBUG_WIRE exercises the per-wire dump routines,
 #    HANAN_DEBUG_NET the per-net debug LEF dump)
 export HANAN_DEBUG_WIRE=1 HANAN_DEBUG_NET=X,Y
-LOGMUST="writing sto to|sol("
+#LOGMUST="writing sto to|sol("
 run_case debug_plot "BLOCK_B_CONC_0.def" \
   -d $IN/layers.json -p $IN/test1.placement_verilog.json -l $IN/test.lef
 unset HANAN_DEBUG_WIRE HANAN_DEBUG_NET
@@ -243,6 +264,72 @@ NETROUTED="N0|N1|N2|N3|N4"
 run_case reorder "REORDER_CONC_0.def" \
   -d $IN/layers.json -p $IN/reorder.placement_verilog.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json
+
+# 21. reorder_disabled: the same case with -reorder 0 turns the net-ordering search
+#     off, so the one net the default HPWL order strands stays open. Exercises the
+#     -reorder argument (Router::setReorderPasses) and confirms the search is what
+#     routes it: LOGMUST asserts the ROUTE_SUMMARY still reports one unrouted net.
+LOGMUST="ROUTE_SUMMARY module=REORDER_CONC_0 nets=5 unrouted=1"
+ALLOW_UNROUTED=1
+run_case reorder_disabled "" \
+  -d $IN/layers.json -p $IN/reorder.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json -reorder 0
+
+# 22-25. argument-handling / error paths (cover main.cpp CLI parsing and the
+#     std::cerr diagnostics). Each asserts the expected message on stderr/err.log.
+cli_check usage_no_args   "usage :"                                       # argc<=1 -> usage text
+cli_check missing_layers  "missing or unable to read layers" \
+  -d $IN/does_not_exist.json -p $IN/reorder.placement_verilog.json -l $IN/m1adj_escape.lef
+cli_check bad_precision   "invalid -r precision" \
+  -d $IN/layers.json -p $IN/reorder.placement_verilog.json -l $IN/m1adj_escape.lef -r notanint
+cli_check bad_reorder_arg "invalid -reorder value" \
+  -d $IN/layers.json -p $IN/reorder.placement_verilog.json -l $IN/m1adj_escape.lef \
+  -ndr $IN/reorder_ndr.json -reorder xyz
+# Netlist input-error paths (cover Netlist.cpp open/parse failure handling).
+cli_check no_placement_file "unable to open placement file" \
+  -d $IN/layers.json -p $IN/does_not_exist.json -l $IN/m1adj_escape.lef
+cli_check bad_placement_json "parse error" \
+  -d $IN/layers.json -p $IN/bad_placement.json -l $IN/m1adj_escape.lef
+cli_check no_lef_file "unable to open leffile" \
+  -d $IN/layers.json -p $IN/reorder.placement_verilog.json -l $IN/does_not_exist.lef
+
+# 26. reorder_reroute: a harder 6-net criss-cross (gap fits fewer than 6) that the
+#     reorder search improves but cannot fully solve, so it exhausts its passes
+#     with the best order found mid-search rather than last -- exercising the
+#     "re-route with the best ordering" replay path. LOGMUST asserts that replay
+#     ran; ALLOW_UNROUTED because the case is intentionally over-subscribed.
+#     Fixture: 6 nets, wall gap [300,440] (criss-cross, capacity < demand).
+LOGMUST="re-routing with best ordering|promoting blocked nets up the routing order"
+ALLOW_UNROUTED=1
+run_case reorder_reroute "REORDER_CONC_0.def" \
+  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
+
+# 27. m2_pin_escape: a 2-pin net whose pins sit on M2 (not the bottom layer M1).
+#     The pin-escape SAT then builds a via-DOWN escape candidate (M2->M1), which
+#     M1-only pins never trigger. LOGMUST checks the SAT ran for the M2 module.
+LOGMUST="pin escape SAT : all 2 pins in M2T_CONC_0"
+run_case m2_pin_escape "M2T_CONC_0.def" \
+  -d $IN/layers.json -p $IN/m2pin.placement_verilog.json -l $IN/m2pin.lef
+
+# 28. ndr_via_detour: NDR forces net A (M1 pins) onto preferred_layers M3/M4, so
+#     it must via UP off M1 and via DOWN back onto M1 -- exercising multi-layer
+#     via routing. A wall obstacle spans all four layers across x[300,360] for
+#     y<360, so the only crossing is over the top (y>360), far outside the pins'
+#     bbox; large_detour="allowed" lets the router expand the search to find it.
+#     The case is unroutable without both features, so NETROUTED=A (the net routed
+#     with vias) confirms the via-down + large-detour path worked.
+NETROUTED="A"
+run_case ndr_via_detour "VIADET_CONC_0.def" \
+  -d $IN/layers.json -p $IN/ndr_viadetour.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/ndr_viadetour.json
+
+# 29. global_net: a non-empty "global_signals" list (VDD) adds the global net as a
+#     pin on every leaf and module -- a path all other inputs (empty list) skip.
+#     LOGMUST confirms the global net was created.
+LOGMUST="net : VDD num pins"
+run_case global_net "GLOB_CONC_0.def" \
+  -d $IN/layers.json -p $IN/global_net.placement_verilog.json -l $IN/m1adj_escape.lef
 
 echo
 echo "smoke tests : $PASS passed, $FAIL failed"

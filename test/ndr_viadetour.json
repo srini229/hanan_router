@@ -1,0 +1,16 @@
+[
+  {
+    "module": "VIADET_CONC_0",
+    "obstacles": [
+      { "shapes": {
+          "M1": [[300,0,360,360]],
+          "M2": [[300,0,360,360]],
+          "M3": [[300,0,360,360]],
+          "M4": [[300,0,360,360]]
+      } }
+    ],
+    "nets": [
+      { "name": "A", "preferred_layers": ["M3","M4"], "large_detour": "allowed" }
+    ]
+  }
+]

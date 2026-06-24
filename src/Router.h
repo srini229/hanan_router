@@ -429,7 +429,7 @@ class Router {
     void setMBox(const Geom::Rect& box) { _mbox = box; }
     void printSol() const;
     void plot() const;
-    void writeSTO() const;
+    //void writeSTO() const;
     void clearObstacles(bool temp = false)
     {
       if(temp) {
