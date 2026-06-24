@@ -331,6 +331,25 @@ LOGMUST="net : VDD num pins"
 run_case global_net "GLOB_CONC_0.def" \
   -d $IN/layers.json -p $IN/global_net.placement_verilog.json -l $IN/m1adj_escape.lef
 
+# 30. net30: a 30-net module (30 parallel 2-pin nets on a 120-unit pitch) -- a
+#     larger throughput check. All thirty route; the harness flags any unrouted
+#     net via ROUTE_SUMMARY. LOGMUST asserts the full 30-net, 0-unrouted summary.
+LOGMUST="ROUTE_SUMMARY module=NET30_CONC_0 nets=30 unrouted=0"
+run_case net30 "NET30_CONC_0.def" \
+  -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
+
+# 31. maze30 (opt-in stress, ~25s): the same 30 nets crossing a staggered-gap
+#     wall, every net flagged large_detour so it can weave around it. Deliberately
+#     hard -- the router leaves ~1/3 of the nets unrouted. Off by default because
+#     of its runtime; run with:  MAZE_STRESS=1 ./run_smoke.sh
+#     Solution quality: python3 maze_quality.py <def> maze30.placement_verilog.json
+if [ -n "${MAZE_STRESS:-}" ]; then
+  ALLOW_UNROUTED=1
+  run_case maze30 "MAZE_CONC_0.def" \
+    -d $IN/layers.json -p $IN/maze30.placement_verilog.json \
+    -l $IN/m1adj_escape.lef -ndr $IN/maze30_ndr.json -reorder 50
+fi
+
 echo
 echo "smoke tests : $PASS passed, $FAIL failed"
 if [ $FAIL -ne 0 ]; then
