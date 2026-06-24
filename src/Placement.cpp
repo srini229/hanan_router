@@ -274,11 +274,16 @@ void Module::route(Router::Router& router, const std::string& outdir)
 
     int bestUnrouted = attempt();
 
+    // If nets remain open, the net ordering is usually to blame: a net routed
+    // early lays wire across a resource a later net needs, leaving it blocked.
+    // Iterate (rip-up and reorder), each pass giving the nets that were left open
+    // a higher priority so they route earlier, and keep the order that leaves the
+    // fewest nets open.
     const int passes = router.reorderPasses();
     const size_t pinned = _routeorder.size();
     if (bestUnrouted > 0 && passes > 0 && nets.size() > pinned + 1) {
       COUT << "module " << _name << " has " << bestUnrouted
-           << " unrouted net(s); reordering blocked nets ahead of their blockers (up to "
+           << " unrouted net(s); promoting blocked nets up the routing order (up to "
            << passes << " pass(es))\n";
       NetsVec bestOrder = nets;
       std::unordered_map<const Net*, int> blockCount;   // times a net was left open
@@ -286,8 +291,8 @@ void Module::route(Router::Router& router, const std::string& outdir)
       for (size_t i = pinned; i < nets.size(); ++i) baseIdx[nets[i]] = static_cast<int>(i);
 
       for (int pass = 0; pass < passes && bestUnrouted > 0; ++pass) {
-        // charge every net the latest attempt left open: these are the nets in
-        // conflict, and each gets a higher priority for the next ordering.
+        // raise the priority of every net the latest attempt left open: a net
+        // that stays blocked keeps climbing until it routes before the rest.
         bool any = false;
         for (size_t i = pinned; i < nets.size(); ++i) {
           Net* v = nets[i];
@@ -295,8 +300,12 @@ void Module::route(Router::Router& router, const std::string& outdir)
         }
         if (!any) break;
 
-        // re-sort the orderable tail: most-blocked nets first, original order on
-        // ties. Blocked nets thus move ahead of the routed nets that blocked them.
+        // re-sort descending block priority (original HPWL order breaks ties):
+        // nets that have been left open rise toward the front
+        // so they get first claim on the contested resources next time, ahead of
+        // the nets that previously routed before them. This is priority promotion,
+        // not an explicit blocker lookup -- the blocked nets simply outrank the
+        // ones that aren't (yet) blocked.
         NetsVec newOrder = nets;
         std::stable_sort(newOrder.begin() + pinned, newOrder.end(),
           [&](const Net* a, const Net* b) {
@@ -320,6 +329,14 @@ void Module::route(Router::Router& router, const std::string& outdir)
         attempt();
       }
     }
+
+    // Authoritative per-module routing result. Emitted as one structured line so
+    // that downstream consumers (e.g. the smoke harness) can read the final
+    // unrouted count directly instead of scraping per-attempt "sol not found"
+    // lines, which over-count across the base/adj sub-passes and reorder passes.
+    COUT << "ROUTE_SUMMARY module=" << _name << " nets=" << nets.size()
+         << " unrouted=" << countUnrouted() << '\n';
+
     router.clearObstacles();
     std::set<std::string> _addednets;
     for (auto& p : _pins) {
