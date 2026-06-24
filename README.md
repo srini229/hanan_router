@@ -153,11 +153,6 @@ make coverage
 This builds an instrumented `hanan_router_cov`, runs the suite with it, and writes reports under `coverage/`: `summary.txt` (per file), `functions.txt` (per routine) and `html/index.html` (annotated sources).
 
 
-# Continuous integration
-
-`.github/workflows/ci.yml` builds the router and runs the smoke suite on every push to `master` and on pull requests targeting it. The job status is reported as the commit's check, and a pass/fail summary of the smoke suite (with any failing cases) is published to the run page.
-
-
 # Visualization and GDSII
 
 A GDSII generator is available in `bin/`. It is written in Python and requires `numpy`, `gdspy`, `json` and `argparse` (`pip install <package>` for any missing one):
