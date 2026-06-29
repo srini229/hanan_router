@@ -88,6 +88,7 @@ The LEF/DEF can be visualized with [`klayout`](https://klayout.de/).
 * **Adjacent-obstacle retry.** When a net's straight wire would cap another net's M1 pin, the blocking pin is projected onto the adjacent metal as an obstacle so the first net detours and leaves the escape free.
 * **Coincident-pin merge.** Two different nets whose pins sit on the same point are physically one node; the router warns (`... has pin(s) coincident with net ...; merging them into one connected net`) and merges them so they route connected instead of shorting.
 * **Unconnected-pin protection.** Instance pins not wired to any net are added as obstacles so no route lands on them.
+* **Obstacle locality.** A net's search never leaves its pin bounding box expanded by a bounded margin, so the module's obstacles are indexed in an R-tree and each net is given only the obstacles near it. This keeps per-net routing cost proportional to the *local* obstacle count rather than the whole design's, without changing the routed result.
 
 ## Parallel routing
 
@@ -167,6 +168,15 @@ A slow (~25 s) 30-net **maze** stress case is gated off by default; enable it wi
 MAZE_STRESS=1 make test
 ```
 `test/maze_quality.py <module.def> <placement.json>` reports solution quality (completion, wirelength, via count and detour ratio) for a routed DEF.
+
+A **parallel-routing** case (also off by default) generates a batch
+of many disjoint, individually-expensive nets, routes it sequentially and with
+several worker threads, and asserts the threaded run is both substantially faster
+and produces identical wires. Enable it with:
+```
+PERF_STRESS=1 make test
+```
+It prints the measured speedup, e.g. `seq=0.30s 4-thread=0.16s 1.86x on 8 cores`.
 
 Code coverage of the smoke suite (Clang source-based instrumentation):
 ```

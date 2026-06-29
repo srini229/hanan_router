@@ -137,6 +137,76 @@ cli_check() {
   fi
 }
 
+# perf_parallel_speedup: route a heavy, fully-parallelizable design (many
+# disjoint, individually-expensive nets) sequentially and with several worker
+# threads, and assert the threaded run is both substantially faster AND lays down
+# bit-for-bit identical wires. The wall time is taken as the best of three runs
+# (the minimum is the cleanest signal -- contention only ever slows a run down).
+perf_parallel_speedup() {
+  local name=perf_parallel_speedup
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "SKIP $name (python3 not available)"; return
+  fi
+  local dir="$OUTROOT/$name"
+  rm -rf "$dir"; mkdir -p "$dir/seq" "$dir/par"
+  local pl="$dir/bench.placement_verilog.json" ndr="$dir/bench_ndr.json"
+  if ! python3 ./gen_parallel_bench.py 32 "$pl" "$ndr" >/dev/null 2>&1; then
+    echo "FAIL $name :generator-failed;"; FAIL=$((FAIL+1))
+    ERRS="${ERRS}$name:generator-failed;\n"; return
+  fi
+
+  local ncpu threads
+  ncpu=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+  threads=4; [ "$ncpu" -lt 4 ] && threads=$ncpu; [ "$threads" -lt 1 ] && threads=1
+
+  _best_time() {  # _best_time <outdir> <threads> -> min wall time of 3 runs
+    local b="" t
+    for _ in 1 2 3; do
+      t=$(python3 - "$ROUTER" "$1/" "$2" "$pl" "$ndr" <<'PY'
+import subprocess, sys, time
+router, outdir, threads, pl, ndr = sys.argv[1:6]
+cmd = [router, "-d", "./layers.json", "-p", pl, "-l", "./m1adj_escape.lef",
+       "-ndr", ndr, "-o", outdir, "-log", outdir + "route.log", "-threads", threads]
+s = time.time(); subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+print(f"{time.time() - s:.4f}")
+PY
+)
+      b=$(python3 -c "print(min($t, ${b:-$t}))")
+    done
+    echo "$b"
+  }
+
+  local tseq tpar
+  tseq=$(_best_time "$dir/seq" 1)
+  tpar=$(_best_time "$dir/par" "$threads")
+
+  local errs="" m lg
+  for m in seq par; do
+    lg="$dir/$m/route.log"
+    grep -q "ROUTE_SUMMARY module=PARBENCH_CONC_0 nets=32 unrouted=0" "$lg" 2>/dev/null \
+      || errs="$errs $m-not-all-routed;"
+    [ "$(grep -c 'SHORT.*between' "$lg" 2>/dev/null)" = "0" ] || errs="$errs $m-shorts;"
+  done
+  # parallelism must not change the routed wires
+  diff -q <(grep '+ RECT' "$dir/seq/PARBENCH_CONC_0.def" 2>/dev/null) \
+          <(grep '+ RECT' "$dir/par/PARBENCH_CONC_0.def" 2>/dev/null) >/dev/null 2>&1 \
+    || errs="$errs geometry-differs;"
+  # the speedup itself -- only assert it when there is more than one core to use
+  local speedup="n/a"
+  if [ "${ncpu:-1}" -ge 2 ]; then
+    speedup=$(python3 -c "print(f'{$tseq/$tpar:.2f}')")
+    awk "BEGIN{exit !($tseq >= $tpar*1.2)}" \
+      || errs="$errs no-speedup(seq=${tseq}s par=${tpar}s=${speedup}x);"
+  fi
+
+  if [ -z "$errs" ]; then
+    echo "PASS $name (seq=${tseq}s ${threads}-thread=${tpar}s ${speedup}x on ${ncpu} cores)"
+    PASS=$((PASS+1))
+  else
+    echo "FAIL $name :$errs"; FAIL=$((FAIL+1)); ERRS="${ERRS}$name:$errs\n"
+  fi
+}
+
 IN=../..   # inputs relative to each case directory
 
 # 1. base testcase from the README
@@ -377,6 +447,14 @@ if [ -n "${MAZE_STRESS:-}" ]; then
   run_case maze30 "MAZE_CONC_0.def" \
     -d $IN/layers.json -p $IN/maze30.placement_verilog.json \
     -l $IN/m1adj_escape.lef -ndr $IN/maze30_ndr.json
+fi
+
+# 33. parallel speedup (opt-in, timing-based, ~2-4s): a batch of many disjoint,
+#     individually-expensive nets routes substantially faster with N worker
+#     threads than sequentially -- and lays down exactly the same wires. Off by
+#     default because it is timing-based; run with:  PERF_STRESS=1 ./run_smoke.sh
+if [ -n "${PERF_STRESS:-}" ]; then
+  perf_parallel_speedup
 fi
 
 echo

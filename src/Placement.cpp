@@ -253,6 +253,24 @@ void Module::route(Router::Router& router, const std::string& outdir)
       return b;
     };
 
+    std::map<int, Geom::RTree2D> obsTree;
+    for (auto& lr : _obstacles) obsTree.emplace(lr.first, lr.second);
+    auto netObstacles = [&](size_t i) -> Geom::LayerRects {
+      Geom::Rect box = pinBBox(nets[i]);
+      if (nets[i]->isDetour() || !nets[i]->routable() || !box.valid())
+        return _obstacles;
+      // Margin >= the router's expansion (pin bbox +50% + bloat*4); parPad covers
+      // the bloat term with room to spare, so the box provably contains the search.
+      box = box.bloatby(box.width() + parPad * 8, box.height() + parPad * 8);
+      Geom::LayerRects out;
+      for (auto& lt : obsTree) {
+        Geom::Rects hits;
+        lt.second.search(hits, box);
+        if (!hits.empty()) out[lt.first] = std::move(hits);
+      }
+      return out;
+    };
+
     auto buildUnrouted = [&](size_t pi, bool addAdj) -> Geom::LayerRects {
       Geom::LayerRects u;
       for (size_t k = 0; k < nets.size(); ++k) {
@@ -276,12 +294,9 @@ void Module::route(Router::Router& router, const std::string& outdir)
     };
 
     auto applyDebug = [&](Router::Router& r, size_t i) {
-      if (debugnet.find(_name + "__" + nets[i]->name()) != debugnet.end()
-          || debugnet.find(nets[i]->name()) != debugnet.end()
-          || debugnet.find(_name) != debugnet.end())
-        r.setEnableDebug(true);
-      else
-        r.setEnableDebug(false);
+      r.setEnableDebug(debugnet.count(_name + "__" + nets[i]->name())
+                       || debugnet.count(nets[i]->name())
+                       || debugnet.count(_name));
     };
 
     auto buildBatches = [&]() -> std::vector<std::vector<size_t>> {
@@ -324,15 +339,15 @@ void Module::route(Router::Router& router, const std::string& outdir)
     auto routeBatch = [&](const std::vector<size_t>& batch,
                           const Geom::LayerRects& routedSnapshot,
                           const std::vector<Geom::LayerRects>& unroutedSets,
-                          bool /*addAdj*/) {
-      if (batch.size() == 1 || router.threads() <= 1) {
-        for (size_t bi = 0; bi < batch.size(); ++bi) {
-          size_t i = batch[bi];
-          router.setNetName(nets[i]->name());
-          applyDebug(router, i);
-          nets[i]->route(router, routedSnapshot, unroutedSets[bi], _obstacles,
-                         true, _uu, _bbox, _name);
-        }
+                          const std::vector<Geom::LayerRects>& obsSets) {
+      // A singleton batch (the only kind when threads <= 1) routes inline on the
+      // shared main router, preserving exact sequential semantics.
+      if (batch.size() == 1) {
+        size_t i = batch[0];
+        router.setNetName(nets[i]->name());
+        applyDebug(router, i);
+        nets[i]->route(router, routedSnapshot, unroutedSets[0], obsSets[0],
+                       true, _uu, _bbox, _name);
         return;
       }
 
@@ -370,7 +385,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
               size_t i = batch[bi];
               myrouter.setNetName(nets[i]->name());
               applyDebug(myrouter, i);
-              nets[i]->route(myrouter, routedSnapshot, unroutedSets[bi], _obstacles, true, _uu, _bbox, _name);
+              nets[i]->route(myrouter, routedSnapshot, unroutedSets[bi], obsSets[bi], true, _uu, _bbox, _name);
               flush();
             }
           }
@@ -388,10 +403,13 @@ void Module::route(Router::Router& router, const std::string& outdir)
       std::vector<std::vector<size_t>> batches = buildBatches();
       for (auto& batch : batches) {
         std::vector<Geom::LayerRects> unroutedSets(batch.size());
-        for (size_t bi = 0; bi < batch.size(); ++bi)
+        std::vector<Geom::LayerRects> obsSets(batch.size());
+        for (size_t bi = 0; bi < batch.size(); ++bi) {
           unroutedSets[bi] = buildUnrouted(batch[bi], addAdjObstacles);
+          obsSets[bi] = netObstacles(batch[bi]);
+        }
 
-        routeBatch(batch, netObstaclesRouted, unroutedSets, addAdjObstacles);
+        routeBatch(batch, netObstaclesRouted, unroutedSets, obsSets);
 
         for (size_t bi = 0; bi < batch.size(); ++bi) {
           size_t i = batch[bi];
