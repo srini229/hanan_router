@@ -6,6 +6,11 @@ static thread_local std::ostream* t_threadLog = nullptr;
 std::ostream& threadLog() { return t_threadLog ? *t_threadLog : std::cout; }
 void setThreadLog(std::ostream* s) { t_threadLog = s; }
 
+// Set once in main() before any routing (so it is race-free across worker threads).
+static bool g_verbose = false;
+bool verboseLog() { return g_verbose; }
+void setVerboseLog(bool v) { g_verbose = v; }
+
 std::string parseArgs(const int argc, char* const argv[], const std::string& arg, std::string str)
 {
   for (int i = 0; i < argc; ++i) {

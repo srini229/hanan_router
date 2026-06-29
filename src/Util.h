@@ -9,6 +9,10 @@
 
 std::ostream& threadLog();
 void setThreadLog(std::ostream* s);  // nullptr restores std::cout for this thread
+// Verbose logging gate for high-volume, per-element debug lines (e.g. one line
+// per obstacle rectangle). Off by default; enabled with -v or HANAN_VERBOSE.
+bool verboseLog();
+void setVerboseLog(bool v);
 #define COUT threadLog() //<< __PRETTY_FUNCTION__ << " -:- "
 #define CERR std::cerr //<< __PRETTY_FUNCTION__ << " -:- "
 

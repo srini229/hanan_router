@@ -507,7 +507,8 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                     if (layer >= 0) {
                       for (auto& r : l.value()) {
                         if (r.size() == 4) {
-                          COUT << "Adding obstacle to module " << modit->second->name() << " layer : " << l.key() << " : [" << r[0] << ' ' << r[1] << ' ' << r[2] << ' ' << r[3] << "]\n";
+                          if (verboseLog())
+                            COUT << "Adding obstacle to module " << modit->second->name() << " layer : " << l.key() << " : [" << r[0] << ' ' << r[1] << ' ' << r[2] << ' ' << r[3] << "]\n";
                           modit->second->addObstacle(layer, Geom::Rect(std::round(static_cast<double>(r[0]) * _uu), std::round(static_cast<double>(r[1]) * _uu),
                                 std::round(static_cast<double>(r[2]) * _uu), std::round(static_cast<double>(r[3]) * _uu))); 
                         }

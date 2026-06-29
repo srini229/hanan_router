@@ -66,6 +66,7 @@ hanan_router -d <layers.json> -p <placement file> -l <lef file> [options]
 | `-uil <dir>` | no | Reuse previously-generated interim LEFs from `<dir>` for hierarchical blocks. |
 | `-sep <str>` | no | Hierarchy name separator. |
 | `-log <file>` | no | Log file name (default `route.log`). |
+| `-v` | no | Verbose: emit high-volume per-element debug logging (off by default; also enabled by `HANAN_VERBOSE`). |
 
 
 ## Output

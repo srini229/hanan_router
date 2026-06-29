@@ -108,7 +108,7 @@ PortPairs Net::reorderPorts() const
     }
   }
 
-  std::sort(primorder.begin(), primorder.end(), [portpairdist](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool
+  std::sort(primorder.begin(), primorder.end(), [&portpairdist](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool
       { return portpairdist[a.first][a.second] < portpairdist[b.first][b.second]; });
 
   

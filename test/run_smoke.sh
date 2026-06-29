@@ -228,9 +228,10 @@ run_case ndr_donotroute "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
   -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr1.json
 
 # 5. NDR: module-level obstacles applied to all nets
+# -v enables the verbose per-obstacle log this case asserts on
 LOGMUST="Adding obstacle to module TEST_CONC_0"
 run_case ndr_obstacles "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr2.json
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr2.json -v
 
 # 6. NDR: module-wide preferred layers + custom via array
 run_case ndr_vias "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
@@ -268,7 +269,7 @@ run_case flipped "BLOCK_B_CONC_0.def" \
 # 13. many obstacles on one layer (forces R-tree node splits)
 LOGMUST="Adding obstacle to module TEST_CONC_0"
 run_case many_obstacles "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr5.json
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr5.json -v
 
 # 14. hierarchical reuse: route once, then reload the interim LEFs (-uil)
 run_case uil_stage "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \

@@ -1173,21 +1173,14 @@ void Router::generateHananGrid()
         }
       }
 
-      for (auto& v : tmpranges) {
-        for (auto& o : l.second) {
-          if (i == 0) {
-            if (v.first > o.xmin() && v.first < o.xmax()) {
-              auto minv{std::max(o.ymin(), _bbox.ymin() - 1)};
-              auto maxv{std::min(o.ymax(), _bbox.ymax())};
-              insertRange(tmpranges[v.first], std::make_pair(minv, maxv));
-            }
-          } else {
-            if (v.first > o.ymin() && v.first < o.ymax()) {
-              auto minv{std::max(o.xmin(), _bbox.xmin() - 1)};
-              auto maxv{std::min(o.xmax(), _bbox.xmax())};
-              insertRange(tmpranges[v.first], std::make_pair(minv, maxv));
-            }
-          }
+      for (auto& o : l.second) {
+        const int lo = (i == 0) ? o.xmin() : o.ymin();
+        const int hi = (i == 0) ? o.xmax() : o.ymax();
+        const IntPair rng = (i == 0)
+          ? std::make_pair(std::max(o.ymin(), _bbox.ymin() - 1), std::min(o.ymax(), _bbox.ymax()))
+          : std::make_pair(std::max(o.xmin(), _bbox.xmin() - 1), std::min(o.xmax(), _bbox.xmax()));
+        for (auto it = tmpranges.upper_bound(lo); it != tmpranges.end() && it->first < hi; ++it) {
+          insertRange(it->second, rng);
         }
       }
       for (auto& r : tmpranges) {
@@ -1335,11 +1328,13 @@ Geom::LayerRects Router::findSol()
         createSourceTargetNodes();
       }
       COUT << "num src : " << _sources.size() << " tgt : " << _targets.size() << std::endl;
-      for (auto& s : _sources) {
-        s->print("source : ");
-      }
-      for (auto& t : _targets) {
-        t->print("targets : ");
+      if (verboseLog()) {
+        for (auto& s : _sources) {
+          s->print("source : ");
+        }
+        for (auto& t : _targets) {
+          t->print("targets : ");
+        }
       }
       for (auto& s : _sources) {
         _bbox.merge(s->x(), s->y(), s->x(), s->y());
@@ -1709,7 +1704,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
     const auto& layer = l.first;
     if (!uselayers.empty() && uselayers.find(l.first) == uselayers.end()) continue;
     for (const auto& r : l.second) {
-      bool olsrcortgt{false};
+      /*bool olsrcortgt{false};
       for (auto src : {true, false}) {
         const auto& shapes = src ? _sourceshapes : _targetshapes;
         const auto it = shapes.find(layer);
@@ -1722,7 +1717,7 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
           }
         }
         if (olsrcortgt) break;
-      }
+      }*/
       //if (!olsrcortgt) {
         if (temp) {
           _ptobstacles[layer] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());

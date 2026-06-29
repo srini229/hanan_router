@@ -241,7 +241,10 @@ void Module::route(Router::Router& router, const std::string& outdir)
     }
     parPad *= 2;
 
-    auto pinBBox = [](const Net* n) -> Geom::Rect {
+    // Pin bbox of each net, cached: pins never move, so it is computed once here
+    // (ports are still pin-only) and reused by every batching / obstacle-filter
+    // pass instead of being recomputed for each net on each reorder attempt.
+    auto computePinBBox = [](const Net* n) -> Geom::Rect {
       Geom::Rect b;
       for (auto virt : {true, false}) {
         const auto& pins = virt ? n->virtualpins() : n->pins();
@@ -252,16 +255,26 @@ void Module::route(Router::Router& router, const std::string& outdir)
       }
       return b;
     };
+    std::unordered_map<const Net*, Geom::Rect> pinBoxCache;
+    pinBoxCache.reserve(nets.size());
+    for (auto n : nets) pinBoxCache.emplace(n, computePinBBox(n));
+    auto pinBBox = [&](const Net* n) -> const Geom::Rect& { return pinBoxCache.at(n); };
+
+    // Generous super-set of a net's A* search box (pin bbox +50% + bloat*4); the
+    // parPad term covers the bloat with room to spare, so an obstacle/pin outside
+    // this box provably cannot overlap the search and is safe to drop.
+    auto searchBox = [&](size_t i) -> Geom::Rect {
+      Geom::Rect b = pinBBox(nets[i]);
+      if (b.valid()) b = b.bloatby(b.width() + parPad * 8, b.height() + parPad * 8);
+      return b;
+    };
 
     std::map<int, Geom::RTree2D> obsTree;
     for (auto& lr : _obstacles) obsTree.emplace(lr.first, lr.second);
     auto netObstacles = [&](size_t i) -> Geom::LayerRects {
-      Geom::Rect box = pinBBox(nets[i]);
+      Geom::Rect box = searchBox(i);
       if (nets[i]->isDetour() || !nets[i]->routable() || !box.valid())
         return _obstacles;
-      // Margin >= the router's expansion (pin bbox +50% + bloat*4); parPad covers
-      // the bloat term with room to spare, so the box provably contains the search.
-      box = box.bloatby(box.width() + parPad * 8, box.height() + parPad * 8);
       Geom::LayerRects out;
       for (auto& lt : obsTree) {
         Geom::Rects hits;
@@ -271,16 +284,58 @@ void Module::route(Router::Router& router, const std::string& outdir)
       return out;
     };
 
-    auto buildUnrouted = [&](size_t pi, bool addAdj) -> Geom::LayerRects {
-      Geom::LayerRects u;
+    // All pins indexed once (pin-only ports, before any routing) so the per-net
+    // unrouted-pin obstacle set can be gathered by an R-tree query of the net's
+    // search box instead of scanning every other net (O(N) per net -> O(N^2)).
+    // Equivalent to the exact scan: pins outside the box never overlap the
+    // search, and a net already routed has its pins in the routed set (l1) too.
+    Geom::LayerRects allPins;
+    for (auto n : nets)
+      for (auto virt : {true, false})
+        for (auto& pin : (virt ? n->virtualpins() : n->pins()))
+          for (auto& p : pin->ports())
+            for (auto& l : p->shapes())
+              for (auto& r : l.second) allPins[l.first].push_back(r);
+    std::map<int, Geom::RTree2D> pinTree;
+    for (auto& lr : allPins) pinTree.emplace(lr.first, lr.second);
+
+    // Exact full scan (used for detour nets, whose search box is not bounded by
+    // the pin bbox, and as a fallback): pins of every net after pi, plus excluded
+    // nets before it.
+    auto exactUnrouted = [&](size_t pi, Geom::LayerRects& u) {
       for (size_t k = 0; k < nets.size(); ++k) {
         if (k == pi) continue;
         if (k < pi && !nets[k]->excluded()) continue;  // already in the routed set
-        for (auto virt : {true, false}) {
-          const auto& pins = virt ? nets[k]->virtualpins() : nets[k]->pins();
-          for (auto& pin : pins)
+        for (auto virt : {true, false})
+          for (auto& pin : (virt ? nets[k]->virtualpins() : nets[k]->pins()))
             for (auto& p : pin->ports())
               Geom::MergeLayerRects(u, p->shapes());
+      }
+    };
+
+    auto buildUnrouted = [&](size_t pi, bool addAdj) -> Geom::LayerRects {
+      Geom::LayerRects u;
+      Geom::Rect box = searchBox(pi);
+      // The adjacency retry projects this set's M1 pins onto M1+1, which would
+      // amplify the (otherwise harmless) redundant pins the spatial query adds,
+      // so use the exact set whenever that projection is in play.
+      if (nets[pi]->isDetour() || addAdj || !box.valid()) {
+        exactUnrouted(pi, u);
+      } else {
+        // own pins must not become obstacles for the net routing to them
+        std::set<std::tuple<int, int, int, int, int>> self;
+        for (auto virt : {true, false})
+          for (auto& pin : (virt ? nets[pi]->virtualpins() : nets[pi]->pins()))
+            for (auto& p : pin->ports())
+              for (auto& l : p->shapes())
+                for (auto& r : l.second)
+                  self.emplace(l.first, r.xmin(), r.ymin(), r.xmax(), r.ymax());
+        for (auto& lt : pinTree) {
+          Geom::Rects hits;
+          lt.second.search(hits, box);
+          for (auto& r : hits)
+            if (!self.count(std::make_tuple(lt.first, r.xmin(), r.ymin(), r.xmax(), r.ymax())))
+              u[lt.first].push_back(r);
         }
       }
       if (addAdj && m1Layer >= 0 && layerName(m1Layer + 1)[0] == 'M') {
@@ -586,17 +641,31 @@ void Module::route(Router::Router& router, const std::string& outdir)
 void Module::checkShort() const
 {
   COUT << "Checking SHORTS for module : " << _name << '\n';
-  for (auto it1 = _nets.begin(); it1 != _nets.end(); ++it1) {
-    for (auto it2 = std::next(it1); it2 != _nets.end(); ++it2) {
-      auto& s1 = it1->second.routeShapesWithPins();
-      auto& s2 = it2->second.routeShapesWithPins();
+  // Pre-compute each net's overall routed bounding box (in _nets order, so the
+  // reported pairs are unchanged) and skip net pairs whose boxes are disjoint --
+  // they cannot short, which avoids the O(shapes^2) inner comparison for the vast
+  // majority of pairs in a spread-out design.
+  std::vector<std::pair<const Net*, Geom::Rect>> nb;
+  nb.reserve(_nets.size());
+  for (auto& n : _nets) {
+    Geom::Rect b;
+    for (auto& l : n.second.routeShapesWithPins())
+      for (auto& r : l.second) b.merge(r);
+    nb.emplace_back(&n.second, b);
+  }
+  for (size_t i = 0; i < nb.size(); ++i) {
+    for (size_t j = i + 1; j < nb.size(); ++j) {
+      if (!nb[i].second.valid() || !nb[j].second.valid()) continue;
+      if (!nb[i].second.overlaps(nb[j].second)) continue;  // disjoint -> cannot short
+      auto& s1 = nb[i].first->routeShapesWithPins();
+      auto& s2 = nb[j].first->routeShapesWithPins();
       for (auto& l : s1) {
         auto its2 = s2.find(l.first);
         if (its2 == s2.end()) continue;
         for (auto& o1 : l.second) {
           for (auto& o2 : its2->second) {
             if (o1.overlaps(o2) && o1 != o2) {
-              COUT << "SHORT (router or pin) between " << it1->second.name() << " & " << it2->second.name() << " @ layer : " << l.first << '\n';
+              COUT << "SHORT (router or pin) between " << nb[i].first->name() << " & " << nb[j].first->name() << " @ layer : " << l.first << '\n';
               COUT << o1.str() << ' ' << o2.str() << '\n';
             }
           }
@@ -604,31 +673,41 @@ void Module::checkShort() const
       }
     }
   }
-  for (auto it1 = _nets.begin(); it1 != _nets.end(); ++it1) {
-    auto& s1 = it1->second.routeShapesWithPins();
-    auto& s2 = _obstacles;
+  // Net-vs-obstacle shorts. Two redundancies are avoided: (1) whether an
+  // obstacle is covered by a pin (a legitimate route-to-pin overlap to ignore)
+  // depends only on the obstacle, so it is answered once via a pin R-tree instead
+  // of re-scanning every pin for every net; (2) a net only needs the obstacles
+  // near its routed bbox, found via an obstacle R-tree, rather than the whole set.
+  std::map<int, Geom::RTree2D> obsTree;
+  for (auto& l : _obstacles) obsTree.emplace(l.first, l.second);
+  std::map<int, Geom::Rects> pinShapes;
+  for (auto& pin : _pins)
+    for (auto& p : pin.second->ports())
+      for (auto& l : p->shapes())
+        for (auto& r : l.second) pinShapes[l.first].push_back(r);
+  std::map<int, Geom::RTree2D> pinTree;
+  for (auto& l : pinShapes) pinTree.emplace(l.first, l.second);
+  auto pinCovered = [&](int layer, const Geom::Rect& o2) -> bool {
+    auto it = pinTree.find(layer);
+    if (it == pinTree.end()) return false;
+    Geom::Rects hits;
+    it->second.search(hits, o2);
+    for (auto& h : hits) if (h.overlaps(o2)) return true;
+    return false;
+  };
+  for (auto& n : nb) {
+    if (!n.second.valid()) continue;
+    auto& s1 = n.first->routeShapesWithPins();
     for (auto& l : s1) {
-      auto its2 = s2.find(l.first);
-      if (its2 == s2.end()) continue;
-      for (auto& o2 : its2->second) {
-        bool obsPinOverlapping{false};
-        for (auto& pin : _pins) {
-          for (auto& p : pin.second->ports()) {
-            const auto& s3 = p->shapes();
-            auto its3 = s3.find(l.first);
-            if (its3 == s3.end()) continue;
-            for (auto& o3 : its3->second) {
-              if (o3.overlaps(o2)) {
-                obsPinOverlapping = true;
-                break;
-              }
-            }
-          }
-        }
-        if (obsPinOverlapping) continue;
+      auto oit = obsTree.find(l.first);
+      if (oit == obsTree.end()) continue;
+      Geom::Rects obs;
+      oit->second.search(obs, n.second);   // only obstacles near this net's routes
+      for (auto& o2 : obs) {
+        if (pinCovered(l.first, o2)) continue;
         for (auto& o1 : l.second) {
           if (o1.overlaps(o2) && o1 != o2) {
-            COUT << "SHORT between " << it1->second.name() << " & obstacle @ layer : " << l.first << '\n';
+            COUT << "SHORT between " << n.first->name() << " & obstacle @ layer : " << l.first << '\n';
             COUT << o1.str() << ' ' << o2.str() << '\n';
           }
         }
