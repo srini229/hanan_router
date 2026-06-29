@@ -7,7 +7,9 @@
 #include <vector>
 #include <set>
 
-#define COUT std::cout //<< __PRETTY_FUNCTION__ << " -:- "
+std::ostream& threadLog();
+void setThreadLog(std::ostream* s);  // nullptr restores std::cout for this thread
+#define COUT threadLog() //<< __PRETTY_FUNCTION__ << " -:- "
 #define CERR std::cerr //<< __PRETTY_FUNCTION__ << " -:- "
 
 class TimeMeasure {

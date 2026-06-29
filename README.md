@@ -19,6 +19,7 @@ Beyond the core router it also provides:
 * a **pre-routing pin-escape feasibility check** that proves (via a small SAT solver) that every pin can leave its cell before any net is routed;
 * an **automatic net-ordering search** that, when nets are left open, promotes the blocked nets up the routing order and retries (reorder);
 * an **adjacent-obstacle retry** that frees a blocked pin's escape layer;
+* optional **multi-threaded routing** that routes non-overlapping nets in parallel (`-threads N`);
 
 
 # Building the router
@@ -59,6 +60,7 @@ hanan_router -d <layers.json> -p <placement file> -l <lef file> [options]
 | `-o <output dir>` | no | Output directory for the generated LEF/DEF (default `./`). |
 | `-r <precision>` | no | Coordinate precision / rounding (default `1`). |
 | `-reorder <N>` | no | Max alternate net-ordering passes to try when nets remain unrouted (default `10`; `0` disables the search). |
+| `-threads <N>` | no | Route non-overlapping nets in parallel using `N` worker threads (default `1` = sequential). See [Parallel routing](#parallel-routing). |
 | `-uu <scale>` | no | User-units scaling for the placement file (e.g. nm/um). |
 | `-s` | no | Treat the LEF as scaled by `-uu`. |
 | `-uil <dir>` | no | Reuse previously-generated interim LEFs from `<dir>` for hierarchical blocks. |
@@ -86,6 +88,26 @@ The LEF/DEF can be visualized with [`klayout`](https://klayout.de/).
 * **Adjacent-obstacle retry.** When a net's straight wire would cap another net's M1 pin, the blocking pin is projected onto the adjacent metal as an obstacle so the first net detours and leaves the escape free.
 * **Coincident-pin merge.** Two different nets whose pins sit on the same point are physically one node; the router warns (`... has pin(s) coincident with net ...; merging them into one connected net`) and merges them so they route connected instead of shorting.
 * **Unconnected-pin protection.** Instance pins not wired to any net are added as obstacles so no route lands on them.
+
+## Parallel routing
+
+With `-threads N` (`N > 1`) the router routes nets concurrently. Routing order
+still matters for nets that compete for the same space, so the router only
+parallelizes nets that **cannot** interfere with one another:
+
+* The ordered net list is split into consecutive **batches** of nets whose
+  (inflated) pin bounding boxes are mutually disjoint. A net's A\* search stays
+  within its pin box expanded by ~50% (clamped to the block), so disjoint
+  inflated boxes guarantee disjoint search regions — the routes cannot overlap.
+* Batches run one after another (preserving order); the nets **within** a batch
+  are routed in parallel by a pool of `N` worker threads that pull nets off a
+  shared queue under a mutex, each thread using its own private router state.
+* Nets that need full sequential context — pinned `routing_order` nets, excluded
+  (`do_not_route`) nets and `large_detour` nets — are never parallelized.
+
+The result is identical to a sequential run: the routed geometry does not depend
+on `N`, and `checkShort()` still verifies the final layout. `-threads 1` (the
+default) is exactly the original sequential behavior.
 
 
 # NDR constraints

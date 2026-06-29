@@ -5,7 +5,7 @@ ifeq (,$(findstring darwin,$(GCC_TARGET)))
     MARCH += -march=native -fopenmp
 endif
 #CCFLAGS = -Wall -g -std=c++14 -D_GLIBCXX_PARALLEL -march=native -funroll-loops -fopenmp
-CCFLAGS = -Wall -g -std=c++14 -funroll-loops $(MARCH)
+CCFLAGS = -Wall -g -std=c++14 -funroll-loops -pthread $(MARCH)
 INCLUDES = ./include
 LFLAGS = 
 DEBUG = 0

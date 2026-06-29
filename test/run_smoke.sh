@@ -348,6 +348,25 @@ LOGMUST="ROUTE_SUMMARY module=NET30_CONC_0 nets=30 unrouted=0"
 run_case net30 "NET30_CONC_0.def" \
   -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
 
+# 31b. net30 routed in parallel (-threads 4): the 30 disjoint nets get grouped
+#      into non-overlapping batches and routed concurrently. Must still route all
+#      30 with no shorts, AND produce a DEF byte-identical to the sequential
+#      net30 case above -- parallelism must not change the result (the DEF is
+#      deterministic: pins are emitted name-sorted, not in pointer order).
+LOGMUST="ROUTE_SUMMARY module=NET30_CONC_0 nets=30 unrouted=0"
+run_case net30_threads "NET30_CONC_0.def" \
+  -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef \
+  -threads 4
+if diff -q "$OUTROOT/net30/NET30_CONC_0.def" \
+           "$OUTROOT/net30_threads/NET30_CONC_0.def" >/dev/null 2>&1; then
+  echo "PASS net30_threads_parity"
+  PASS=$((PASS+1))
+else
+  echo "FAIL net30_threads_parity :def-differs-from-sequential;"
+  FAIL=$((FAIL+1))
+  ERRS="${ERRS}net30_threads_parity:def-differs-from-sequential;\n"
+fi
+
 # 31. maze30 (opt-in stress, ~25s): the same 30 nets crossing a staggered-gap
 #     wall, every net flagged large_detour so it can weave around it. Deliberately
 #     hard -- the router leaves ~1/3 of the nets unrouted. Off by default because

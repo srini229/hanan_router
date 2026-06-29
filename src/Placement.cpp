@@ -5,6 +5,12 @@
 #include <tuple>
 
 #include <algorithm>
+#include <thread>
+#include <mutex>
+#include <queue>
+#include <sstream>
+#include <iostream>
+#include <pthread.h>
 
 namespace Placement {
 
@@ -227,52 +233,171 @@ void Module::route(Router::Router& router, const std::string& outdir)
       return -1;
     }();
 
+    int parPad = 0;
+    for (int z = router.minLayer(); z <= router.maxLayer(); ++z) {
+      parPad = std::max(parPad,
+          std::max(router.baseWidthX(z), router.baseWidthY(z))
+        + std::max(router.baseSpaceX(z), router.baseSpaceY(z)));
+    }
+    parPad *= 2;
+
+    auto pinBBox = [](const Net* n) -> Geom::Rect {
+      Geom::Rect b;
+      for (auto virt : {true, false}) {
+        const auto& pins = virt ? n->virtualpins() : n->pins();
+        for (auto& pin : pins)
+          for (auto& p : pin->ports())
+            for (auto& l : p->shapes())
+              for (auto& r : l.second) b.merge(r);
+      }
+      return b;
+    };
+
+    auto buildUnrouted = [&](size_t pi, bool addAdj) -> Geom::LayerRects {
+      Geom::LayerRects u;
+      for (size_t k = 0; k < nets.size(); ++k) {
+        if (k == pi) continue;
+        if (k < pi && !nets[k]->excluded()) continue;  // already in the routed set
+        for (auto virt : {true, false}) {
+          const auto& pins = virt ? nets[k]->virtualpins() : nets[k]->pins();
+          for (auto& pin : pins)
+            for (auto& p : pin->ports())
+              Geom::MergeLayerRects(u, p->shapes());
+        }
+      }
+      if (addAdj && m1Layer >= 0 && layerName(m1Layer + 1)[0] == 'M') {
+        auto itm1 = u.find(m1Layer);
+        if (itm1 != u.end() && !itm1->second.empty()) {
+          auto& adj = u[m1Layer + 1];
+          adj.insert(adj.end(), itm1->second.begin(), itm1->second.end());
+        }
+      }
+      return u;
+    };
+
+    auto applyDebug = [&](Router::Router& r, size_t i) {
+      if (debugnet.find(_name + "__" + nets[i]->name()) != debugnet.end()
+          || debugnet.find(nets[i]->name()) != debugnet.end()
+          || debugnet.find(_name) != debugnet.end())
+        r.setEnableDebug(true);
+      else
+        r.setEnableDebug(false);
+    };
+
+    auto buildBatches = [&]() -> std::vector<std::vector<size_t>> {
+      std::vector<std::vector<size_t>> batches;
+      const size_t N = nets.size();
+      const size_t pinned = _routeorder.size();
+      if (router.threads() <= 1) {
+        for (size_t i = 0; i < N; ++i) batches.push_back({i});
+        return batches;
+      }
+      auto mustSingleton = [&](size_t i) {
+        return i < pinned || nets[i]->excluded() || nets[i]->isDetour()
+            || !nets[i]->routable();
+      };
+      std::vector<Geom::Rect> boxOf(N);
+      for (size_t i = 0; i < N; ++i) {
+        Geom::Rect b = pinBBox(nets[i]);
+        if (b.valid()) b = b.bloatby(b.width() / 2 + parPad, b.height() / 2 + parPad);
+        boxOf[i] = b;
+      }
+      size_t i = 0;
+      while (i < N) {
+        if (mustSingleton(i)) { batches.push_back({i}); ++i; continue; }
+        std::vector<size_t> batch{i};
+        size_t j = i + 1;
+        while (j < N && !mustSingleton(j)) {
+          bool disjoint = true;
+          for (size_t idx : batch)
+            if (boxOf[j].overlaps(boxOf[idx])) { disjoint = false; break; }
+          if (!disjoint) break;
+          batch.push_back(j);
+          ++j;
+        }
+        batches.push_back(std::move(batch));
+        i = j;
+      }
+      return batches;
+    };
+
+    auto routeBatch = [&](const std::vector<size_t>& batch,
+                          const Geom::LayerRects& routedSnapshot,
+                          const std::vector<Geom::LayerRects>& unroutedSets,
+                          bool /*addAdj*/) {
+      if (batch.size() == 1 || router.threads() <= 1) {
+        for (size_t bi = 0; bi < batch.size(); ++bi) {
+          size_t i = batch[bi];
+          router.setNetName(nets[i]->name());
+          applyDebug(router, i);
+          nets[i]->route(router, routedSnapshot, unroutedSets[bi], _obstacles,
+                         true, _uu, _bbox, _name);
+        }
+        return;
+      }
+
+      std::queue<size_t> q;                 // positions within 'batch'
+      for (size_t bi = 0; bi < batch.size(); ++bi) q.push(bi);
+      pthread_mutex_t qlock;
+      pthread_mutex_init(&qlock, nullptr);
+      std::mutex logmtx;                     // guards the real log sink
+
+      const int nworkers = std::min<int>(router.threads(),
+                                         static_cast<int>(batch.size()));
+      std::vector<std::thread> workers;
+      for (int w = 0; w < nworkers; ++w) {
+        workers.emplace_back([&]() {
+          std::ostringstream tlog;
+          setThreadLog(&tlog);
+          auto flush = [&]() {
+            std::lock_guard<std::mutex> lk(logmtx);
+            std::cout << tlog.str();
+            tlog.str("");
+          };
+          {
+            Router::Router myrouter(router.layerInfo());
+            myrouter.setuu(_uu);
+            myrouter.setModName(_name);
+            myrouter.setusepinwidth((_usepinwidth == 1) ? true : false);
+            flush();
+            for (;;) {
+              pthread_mutex_lock(&qlock);
+              if (q.empty()) { pthread_mutex_unlock(&qlock); break; }
+              size_t bi = q.front();
+              q.pop();
+              pthread_mutex_unlock(&qlock);
+
+              size_t i = batch[bi];
+              myrouter.setNetName(nets[i]->name());
+              applyDebug(myrouter, i);
+              nets[i]->route(myrouter, routedSnapshot, unroutedSets[bi], _obstacles, true, _uu, _bbox, _name);
+              flush();
+            }
+          }
+          flush();
+          setThreadLog(nullptr);
+        });
+      }
+      for (auto& t : workers) t.join();
+      pthread_mutex_destroy(&qlock);
+    };
+
     auto routeAllNets = [&](const bool addAdjObstacles) -> bool {
-      Geom::LayerRects netObstaclesRouted, netObstaclesUnrouted;
+      Geom::LayerRects netObstaclesRouted;
       bool anyUnrouted{false};
-      for (auto it = nets.begin(); it != nets.end(); ++it) {
-        netObstaclesUnrouted.clear();
-        for (auto itn = nets.begin(); itn != it; ++itn) {
-          if ((*itn)->excluded()) {
-            for (auto virt : {true, false}) {
-              const auto& pins = virt ? (*itn)->virtualpins() : (*itn)->pins();
-              for (auto& pin : pins) {
-                for (auto& p : pin->ports()) {
-                  Geom::MergeLayerRects(netObstaclesUnrouted, p->shapes());
-                }
-              }
-            }
-          }
+      std::vector<std::vector<size_t>> batches = buildBatches();
+      for (auto& batch : batches) {
+        std::vector<Geom::LayerRects> unroutedSets(batch.size());
+        for (size_t bi = 0; bi < batch.size(); ++bi)
+          unroutedSets[bi] = buildUnrouted(batch[bi], addAdjObstacles);
+
+        routeBatch(batch, netObstaclesRouted, unroutedSets, addAdjObstacles);
+
+        for (size_t bi = 0; bi < batch.size(); ++bi) {
+          size_t i = batch[bi];
+          if (nets[i]->routable() && nets[i]->unrouted()) anyUnrouted = true;
+          Geom::MergeLayerRects(netObstaclesRouted, nets[i]->routeShapesWithPins());
         }
-        for (auto itn = std::next(it); itn != nets.end(); ++itn) {
-          for (auto virt : {true, false}) {
-            const auto& pins = virt ? (*itn)->virtualpins() : (*itn)->pins();
-            for (auto& pin : pins) {
-              for (auto& p : pin->ports()) {
-                Geom::MergeLayerRects(netObstaclesUnrouted, p->shapes());
-              }
-            }
-          }
-        }
-        if (addAdjObstacles && m1Layer >= 0 && layerName(m1Layer + 1)[0] == 'M') {
-          auto itm1 = netObstaclesUnrouted.find(m1Layer);
-          if (itm1 != netObstaclesUnrouted.end() && !itm1->second.empty()) {
-            auto& adj = netObstaclesUnrouted[m1Layer + 1];
-            adj.insert(adj.end(), itm1->second.begin(), itm1->second.end());
-          }
-        }
-        router.setNetName((*it)->name());
-        if (debugnet.find(_name + "__" + (*it)->name()) != debugnet.end()
-            || debugnet.find((*it)->name()) != debugnet.end()
-            || debugnet.find(_name) != debugnet.end()) {
-          router.setEnableDebug(true);
-        } else {
-          router.setEnableDebug(false);
-        }
-        (*it)->route(router, netObstaclesRouted, netObstaclesUnrouted, _obstacles, true, _uu, _bbox, _name);
-        //writeDEF("_" + (*it)->name(), (*it)->name());
-        if ((*it)->routable() && (*it)->unrouted()) anyUnrouted = true;
-        Geom::MergeLayerRects(netObstaclesRouted, (*it)->routeShapesWithPins());
       }
       return anyUnrouted;
     };
@@ -520,7 +645,13 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
       ofs << "NETS " << _nets.size() << " ;\n ";
       for (auto& n : _nets) {
         ofs << "- " << n.first << "\n";
-        for (auto& p : n.second.pins()) {
+        // Emit the pins in a stable, name-sorted order. Net::pins() is a
+        // std::set keyed by Pin pointer, whose address ordering varies between
+        // runs (ASLR), so iterating it directly makes the DEF non-deterministic.
+        std::vector<const Pin*> orderedPins(n.second.pins().begin(), n.second.pins().end());
+        std::sort(orderedPins.begin(), orderedPins.end(),
+            [](const Pin* a, const Pin* b) { return a->name() < b->name(); });
+        for (auto& p : orderedPins) {
           std::string instname = p->name();
           std::string pinname  = p->name();
           auto ppos = p->name().rfind('+');
@@ -541,7 +672,7 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
           }
         } else {
           ofs << "\n";
-          for (auto& pin : n.second.pins()) {
+          for (auto& pin : orderedPins) {
             for (auto& p : pin->ports()) {
               const auto& shapes = p->shapes();
               if (!shapes.empty()) {

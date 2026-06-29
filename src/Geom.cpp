@@ -71,14 +71,16 @@ typedef RTree<int, int, 2, double, 16> Tree;
 
 RTree2D::~RTree2D()
 {
-  if (nullptr != _rtree) {
-    if (_copies) { 
-      if (*_copies == 0) {
-        delete static_cast<Tree*>(_rtree);
-        delete _copies;
-      } else {
-        --(*_copies);
-      }
+  // _copies (the shared ref-count) is allocated unconditionally by the ctor,
+  // even when the rect list is empty and _rtree stays null, so it must be freed
+  // independently of _rtree -- otherwise an empty tree leaks its ref-count.
+  // delete on a null _rtree is a no-op, so it is safe in either case.
+  if (_copies) {
+    if (*_copies == 0) {
+      delete static_cast<Tree*>(_rtree);
+      delete _copies;
+    } else {
+      --(*_copies);
     }
     _copies = nullptr;
     _rtree = nullptr;

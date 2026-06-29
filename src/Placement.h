@@ -166,6 +166,7 @@ class Net {
       }
     }
     int halfpm() const { return _bbox.halfpm(); }
+    const Geom::Rect& bbox() const { return _bbox; }
     void addNDRWidth(const int layer, const int width) { _ndrwidths[layer] = width; }
     void addNDRSpace(const int layer, const int space) { _ndrspaces[layer] = space; }
     void addNDRDir(const int layer, const std::string& dir)
@@ -180,6 +181,7 @@ class Net {
     void exclude() { _exclude = 1; }
     void allowDetour() { _detour = 1; }
     bool excluded() const { return _exclude ? true : false; }
+    bool isDetour() const { return _detour ? true : false; }
     void setClockDriver(const std::string& driver) { _driver = driver; }
     void addObstacle(const int layer, const Geom::Rect& r) {
       COUT << "Adding obstacle to net : " << _name << " layer : " << layer << ' ' << r.str() << '\n';

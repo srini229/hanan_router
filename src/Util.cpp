@@ -2,6 +2,10 @@
 #include "Geom.h"
 #include <sstream>
 
+static thread_local std::ostream* t_threadLog = nullptr;
+std::ostream& threadLog() { return t_threadLog ? *t_threadLog : std::cout; }
+void setThreadLog(std::ostream* s) { t_threadLog = s; }
+
 std::string parseArgs(const int argc, char* const argv[], const std::string& arg, std::string str)
 {
   for (int i = 0; i < argc; ++i) {
