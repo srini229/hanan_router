@@ -535,6 +535,28 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
           if (it != m.end()) {
             modit->second->setusepinwidth(static_cast<int>(*it));
           }
+          it = m.find("deviation_cost");
+          if (it != m.end() && it->is_number()) {
+            modit->second->setDeviationCost(static_cast<double>(*it));
+          }
+          it = m.find("symmetric_nets");
+          if (it != m.end()) {
+            // each entry : ["net1", "net2"] or ["net1", "net2", {"V": x}|{"H": y}]
+            for (auto& pr : *it) {
+              if (!pr.is_array() || pr.size() < 2 || !pr[0].is_string() || !pr[1].is_string()) {
+                CERR << "symmetric_nets : entry must be [\"net1\", \"net2\"] (with optional axis); skipping\n";
+                continue;
+              }
+              int orient = 0, pos = 0;   // 0 = auto-detect axis
+              if (pr.size() >= 3 && pr[2].is_object()) {
+                auto av = pr[2].find("V");
+                auto ah = pr[2].find("H");
+                if (av != pr[2].end()) { orient = 1; pos = std::round(static_cast<double>(*av) * _uu); }
+                else if (ah != pr[2].end()) { orient = 2; pos = std::round(static_cast<double>(*ah) * _uu); }
+              }
+              modit->second->addSymmetricPair(pr[0], pr[1], orient, pos);
+            }
+          }
         }
       }
     }

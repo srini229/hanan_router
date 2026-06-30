@@ -1,0 +1,106 @@
+{
+  "global_signals": [],
+  "leaves": [
+    {
+      "abstract_name": "CELL",
+      "bbox": [
+        0,
+        0,
+        60,
+        60
+      ],
+      "concrete_name": "CELL",
+      "terminals": [
+        {
+          "name": "P"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "abstract_name": "SYMS",
+      "bbox": [
+        0,
+        0,
+        2000,
+        1000
+      ],
+      "concrete_name": "SYMS_CONC_0",
+      "instances": [
+        {
+          "abstract_template_name": "CELL",
+          "concrete_template_name": "CELL",
+          "fa_map": [
+            {
+              "actual": "INP",
+              "formal": "P"
+            }
+          ],
+          "instance_name": "IPB",
+          "transformation": {
+            "oX": 300,
+            "oY": 150,
+            "sX": 1,
+            "sY": 1
+          }
+        },
+        {
+          "abstract_template_name": "CELL",
+          "concrete_template_name": "CELL",
+          "fa_map": [
+            {
+              "actual": "INP",
+              "formal": "P"
+            }
+          ],
+          "instance_name": "IPT",
+          "transformation": {
+            "oX": 500,
+            "oY": 820,
+            "sX": 1,
+            "sY": 1
+          }
+        },
+        {
+          "abstract_template_name": "CELL",
+          "concrete_template_name": "CELL",
+          "fa_map": [
+            {
+              "actual": "INM",
+              "formal": "P"
+            }
+          ],
+          "instance_name": "IMB",
+          "transformation": {
+            "oX": 1668,
+            "oY": 150,
+            "sX": 1,
+            "sY": 1
+          }
+        },
+        {
+          "abstract_template_name": "CELL",
+          "concrete_template_name": "CELL",
+          "fa_map": [
+            {
+              "actual": "INM",
+              "formal": "P"
+            }
+          ],
+          "instance_name": "IMT",
+          "transformation": {
+            "oX": 1468,
+            "oY": 820,
+            "sX": 1,
+            "sY": 1
+          }
+        }
+      ],
+      "parameters": [
+        "INP",
+        "INM"
+      ]
+    }
+  ]
+}

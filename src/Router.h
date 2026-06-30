@@ -255,6 +255,16 @@ class Router {
     int _reorderPasses{10};
     int _threads{1};
 
+    // Optional "guide" geometry (the mirrored route of a symmetric partner net).
+    // When set, the A* g-cost is biased by each node's distance from the guide so
+    // the route is pulled toward it -- making a symmetric pair appear mirrored.
+    // Empty / weight 0 -> _hasGuide false -> zero effect on cost (default).
+    Geom::LayerRects _guide;
+    std::map<int, Geom::Rects> _guideByLayer;
+    Geom::Rects _guideAll;
+    CostType _guideWeight{0};
+    bool _hasGuide{false};
+
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
         const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
 
@@ -276,6 +286,12 @@ class Router {
             fcost += 1;
           }
         }
+      }
+      // Bias toward the symmetry guide: penalise this node's planar distance from
+      // the guide. The term depends only on n's position, so it accumulates along
+      // the path (via parent->fcost()) without changing parent selection.
+      if (_hasGuide) {
+        fcost += _guideWeight * guideDeviation(n->x(), n->y(), n->z());
       }
       n->setFCost(fcost);
       /*CostType bends{0};
@@ -465,6 +481,17 @@ class Router {
     void setThreads(const int n) { _threads = n; }
     int threads() const { return _threads; }
     const DRC::LayerInfo& layerInfo() const { return _lf; }
+
+    // Symmetry guide. setGuide installs the mirrored partner route; weight scales
+    // the per-node deviation penalty (0 or empty guide disables it). guideDeviation
+    // returns the Manhattan distance from (x,y,z) to the nearest guide shape on the
+    // same layer (falling back to any layer). baseUnitCost is the cheapest per-DBU
+    // wire cost, used by the caller to scale the weight into cost units.
+    void setGuide(const Geom::LayerRects& g, const CostType weight);
+    void clearGuide() { _guide.clear(); _guideByLayer.clear(); _guideAll.clear(); _guideWeight = 0; _hasGuide = false; }
+    bool hasGuide() const { return _hasGuide; }
+    CostType guideDeviation(const int x, const int y, const int z) const;
+    CostType baseUnitCost() const;
 };
 
 }

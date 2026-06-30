@@ -402,6 +402,51 @@ LOGMUST="net : VDD num pins"
 run_case global_net "GLOB_CONC_0.def" \
   -d $IN/layers.json -p $IN/global_net.placement_verilog.json -l $IN/m1adj_escape.lef
 
+# 29b. symmetric_nets: two diagonal nets (INP, INM) placed as mirror images about
+#      x=1000, with a routing obstacle ON THE INP SIDE ONLY. Unguided, INP must
+#      detour around the obstacle while INM (clear side) routes straight -- so the
+#      two are NOT mirror symmetric. With symmetric_nets, INP is routed first and
+#      its mirrored route guides INM's A*, so INM reproduces the detour mirrored.
+#      The router measures the residual and prints "... maxdev=0 ...": INM matches
+#      the mirror of INP exactly, which only happens because the deviation cost
+#      actually steered the search (without it maxdev would be hundreds). The axis
+#      here is auto-detected from the nets' pin geometry (no explicit override).
+LOGMUST="symmetric net : routing INM guided by INP|SYMMETRY module=SYM_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
+run_case symmetric_nets "SYM_CONC_0.def" \
+  -d $IN/layers.json -p $IN/symmetric.placement_verilog.json -l $IN/symmetric.lef \
+  -ndr $IN/symmetric_ndr.json
+
+# 29c. same layout but with the mirror axis given explicitly ("V": 1000) instead
+#      of auto-detected -- exercises the JSON axis-override parse path. Result is
+#      identical: INM mirrors INP's detour exactly (maxdev=0).
+LOGMUST="SYMMETRY module=SYM_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
+run_case symmetric_nets_axis "SYM_CONC_0.def" \
+  -d $IN/layers.json -p $IN/symmetric.placement_verilog.json -l $IN/symmetric.lef \
+  -ndr $IN/symmetric_axis_ndr.json
+
+# 29d. symmetric_s: a harder symmetric case whose routes are S-shaped. Each net's
+#      two pins are offset in x, and two staggered all-metal obstacle bars (with
+#      gaps on opposite sides) force the wire to rise on one column, cross over,
+#      and rise on the other -- an S/Z. The obstacles are themselves mirror images
+#      about x=1000, so both nets route an S; symmetric_nets makes INM the exact
+#      mirror of INP's S (maxdev=0). The post-check confirms INP genuinely weaves
+#      (M1 vertical runs on BOTH a left and a right column), i.e. it is not a
+#      straight wire -- so maxdev=0 means a full S was mirrored, not a trivial line.
+LOGMUST="SYMMETRY module=SYMS_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
+run_case symmetric_s "SYMS_CONC_0.def" \
+  -d $IN/layers.json -p $IN/symmetric_s.placement_verilog.json -l $IN/symmetric.lef \
+  -ndr $IN/symmetric_s_ndr.json
+sdef="$OUTROOT/symmetric_s/SYMS_CONC_0.def"
+if awk '
+    /^ *- INP$/{p=1; next} /^ *- INM$/{p=0} /END NETS/{p=0}
+    p && /\+ RECT M1 / { x=$5+0; if (x<=360) L=1; if (x>=456) R=1 }
+    END{ exit !(L && R) }' "$sdef" 2>/dev/null; then
+  echo "PASS symmetric_s_shape"; PASS=$((PASS+1))
+else
+  echo "FAIL symmetric_s_shape : INP route does not weave across columns (no S)"
+  FAIL=$((FAIL+1)); ERRS="${ERRS}symmetric_s_shape:no-weave;\n"
+fi
+
 # 30. coincident_pin: nets A and B have a pin at the IDENTICAL location (700,300)
 #     -- physically one point. Routing them separately must short; instead the
 #     router warns and merges them into one connected net (dropping the redundant

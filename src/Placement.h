@@ -234,6 +234,14 @@ class Module {
     const int _uu;
     NetsVec _routeorder;
 
+    // Symmetric-net constraint: route 'first' then mirror its result as a guide
+    // for 'second'. orient: 0 = auto-detect from pin geometry, 1 = vertical axis
+    // at x=pos, 2 = horizontal axis at y=pos (pos already in DB units).
+    struct SymPair { Net* first; Net* second; int orient; int pos; };
+    std::vector<SymPair> _sympairs;
+    // Multiplier on the cheapest per-DBU wire cost for the A* deviation penalty.
+    double _devweight{4.0};
+
     void build();
   public:
     Module(const std::string& name, const std::string& absname, const unsigned leaf, const int uu) : _name(name), _absname{absname}, _leaf(leaf), _routed{leaf}, _usepinwidth{0}, _bbox{}, _uu{uu} {_instances.reserve(64);}
@@ -387,6 +395,23 @@ class Module {
     }
 
     void setusepinwidth(int u) { _usepinwidth = u ? 1 : 0; }
+
+    void addSymmetricPair(const std::string& a, const std::string& b, const int orient, const int pos)
+    {
+      Net* na = net(a);
+      Net* nb = net(b);
+      if (na == nullptr || nb == nullptr) {
+        COUT << "symmetric_nets : skipping pair (" << a << ", " << b << ") -- "
+             << (na ? b : a) << " not found in module " << _name << '\n';
+        return;
+      }
+      if (na == nb) {
+        COUT << "symmetric_nets : skipping pair (" << a << ", " << b << ") -- same net\n";
+        return;
+      }
+      _sympairs.push_back(SymPair{na, nb, orient, pos});
+    }
+    void setDeviationCost(const double w) { if (w >= 0) _devweight = w; }
 
     void route(Router::Router& r, const std::string& outdir);
 

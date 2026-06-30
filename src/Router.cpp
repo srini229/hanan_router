@@ -326,6 +326,54 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
   constructVias();
 }
 
+void Router::setGuide(const Geom::LayerRects& g, const CostType weight)
+{
+  _guide = g;
+  _guideByLayer.clear();
+  _guideAll.clear();
+  for (auto& l : _guide) {
+    auto& v = _guideByLayer[l.first];
+    for (auto& r : l.second) {
+      v.push_back(r);
+      _guideAll.push_back(r);
+    }
+  }
+  _guideWeight = weight;
+  _hasGuide = (weight > 0 && !_guideAll.empty());
+}
+
+CostType Router::baseUnitCost() const
+{
+  CostType m = CostTypeMax;
+  for (int i = 0; i <= _cf.topRoutingLayer(); ++i) {
+    m = std::min(m, std::min(_cf.hcost(i), _cf.vcost(i)));
+  }
+  return (m == CostTypeMax || m <= 0) ? 1 : m;
+}
+
+CostType Router::guideDeviation(const int x, const int y, const int z) const
+{
+  // Manhattan distance from (x,y) to the nearest rect in 'rs' (0 if inside one).
+  auto nearest = [&](const Geom::Rects& rs) -> long {
+    long best = -1;
+    for (auto& r : rs) {
+      long dx = std::max(std::max(r.xmin() - x, x - r.xmax()), 0);
+      long dy = std::max(std::max(r.ymin() - y, y - r.ymax()), 0);
+      long d = dx + dy;
+      if (best < 0 || d < best) best = d;
+      if (best == 0) break;
+    }
+    return best;
+  };
+  auto it = _guideByLayer.find(z);
+  if (it != _guideByLayer.end() && !it->second.empty()) {
+    long d = nearest(it->second);
+    if (d >= 0) return static_cast<CostType>(d);
+  }
+  long d = nearest(_guideAll);
+  return d < 0 ? 0 : static_cast<CostType>(d);
+}
+
 Node* Router::createNode(const int x, const int y, const int z,
     const Node* parent, const int fcost, const int tcost)
 {

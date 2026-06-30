@@ -89,6 +89,7 @@ The LEF/DEF can be visualized with [`klayout`](https://klayout.de/).
 * **Adjacent-obstacle retry.** When a net's straight wire would cap another net's M1 pin, the blocking pin is projected onto the adjacent metal as an obstacle so the first net detours and leaves the escape free.
 * **Coincident-pin merge.** Two different nets whose pins sit on the same point are physically one node; the router warns (`... has pin(s) coincident with net ...; merging them into one connected net`) and merges them so they route connected instead of shorting.
 * **Unconnected-pin protection.** Instance pins not wired to any net are added as obstacles so no route lands on them.
+* **Symmetric-net guiding.** Net pairs marked `symmetric_nets` are routed so they appear mirror-symmetric: the first net is routed, its solution mirrored across the pair's axis, and that mirror used as a soft *deviation-cost* guide for the second net's A\* search (see [Symmetric nets](#symmetric-nets)).
 * **Obstacle locality.** A net's search never leaves its pin bounding box expanded by a bounded margin, so the module's obstacles are indexed in an R-tree and each net is given only the obstacles near it. This keeps per-net routing cost proportional to the *local* obstacle count rather than the whole design's, without changing the routed result.
 
 ## Parallel routing
@@ -135,7 +136,8 @@ The optional `-ndr <file>` is a JSON array of per-module objects. Module-level k
       },
       { "name": "D", "do_not_route": 1 }
     ],
-    "clock_nets": [ { "name": "CLK", "driver": "U1/Y" } ]
+    "clock_nets": [ { "name": "CLK", "driver": "U1/Y" } ],
+    "symmetric_nets": [ ["INP", "INM"], ["OUTP", "OUTM", { "V": 1250 }] ]
   }
 ]
 ```
@@ -152,11 +154,46 @@ The optional `-ndr <file>` is a JSON array of per-module objects. Module-level k
 | `obstacles` | module / net | Extra routing blockages, as per-layer rectangle lists. |
 | `virtual_pins` | net | Additional routing targets (e.g. a clock spine entry). |
 | `clock_nets` | module | Mark a net as a clock with a named driver for ordering. |
+| `symmetric_nets` | module | Pairs of nets to route mirror-symmetrically (see [Symmetric nets](#symmetric-nets)). |
+| `deviation_cost` | module | Weight of the symmetry guide penalty (default `4`); higher hugs the mirror harder. |
+
+
+## Symmetric nets
+
+`symmetric_nets` takes a list of net-name pairs that should be routed as mirror
+images of one another (e.g. the two halves of a differential pair). Each entry is
+`["net1", "net2"]`, optionally followed by an explicit mirror axis
+`{"V": x}` (a vertical line at `x`) or `{"H": y}` (a horizontal line at `y`),
+given in the same user units as the placement:
+
+```json
+"symmetric_nets": [
+  ["INP", "INM"],                 // axis auto-detected from the pins
+  ["OUTP", "OUTM", { "V": 1250 }] // explicit vertical mirror axis at x = 1250
+]
+```
+
+For each pair the router routes `net1` first, mirrors its solution across the
+axis, and uses that mirrored route as a **guide** for `net2`: a *deviation cost*
+is added to `net2`'s A\* search that penalises every node by its distance from the
+guide, so the search is pulled toward the mirror. The two nets therefore come out
+mirror-symmetric wherever the design allows it, and degrade gracefully (routing a
+shortest path *near* the mirror) where obstacles make an exact mirror impossible.
+
+* If no axis is given it is **auto-detected**: the orientation (vertical or
+  horizontal) and position are taken from the two nets' pin bounding-box centres.
+* Symmetric-pair nets are always routed sequentially (`net1` before `net2`) and
+  are never parallelized, regardless of `-threads`.
+* The guide is a soft bias, not a hard constraint, so a symmetric net never fails
+  to route because of it. For every pair the log reports
+  `SYMMETRY module=<m> pair=<n1>,<n2> axis=<V|H>:<pos> maxdev=<d> meandev=<d>`,
+  where `maxdev`/`meandev` are the residual distance of `net2`'s route from the
+  mirror (`0` = a perfect mirror).
 
 
 # Tests
 
-A smoke-test suite under `test/` exercises the example configurations: basic routing, NDR widths/spaces/directions/preferred-layers, virtual pins, clock nets, do-not-route, routing order, pin-width matching, large detours, NDR and LEF-OBS obstacles, custom via arrays, precision rounding, mirrored placements, debug dumps, interim-LEF reuse, the pin-escape SAT check, the net-ordering reorder search, coincident-pin merging, CLI/error-handling paths and a 30-net throughput case.
+A smoke-test suite under `test/` exercises the example configurations: basic routing, NDR widths/spaces/directions/preferred-layers, virtual pins, clock nets, do-not-route, routing order, pin-width matching, large detours, NDR and LEF-OBS obstacles, custom via arrays, precision rounding, mirrored placements, debug dumps, interim-LEF reuse, the pin-escape SAT check, the net-ordering reorder search, coincident-pin merging, symmetric-net mirror routing (including an S-shaped serpentine pair), CLI/error-handling paths and a 30-net throughput case.
 
 Run it with:
 ```

@@ -2,6 +2,7 @@
 #include "Placement.h"
 #include "Escape.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <tuple>
 
 #include <algorithm>
@@ -260,6 +261,51 @@ void Module::route(Router::Router& router, const std::string& outdir)
     for (auto n : nets) pinBoxCache.emplace(n, computePinBBox(n));
     auto pinBBox = [&](const Net* n) -> const Geom::Rect& { return pinBoxCache.at(n); };
 
+    // ---- symmetric_nets : route the first of a pair, then mirror its solution as
+    // a guide that biases the A* search of the second so the pair appears mirrored.
+    std::unordered_set<const Net*> symNets;                 // every net in any pair
+    std::unordered_map<const Net*, const SymPair*> secondToPair;  // second net -> pair
+    for (auto& sp : _sympairs) {
+      symNets.insert(sp.first);
+      symNets.insert(sp.second);
+      secondToPair[sp.second] = &sp;
+    }
+    auto mirrorRect = [](const Geom::Rect& r, const bool vert, const int pos) -> Geom::Rect {
+      if (vert) return Geom::Rect(2 * pos - r.xmax(), r.ymin(), 2 * pos - r.xmin(), r.ymax());
+      return Geom::Rect(r.xmin(), 2 * pos - r.ymax(), r.xmax(), 2 * pos - r.ymin());
+    };
+    auto mirrorShapes = [&](const Geom::LayerRects& in, const bool vert, const int pos) -> Geom::LayerRects {
+      Geom::LayerRects out;
+      for (auto& l : in)
+        for (auto& r : l.second) out[l.first].push_back(mirrorRect(r, vert, pos));
+      return out;
+    };
+    // Mirror axis for a pair: explicit override, else inferred from the two nets'
+    // pin-bbox centres (the larger centre offset picks the axis orientation).
+    auto resolveAxis = [&](const SymPair& sp, bool& vert, int& pos) {
+      if (sp.orient == 1) { vert = true;  pos = sp.pos; return; }
+      if (sp.orient == 2) { vert = false; pos = sp.pos; return; }
+      const Geom::Rect& ba = pinBBox(sp.first);
+      const Geom::Rect& bb = pinBBox(sp.second);
+      const long dx = std::labs(static_cast<long>(ba.xcenter()) - bb.xcenter());
+      const long dy = std::labs(static_cast<long>(ba.ycenter()) - bb.ycenter());
+      if (dx >= dy) { vert = true;  pos = (ba.xcenter() + bb.xcenter()) / 2; }
+      else          { vert = false; pos = (ba.ycenter() + bb.ycenter()) / 2; }
+    };
+    // Keep each pair's first net ahead of its second in the routing order so the
+    // guide (the first net's mirrored route) exists when the second is routed.
+    auto enforceSymOrder = [&](NetsVec& order) {
+      for (auto& sp : _sympairs) {
+        auto ita = std::find(order.begin(), order.end(), sp.first);
+        auto itb = std::find(order.begin(), order.end(), sp.second);
+        if (ita == order.end() || itb == order.end() || itb > ita) continue;
+        Net* b = *itb;
+        order.erase(itb);
+        ita = std::find(order.begin(), order.end(), sp.first);
+        order.insert(ita + 1, b);
+      }
+    };
+
     // Generous super-set of a net's A* search box (pin bbox +50% + bloat*4); the
     // parPad term covers the bloat with room to spare, so an obstacle/pin outside
     // this box provably cannot overlap the search and is safe to drop.
@@ -364,7 +410,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
       }
       auto mustSingleton = [&](size_t i) {
         return i < pinned || nets[i]->excluded() || nets[i]->isDetour()
-            || !nets[i]->routable();
+            || !nets[i]->routable() || symNets.count(nets[i]);
       };
       std::vector<Geom::Rect> boxOf(N);
       for (size_t i = 0; i < N; ++i) {
@@ -401,8 +447,33 @@ void Module::route(Router::Router& router, const std::string& outdir)
         size_t i = batch[0];
         router.setNetName(nets[i]->name());
         applyDebug(router, i);
+        // If this net is the second of a symmetric pair and its partner routed,
+        // install the mirrored partner route as an A* guide.
+        bool vert = true; int pos = 0; bool guided = false;
+        auto sit = secondToPair.find(nets[i]);
+        if (sit != secondToPair.end() && !sit->second->first->routeShapes().empty()) {
+          resolveAxis(*sit->second, vert, pos);
+          router.setGuide(mirrorShapes(sit->second->first->routeShapes(), vert, pos),
+                          _devweight * router.baseUnitCost());
+          guided = true;
+          COUT << "symmetric net : routing " << nets[i]->name() << " guided by "
+               << sit->second->first->name() << " mirrored about "
+               << (vert ? "V:" : "H:") << pos << '\n';
+        }
         nets[i]->route(router, routedSnapshot, unroutedSets[0], obsSets[0],
                        true, _uu, _bbox, _name);
+        if (guided) {
+          double maxdev = 0, sumdev = 0; long cnt = 0;
+          for (auto& l : nets[i]->routeShapes())
+            for (auto& r : l.second) {
+              double d = router.guideDeviation(r.xcenter(), r.ycenter(), l.first);
+              maxdev = std::max(maxdev, d); sumdev += d; ++cnt;
+            }
+          COUT << "SYMMETRY module=" << _name << " pair=" << sit->second->first->name()
+               << ',' << nets[i]->name() << " axis=" << (vert ? "V:" : "H:") << pos
+               << " maxdev=" << maxdev << " meandev=" << (cnt ? sumdev / cnt : 0.0) << '\n';
+          router.clearGuide();
+        }
         return;
       }
 
@@ -453,6 +524,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
     };
 
     auto routeAllNets = [&](const bool addAdjObstacles) -> bool {
+      if (!_sympairs.empty()) enforceSymOrder(nets);
       Geom::LayerRects netObstaclesRouted;
       bool anyUnrouted{false};
       std::vector<std::vector<size_t>> batches = buildBatches();
