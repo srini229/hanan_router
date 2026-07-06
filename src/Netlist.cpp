@@ -356,7 +356,7 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
               if (iwsd < 3) {
                 for (auto& el : (*itwsd).items()) {
                   auto layer = lf.getLayerIndex(el.key());
-                  if (layer >= 0) {
+                  if (layer >= 0 && ((iwsd < 2 && el.value().is_number()) || (iwsd == 2 && el.value().is_string()))) {
                     switch (iwsd) {
                       default:
                       case 0: modit->second->addNDRWidth(layer, std::round(static_cast<double>(el.value()) * _uu));
@@ -380,17 +380,17 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                   if (layer >= 0) {
                     int wx{0}, wy{0}, sx{0}, sy{0}, nx{0}, ny{0};
                     auto itvia = via.find("WidthX");
-                    if (itvia != via.end()) wx = *itvia;
+                    if (itvia != via.end() && itvia->is_number()) wx = *itvia;
                     itvia = via.find("WidthY");
-                    if (itvia != via.end()) wy = *itvia;
+                    if (itvia != via.end() && itvia->is_number()) wy = *itvia;
                     itvia = via.find("SpaceX");
-                    if (itvia != via.end()) sx = *itvia;
+                    if (itvia != via.end() && itvia->is_number()) sx = *itvia;
                     itvia = via.find("SpaceY");
-                    if (itvia != via.end()) sy = *itvia;
+                    if (itvia != via.end() && itvia->is_number()) sy = *itvia;
                     itvia = via.find("NumX");
-                    if (itvia != via.end()) nx = *itvia;
+                    if (itvia != via.end() && itvia->is_number()) nx = *itvia;
                     itvia = via.find("NumY");
-                    if (itvia != via.end()) ny = *itvia;
+                    if (itvia != via.end() && itvia->is_number()) ny = *itvia;
                     modit->second->addNDRVia(layer, DRC::ViaArray(wx, wy, sx, sy, nx, ny));
                   }
                 }
@@ -412,7 +412,7 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                     if (iwsd < 3) {
                       for (auto& el : (*itwsd).items()) {
                         auto layer = lf.getLayerIndex(el.key());
-                        if (layer >= 0) {
+                        if (layer >= 0 && ((iwsd < 2 && el.value().is_number()) || (iwsd == 2 && el.value().is_string()))) {
                           switch (iwsd) {
                             default:
                             case 0: modit->second->addNDRWidth(layer, std::round(static_cast<double>(el.value()) * _uu), *itnetname);
@@ -437,17 +437,17 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                         if (layer >= 0) {
                           int wx{0}, wy{0}, sx{0}, sy{0}, nx{0}, ny{0};
                           auto itvia = via.find("WidthX");
-                          if (itvia != via.end()) wx = *itvia;
+                          if (itvia != via.end() && itvia->is_number()) wx = *itvia;
                           itvia = via.find("WidthY");
-                          if (itvia != via.end()) wy = *itvia;
+                          if (itvia != via.end() && itvia->is_number()) wy = *itvia;
                           itvia = via.find("SpaceX");
-                          if (itvia != via.end()) sx = *itvia;
+                          if (itvia != via.end() && itvia->is_number()) sx = *itvia;
                           itvia = via.find("SpaceY");
-                          if (itvia != via.end()) sy = *itvia;
+                          if (itvia != via.end() && itvia->is_number()) sy = *itvia;
                           itvia = via.find("NumX");
-                          if (itvia != via.end()) nx = *itvia;
+                          if (itvia != via.end() && itvia->is_number()) nx = *itvia;
                           itvia = via.find("NumY");
-                          if (itvia != via.end()) ny = *itvia;
+                          if (itvia != via.end() && itvia->is_number()) ny = *itvia;
                           modit->second->addNDRVia(layer, DRC::ViaArray(wx, wy, sx, sy, nx, ny), *itnetname);
                         }
                       }

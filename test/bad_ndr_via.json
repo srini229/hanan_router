@@ -1,0 +1,17 @@
+[
+  {
+    "module": "TEST_CONC_0",
+    "vias":
+    {
+      "V1":
+      {
+        "WidthX": "bad",
+        "WidthY": 16,
+        "SpaceX": 20,
+        "SpaceY": 20,
+        "NumX": 2,
+        "NumY": 2
+      }
+    }
+  }
+]

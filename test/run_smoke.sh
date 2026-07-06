@@ -256,6 +256,15 @@ run_case ndr_vias "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
 run_case precision "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
   -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -r 4
 
+# 7b. outdir_no_slash: -o given without a trailing '/' (main.cpp appends one
+#     if missing). Every other case relies on run_case's own appended
+#     "-o ./", which already ends in '/' and never exercises that append --
+#     passing "-o ." here as part of the case's own args takes priority
+#     (parseArgs returns the first -o it finds) and still resolves to the
+#     current directory, so run_case's own file-existence checks apply as-is.
+run_case outdir_no_slash "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -o .
+
 # 8. debug plot outputs (HANAN_DEBUG_WIRE exercises the per-wire dump routines,
 #    HANAN_DEBUG_NET the per-net debug LEF dump)
 export HANAN_DEBUG_WIRE=1 HANAN_DEBUG_NET=X,Y
@@ -379,6 +388,27 @@ ALLOW_UNROUTED=1
 run_case sat_spacing_gap "" \
   -d $IN/layers.json -p $IN/sat_spacing_gap.placement_verilog.json \
   -l $IN/m1adj_escape.lef -ndr $IN/sat_spacing_gap_ndr.json
+
+# 19c. sat_clash: two DIFFERENT nets (A, B) each have one pin (I_A0, I_B0)
+#      boxed on three sides so their only escape is a via straight up to M2;
+#      the two pins sit immediately adjacent on M1 (I_A0 at x=[100,132],
+#      I_B0 touching at x=[132,164]) so their M2 via footprints are within
+#      the M2 spacing of each other. Escape::feasible's own per-pin
+#      candidates are each individually fine, but the cross-net clash clause
+#      (Escape.cpp's "escapes of different nets that... would clash") makes
+#      choosing both simultaneously UNSAT -- this is the only existing
+#      fixture that ever exercises that clause, and the SAT solver's own
+#      conflict/undo() path in Sat.h (previously 0% covered; verified via
+#      `make coverage`). LOGMUST checks the specific "mutually conflict
+#      (unsat)" reason string, distinct from sat_pin_escape's/
+#      sat_spacing_gap's "no possible escape" (a single hard-blocked pin,
+#      resolved before the SAT solver even runs).
+LOGMUST="pin escape SAT : SATCLASH_CONC_0 is infeasible (escapes mutually conflict (unsat))"
+ALLOW_UNROUTED=1
+run_case sat_clash "" \
+  -d $IN/layers.json -p $IN/sat_clash.placement_verilog.json \
+  -l $IN/sat_clash.lef -ndr $IN/sat_clash_ndr.json
+
 # 20. reorder: 5 nets criss-cross through one capacity-limited gap in a wall (left
 #     pins top->down, right pins bottom->up). The default HPWL net order strands
 #     one net; the reorder search promotes blocked nets up the routing order
@@ -413,6 +443,9 @@ cli_check bad_precision   "invalid -r precision" \
 cli_check bad_reorder_arg "invalid -reorder value" \
   -d $IN/layers.json -p $IN/reorder.placement_verilog.json -l $IN/m1adj_escape.lef \
   -ndr $IN/reorder_ndr.json -reorder xyz
+cli_check bad_threads_arg "invalid -threads value" \
+  -d $IN/layers.json -p $IN/reorder.placement_verilog.json -l $IN/m1adj_escape.lef \
+  -ndr $IN/reorder_ndr.json -threads xyz
 # Netlist input-error paths (cover Netlist.cpp open/parse failure handling).
 cli_check no_placement_file "unable to open placement file" \
   -d $IN/layers.json -p $IN/does_not_exist.json -l $IN/m1adj_escape.lef
@@ -429,6 +462,17 @@ cli_check no_lef_file "unable to open leffile" \
 #     diagnostic instead of terminate()/SIGABRT.
 cli_check bad_layers_json "invalid UnitR" \
   -d $IN/bad_layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+
+# bad_ndr_via: an NDR "vias" WidthX given as a JSON string instead of a
+#     number. readNDR() read every via field (WidthX/Y, SpaceX/Y, NumX/Y) via
+#     a bare `*itvia` conversion with no type check -- unlike layers.json's
+#     fields (see bad_layers_json above, and the is_number() widening this
+#     suite already covers via layers_float_width), so a type mismatch threw
+#     an uncaught json::type_error and aborted the whole process. Must just
+#     silently default that one field to 0 and route normally, matching how
+#     every other malformed-but-present NDR field in this codebase behaves.
+run_case bad_ndr_via "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
+  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/bad_ndr_via.json
 
 # 26. reorder_reroute: a harder 6-net criss-cross (gap fits fewer than 6) that the
 #     reorder search improves but cannot fully solve, so it exhausts its passes
