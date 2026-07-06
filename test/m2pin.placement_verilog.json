@@ -1,0 +1,19 @@
+{
+ "global_signals": [],
+ "leaves": [
+  { "abstract_name": "M2CELL", "bbox": [0,0,32,32], "concrete_name": "M2CELL",
+    "terminals": [ { "name": "P", "rect": [0,0,32,32] } ] }
+ ],
+ "modules": [
+  { "abstract_name": "M2T", "bbox": [0,0,400,200], "concrete_name": "M2T_CONC_0",
+    "instances": [
+      { "abstract_template_name": "M2CELL", "concrete_template_name": "M2CELL",
+        "fa_map": [ {"actual":"A","formal":"P"} ], "instance_name": "I_A0",
+        "transformation": {"oX":60,"oY":80,"sX":1,"sY":1} },
+      { "abstract_template_name": "M2CELL", "concrete_template_name": "M2CELL",
+        "fa_map": [ {"actual":"A","formal":"P"} ], "instance_name": "I_A1",
+        "transformation": {"oX":300,"oY":80,"sX":1,"sY":1} }
+    ],
+    "parameters": ["A"] }
+ ]
+}

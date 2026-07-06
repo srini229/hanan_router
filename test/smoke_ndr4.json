@@ -1,0 +1,14 @@
+[
+  {
+    "module": "BLOCK_B_CONC_0",
+    "directions": {"M1": "V", "M2": "H"},
+    "use_pin_width": 1,
+    "nets": [{"name": "X", "large_detour": "allowed", "directions": {"M1": "V", "M2": "H"}}],
+    "routing_order": ["Y", "X"]
+  },
+  {
+    "module": "TEST_CONC_0",
+    "directions": {"M3": "H", "M4": "V"},
+    "routing_order": ["D", "C"]
+  }
+]

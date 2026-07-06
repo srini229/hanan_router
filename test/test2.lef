@@ -1,0 +1,32 @@
+MACRO BLOCK_A_2
+  UNITS 
+    DATABASE MICRONS UNITS 1;
+  END UNITS 
+  ORIGIN 0 0 ;
+  FOREIGN BLOCK_A 0 0 ;
+  SIZE 200 BY 200 ;
+  PIN A
+    DIRECTION INOUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER M1 ;
+        RECT 0 0 32 32 ;
+    END
+  END A
+  PIN B
+    DIRECTION INOUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER M1 ;
+        RECT 50 120 82 152 ;
+    END
+  END B
+  PIN C
+    DIRECTION INOUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER M1 ;
+        RECT 64 0 96 32 ;
+    END
+  END C
+END BLOCK_A_2

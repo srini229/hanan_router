@@ -1,0 +1,10 @@
+{
+ "global_signals": [],
+ "leaves": [ { "abstract_name":"PINCELL","bbox":[0,0,32,32],"concrete_name":"PINCELL","terminals":[{"name":"P","rect":[0,0,32,32]}] } ],
+ "modules": [ { "abstract_name":"COIN","bbox":[0,0,800,600],"concrete_name":"COIN_CONC_0","instances":[
+   {"abstract_template_name":"PINCELL","concrete_template_name":"PINCELL","fa_map":[{"actual":"A","formal":"P"}],"instance_name":"I_LA","transformation":{"oX":40,"oY":200,"sX":1,"sY":1}},
+   {"abstract_template_name":"PINCELL","concrete_template_name":"PINCELL","fa_map":[{"actual":"A","formal":"P"}],"instance_name":"I_RA","transformation":{"oX":700,"oY":300,"sX":1,"sY":1}},
+   {"abstract_template_name":"PINCELL","concrete_template_name":"PINCELL","fa_map":[{"actual":"B","formal":"P"}],"instance_name":"I_LB","transformation":{"oX":40,"oY":400,"sX":1,"sY":1}},
+   {"abstract_template_name":"PINCELL","concrete_template_name":"PINCELL","fa_map":[{"actual":"B","formal":"P"}],"instance_name":"I_RB","transformation":{"oX":700,"oY":300,"sX":1,"sY":1}}
+ ],"parameters":["A","B"] } ]
+}

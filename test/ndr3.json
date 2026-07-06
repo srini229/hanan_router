@@ -1,0 +1,22 @@
+[
+  {
+    "module": "test_inter_0",
+    "preferred_layers":["M3", "M4"]
+  },
+  {
+    "module": "test_0",
+    "preferred_layers":["M1", "M2"],
+    "vias":
+    {
+      "V1":
+      {
+        "WidthX": 16,
+        "WidthY": 16,
+        "SpaceX": 20,
+        "SpaceY": 20,
+        "NumX": 2,
+        "NumY": 2
+      }
+    }
+  }
+]

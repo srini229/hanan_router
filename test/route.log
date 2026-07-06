@@ -1,0 +1,397 @@
+Using options : -d layers.json -p test1.placement_verilog.json -l test.lef -uu 1 -o ./
+layer resistance : Poly 100 80 120
+layer resistance : Fin 0 0 0
+layer resistance : M1 50 40 60
+layer resistance : M2 50 40 60
+layer resistance : M3 50 40 60
+layer resistance : M4 50 40 60
+layer resistance : M5 25 20 30
+layer : Poly index : 0
+layer : Fin index : 1
+layer : M1 index : 2
+layer : M2 index : 3
+layer : M3 index : 4
+layer : M4 index : 5
+layer : M5 index : 6
+layer : V0 index : 7
+ cover : l: 20,0 u: 20,0
+layer : V1 index : 8
+ cover : l: 20,0 u: 20,0
+layer : V2 index : 9
+ cover : l: 20,0 u: 20,4
+layer : V3 index : 10
+ cover : l: 20,0 u: 20,0
+layer : V4 index : 11
+ cover : l: 20,0 u: 20,12
+top metal layer : M5
+signal routing layers : M1 : M5
+power  routing layers : unsp : unsp
+clock  routing layers : unsp : unsp
+layer : 0 cost : 10000 100
+layer : 1 cost : 1 10000
+layer : 2 cost : 10000 50
+layer : 3 cost : 50 10000
+layer : 4 cost : 10000 50
+layer : 5 cost : 50 10000
+layer : 6 cost : 10000 25
+layerPairCost : 0 1 10000
+layerPairCost : 1 0 10000
+layerPairCost : 1 2 10000
+layerPairCost : 2 1 10000
+layerPairCost : 2 3 25
+layerPairCost : 3 2 25
+layerPairCost : 3 4 25
+layerPairCost : 4 3 25
+layerPairCost : 4 5 25
+layerPairCost : 5 4 25
+layerPairCost : 5 6 25
+layerPairCost : 6 5 25
+layer : 0 width : 14 space : 66 v : 1 h : 0
+layer : 1 width : 10 space : 32 v : 0 h : 1
+layer : 2 width : 32 space : 24 v : 1 h : 0
+layer : 3 width : 32 space : 24 v : 0 h : 1
+layer : 4 width : 40 space : 40 v : 1 h : 0
+layer : 5 width : 40 space : 44 v : 0 h : 1
+layer : 6 width : 64 space : 80 v : 1 h : 0
+layer : 0 above : -1 below : -1
+layer : 1 above : -1 below : -1
+layer : 2 above : 8 below : -1
+layer : 3 above : 9 below : 8
+layer : 4 above : 10 below : 9
+layer : 5 above : 11 below : 10
+layer : 6 above : -1 below : 11
+min routing layer : M1 max routing layer : M5
+via : l: 2 u: 3 c: 8 center: (0,0) lb: [(-16,-36),(16,36)] ub: [(-36,-16),(36,16)] cut: [(-16,-16),(16,16)] bbox: [(-36,-36),(36,36)]
+via : l: 3 u: 4 c: 9 center: (0,0) lb: [(-36,-16),(36,16)] ub: [(-20,-36),(20,36)] cut: [(-16,-16),(16,16)] bbox: [(-36,-36),(36,36)]
+via : l: 4 u: 5 c: 10 center: (0,0) lb: [(-20,-40),(20,40)] ub: [(-40,-20),(40,20)] cut: [(-20,-20),(20,20)] bbox: [(-40,-40),(40,40)]
+via : l: 5 u: 6 c: 11 center: (0,0) lb: [(-40,-20),(40,20)] ub: [(-32,-40),(32,40)] cut: [(-20,-20),(20,20)] bbox: [(-40,-40),(40,40)]
+adding leaf : "BLOCK_A"
+"A"
+"B"
+adding module : "BLOCK_B_CONC_0"
+"X"
+"Y"
+"I_0" "BLOCK_A"
+net : "X"
+pin : "A"
+net : "Y"
+pin : "B"
+"I_1" "BLOCK_A"
+net : "X"
+pin : "B"
+net : "Y"
+pin : "A"
+Reading LEF file test.lef
+macro BLOCK_A
+loading macro BLOCK_A
+in units
+using scale : 1
+units : 1
+Checking SHORTS for module : BLOCK_A
+void Placement::Module::route(Router::Router&, const std::string&) runtime : 7.32e-07(s)
+ routing : BLOCK_B_CONC_0; num nets : 2; use pin width : 0
+setting module name : BLOCK_B_CONC_0
+net : Y num pins : 2
+routing net : Y 1540
+ports dist : I_1/A_port_0 I_1/A_port_1 0.06
+ports dist : I_1/A_port_0 I_0/B_port_0 0.864935
+ports dist : I_1/A_port_1 I_0/B_port_0 0.924935
+ports to route order : I_1/A_port_0 I_1/A_port_1
+ports to route order : I_1/A_port_0 I_0/B_port_0
+flushing nodes
+routing ports : I_1/A_port_0 I_1/A_port_1
+after updatendr layer : 0 width : 14 14
+after updatendr layer : 1 width : 10 10
+after updatendr layer : 2 width : 32 32
+after updatendr layer : 3 width : 32 32
+after updatendr layer : 4 width : 40 40
+after updatendr layer : 5 width : 40 40
+after updatendr layer : 6 width : 64 64
+after updatendr layer : 7 width : 32 32
+after updatendr layer : 8 width : 32 32
+after updatendr layer : 9 width : 32 32
+after updatendr layer : 10 width : 40 40
+after updatendr layer : 11 width : 40 40
+layer : 0 width : 14 14
+layer : 1 width : 10 10
+layer : 2 width : 32 32
+layer : 3 width : 32 32
+layer : 4 width : 40 40
+layer : 5 width : 40 40
+layer : 6 width : 64 64
+layer : 7 width : 32 32
+layer : 8 width : 32 32
+layer : 9 width : 32 32
+layer : 10 width : 40 40
+layer : 11 width : 40 40
+via : l: 2 u: 3 c: 8 center: (0,0) lb: [(-16,-36),(16,36)] ub: [(-36,-16),(36,16)] cut: [(-16,-16),(16,16)] bbox: [(-36,-36),(36,36)]
+via : l: 3 u: 4 c: 9 center: (0,0) lb: [(-36,-16),(36,16)] ub: [(-20,-36),(20,36)] cut: [(-16,-16),(16,16)] bbox: [(-36,-36),(36,36)]
+via : l: 4 u: 5 c: 10 center: (0,0) lb: [(-20,-40),(20,40)] ub: [(-40,-20),(40,20)] cut: [(-20,-20),(20,20)] bbox: [(-40,-40),(40,40)]
+via : l: 5 u: 6 c: 11 center: (0,0) lb: [(-40,-20),(40,20)] ub: [(-32,-40),(32,40)] cut: [(-20,-20),(20,20)] bbox: [(-40,-40),(40,40)]
+Y__I_1/A_port_0__I_1/A_port_1 points : 
+pointv : 820,836,32
+Y__I_1/A_port_0__I_1/A_port_1 points : 
+Y__I_1/A_port_0__I_1/A_port_1 points : 
+Y__I_1/A_port_0__I_1/A_port_1 points : 
+Y__I_1/A_port_0__I_1/A_port_1 points : 
+Y__I_1/A_port_0__I_1/A_port_1 points : 
+pointv : 820,836,40
+Y__I_1/A_port_0__I_1/A_port_1 points : 
+Y__I_1/A_port_0__I_1/A_port_1 points : 
+routing : Y__I_1/A_port_0__I_1/A_port_1
+num src : 4 tgt : 4
+source : (816,800,2) cost : (0,-1,-1)  N S
+source : (816,872,2) cost : (0,-1,-1)  N S
+source : (820,836,2) cost : (0,-1,-1)  VU
+source : (820,840,2) cost : (0,-1,-1)  VU
+targets : (816,800,4) cost : (-1,0,-1)  N S
+targets : (816,872,4) cost : (-1,0,-1)  N S
+targets : (820,836,4) cost : (-1,0,-1)  VD
+targets : (820,840,4) cost : (-1,0,-1)  VU VD
+sol found with 2 expansions!
+	expanded : 0 0
+	expanded : 1 0
+	expanded : 2 1
+	expanded : 3 1
+	expanded : 4 0
+	expanded : 5 0
+	expanded : 6 0
+flushing nodes
+Geom::LayerRects Router::Router::findSol() runtime : 7.1993e-05(s)
+Adding routes to I_1/A_port_0 5
+Adding routes to I_1/A_port_1 5
+flushing nodes
+routing ports : I_1/A_port_0 I_0/B_port_0
+after updatendr layer : 0 width : 14 14
+after updatendr layer : 1 width : 10 10
+after updatendr layer : 2 width : 32 32
+after updatendr layer : 3 width : 32 32
+after updatendr layer : 4 width : 40 40
+after updatendr layer : 5 width : 40 40
+after updatendr layer : 6 width : 64 64
+after updatendr layer : 7 width : 32 32
+after updatendr layer : 8 width : 32 32
+after updatendr layer : 9 width : 32 32
+after updatendr layer : 10 width : 40 40
+after updatendr layer : 11 width : 40 40
+layer : 0 width : 14 14
+layer : 1 width : 10 10
+layer : 2 width : 32 32
+layer : 3 width : 32 32
+layer : 4 width : 40 40
+layer : 5 width : 40 40
+layer : 6 width : 64 64
+layer : 7 width : 32 32
+layer : 8 width : 32 32
+layer : 9 width : 32 32
+layer : 10 width : 40 40
+layer : 11 width : 40 40
+via : l: 2 u: 3 c: 8 center: (0,0) lb: [(-16,-36),(16,36)] ub: [(-36,-16),(36,16)] cut: [(-16,-16),(16,16)] bbox: [(-36,-36),(36,36)]
+via : l: 3 u: 4 c: 9 center: (0,0) lb: [(-36,-16),(36,16)] ub: [(-20,-36),(20,36)] cut: [(-16,-16),(16,16)] bbox: [(-36,-36),(36,36)]
+via : l: 4 u: 5 c: 10 center: (0,0) lb: [(-20,-40),(20,40)] ub: [(-40,-20),(40,20)] cut: [(-20,-20),(20,20)] bbox: [(-40,-40),(40,40)]
+via : l: 5 u: 6 c: 11 center: (0,0) lb: [(-40,-20),(40,20)] ub: [(-32,-40),(32,40)] cut: [(-20,-20),(20,20)] bbox: [(-40,-40),(40,40)]
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+pointv : 820,836,32
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+pointh : 816,800,32
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+pointh : 816,800,32
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+pointv : 820,800,40
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+pointv : 80,136,32
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+Y__I_1/A_port_0__I_0/B_port_0 points : 
+routing : Y__I_1/A_port_0__I_0/B_port_0
+num src : 4 tgt : 11
+source : (80,100,2) cost : (-1,0,-1)  N S
+source : (80,136,2) cost : (-1,0,-1)  VU
+source : (80,140,2) cost : (-1,0,-1)  VU
+source : (80,172,2) cost : (-1,0,-1)  N S
+targets : (780,800,3) cost : (0,-1,-1)  E W
+targets : (816,764,2) cost : (0,-1,-1)  N S
+targets : (816,764,4) cost : (0,-1,-1)  N S
+targets : (816,800,3) cost : (0,-1,-1)  VU VD
+targets : (816,836,4) cost : (0,-1,-1)  N S
+targets : (816,872,2) cost : (0,-1,-1)  N S
+targets : (820,800,3) cost : (0,-1,-1)  VU VD
+targets : (820,800,4) cost : (0,-1,-1)  VU VD
+targets : (820,820,2) cost : (0,-1,-1)  VU
+targets : (820,836,2) cost : (0,-1,-1)  VU
+targets : (852,800,3) cost : (0,-1,-1)  E W
+sol found with 3 expansions!
+	expanded : 0 0
+	expanded : 1 0
+	expanded : 2 2
+	expanded : 3 1
+	expanded : 4 0
+	expanded : 5 0
+	expanded : 6 0
+flushing nodes
+Geom::LayerRects Router::Router::findSol() runtime : 0.000105806(s)
+Adding routes to I_1/A_port_0 3
+Adding routes to I_0/B_port_0 3
+net : X num pins : 2
+routing net : X 1868
+ports dist : I_1/B_port_0 I_0/A_port_0 0.888651
+ports dist : I_1/B_port_0 I_0/A_port_1 0.948651
+ports dist : I_0/A_port_0 I_0/A_port_1 0.06
+ports to route order : I_0/A_port_0 I_0/A_port_1
+ports to route order : I_0/A_port_0 I_1/B_port_0
+flushing nodes
+routing ports : I_0/A_port_0 I_0/A_port_1
+after updatendr layer : 0 width : 14 14
+after updatendr layer : 1 width : 10 10
+after updatendr layer : 2 width : 32 32
+after updatendr layer : 3 width : 32 32
+after updatendr layer : 4 width : 40 40
+after updatendr layer : 5 width : 40 40
+after updatendr layer : 6 width : 64 64
+after updatendr layer : 7 width : 32 32
+after updatendr layer : 8 width : 32 32
+after updatendr layer : 9 width : 32 32
+after updatendr layer : 10 width : 40 40
+after updatendr layer : 11 width : 40 40
+layer : 0 width : 14 14
+layer : 1 width : 10 10
+layer : 2 width : 32 32
+layer : 3 width : 32 32
+layer : 4 width : 40 40
+layer : 5 width : 40 40
+layer : 6 width : 64 64
+layer : 7 width : 32 32
+layer : 8 width : 32 32
+layer : 9 width : 32 32
+layer : 10 width : 40 40
+layer : 11 width : 40 40
+via : l: 2 u: 3 c: 8 center: (0,0) lb: [(-16,-36),(16,36)] ub: [(-36,-16),(36,16)] cut: [(-16,-16),(16,16)] bbox: [(-36,-36),(36,36)]
+via : l: 3 u: 4 c: 9 center: (0,0) lb: [(-36,-16),(36,16)] ub: [(-20,-36),(20,36)] cut: [(-16,-16),(16,16)] bbox: [(-36,-36),(36,36)]
+via : l: 4 u: 5 c: 10 center: (0,0) lb: [(-20,-40),(20,40)] ub: [(-40,-20),(40,20)] cut: [(-20,-20),(20,20)] bbox: [(-40,-40),(40,40)]
+via : l: 5 u: 6 c: 11 center: (0,0) lb: [(-40,-20),(40,20)] ub: [(-32,-40),(32,40)] cut: [(-20,-20),(20,20)] bbox: [(-40,-40),(40,40)]
+X__I_0/A_port_0__I_0/A_port_1 points : 
+pointv : 20,36,32
+X__I_0/A_port_0__I_0/A_port_1 points : 
+X__I_0/A_port_0__I_0/A_port_1 points : 
+X__I_0/A_port_0__I_0/A_port_1 points : 
+X__I_0/A_port_0__I_0/A_port_1 points : 
+X__I_0/A_port_0__I_0/A_port_1 points : 
+pointv : 20,36,40
+X__I_0/A_port_0__I_0/A_port_1 points : 
+X__I_0/A_port_0__I_0/A_port_1 points : 
+routing : X__I_0/A_port_0__I_0/A_port_1
+num src : 4 tgt : 4
+source : (16,0,2) cost : (0,-1,-1)  N S
+source : (16,72,2) cost : (0,-1,-1)  N S
+source : (20,36,2) cost : (0,-1,-1)  VU
+source : (20,40,2) cost : (0,-1,-1)  VU
+targets : (16,0,4) cost : (-1,0,-1)  N S
+targets : (16,72,4) cost : (-1,0,-1)  N S
+targets : (20,36,4) cost : (-1,0,-1)  VD
+targets : (20,40,4) cost : (-1,0,-1)  VU VD
+sol found with 2 expansions!
+	expanded : 0 0
+	expanded : 1 0
+	expanded : 2 1
+	expanded : 3 1
+	expanded : 4 0
+	expanded : 5 0
+	expanded : 6 0
+flushing nodes
+Geom::LayerRects Router::Router::findSol() runtime : 6.2445e-05(s)
+Adding routes to I_0/A_port_0 5
+Adding routes to I_0/A_port_1 5
+flushing nodes
+routing ports : I_0/A_port_0 I_1/B_port_0
+after updatendr layer : 0 width : 14 14
+after updatendr layer : 1 width : 10 10
+after updatendr layer : 2 width : 32 32
+after updatendr layer : 3 width : 32 32
+after updatendr layer : 4 width : 40 40
+after updatendr layer : 5 width : 40 40
+after updatendr layer : 6 width : 64 64
+after updatendr layer : 7 width : 32 32
+after updatendr layer : 8 width : 32 32
+after updatendr layer : 9 width : 32 32
+after updatendr layer : 10 width : 40 40
+after updatendr layer : 11 width : 40 40
+layer : 0 width : 14 14
+layer : 1 width : 10 10
+layer : 2 width : 32 32
+layer : 3 width : 32 32
+layer : 4 width : 40 40
+layer : 5 width : 40 40
+layer : 6 width : 64 64
+layer : 7 width : 32 32
+layer : 8 width : 32 32
+layer : 9 width : 32 32
+layer : 10 width : 40 40
+layer : 11 width : 40 40
+via : l: 2 u: 3 c: 8 center: (0,0) lb: [(-16,-36),(16,36)] ub: [(-36,-16),(36,16)] cut: [(-16,-16),(16,16)] bbox: [(-36,-36),(36,36)]
+via : l: 3 u: 4 c: 9 center: (0,0) lb: [(-36,-16),(36,16)] ub: [(-20,-36),(20,36)] cut: [(-16,-16),(16,16)] bbox: [(-36,-36),(36,36)]
+via : l: 4 u: 5 c: 10 center: (0,0) lb: [(-20,-40),(20,40)] ub: [(-40,-20),(40,20)] cut: [(-20,-20),(20,20)] bbox: [(-40,-40),(40,40)]
+via : l: 5 u: 6 c: 11 center: (0,0) lb: [(-40,-20),(40,20)] ub: [(-32,-40),(32,40)] cut: [(-20,-20),(20,20)] bbox: [(-40,-40),(40,40)]
+X__I_0/A_port_0__I_1/B_port_0 points : 
+pointv : 20,36,32
+X__I_0/A_port_0__I_1/B_port_0 points : 
+X__I_0/A_port_0__I_1/B_port_0 points : 
+X__I_0/A_port_0__I_1/B_port_0 points : 
+X__I_0/A_port_0__I_1/B_port_0 points : 
+pointh : 16,0,32
+X__I_0/A_port_0__I_1/B_port_0 points : 
+pointh : 16,0,32
+X__I_0/A_port_0__I_1/B_port_0 points : 
+X__I_0/A_port_0__I_1/B_port_0 points : 
+X__I_0/A_port_0__I_1/B_port_0 points : 
+X__I_0/A_port_0__I_1/B_port_0 points : 
+pointv : 20,0,40
+X__I_0/A_port_0__I_1/B_port_0 points : 
+X__I_0/A_port_0__I_1/B_port_0 points : 
+X__I_0/A_port_0__I_1/B_port_0 points : 
+pointv : 880,936,32
+X__I_0/A_port_0__I_1/B_port_0 points : 
+X__I_0/A_port_0__I_1/B_port_0 points : 
+X__I_0/A_port_0__I_1/B_port_0 points : 
+routing : X__I_0/A_port_0__I_1/B_port_0
+num src : 4 tgt : 11
+source : (880,900,2) cost : (-1,0,-1)  N S
+source : (880,936,2) cost : (-1,0,-1)  VU
+source : (880,940,2) cost : (-1,0,-1)  VU
+source : (880,972,2) cost : (-1,0,-1)  N S
+targets : (-20,0,3) cost : (0,-1,-1)  E W
+targets : (16,-36,2) cost : (0,-1,-1)  N S
+targets : (16,-36,4) cost : (0,-1,-1)  N S
+targets : (16,0,3) cost : (0,-1,-1)  VU VD
+targets : (16,36,4) cost : (0,-1,-1)  N S
+targets : (16,72,2) cost : (0,-1,-1)  N S
+targets : (20,0,3) cost : (0,-1,-1)  VU VD
+targets : (20,0,4) cost : (0,-1,-1)  VU VD
+targets : (20,20,2) cost : (0,-1,-1)  VU
+targets : (20,36,2) cost : (0,-1,-1)  VU
+targets : (52,0,3) cost : (0,-1,-1)  E W
+sol found with 9 expansions!
+	expanded : 0 0
+	expanded : 1 0
+	expanded : 2 7
+	expanded : 3 2
+	expanded : 4 0
+	expanded : 5 0
+	expanded : 6 0
+flushing nodes
+Geom::LayerRects Router::Router::findSol() runtime : 0.000149215(s)
+Adding routes to I_0/A_port_0 3
+Adding routes to I_1/B_port_0 3
+Checking SHORTS for module : BLOCK_B_CONC_0
+void Placement::Module::route(Router::Router&, const std::string&) runtime : 0.000667658(s)
+Checking SHORTS for module : BLOCK_A
+Checking SHORTS for module : BLOCK_B_CONC_0
+flushing nodes
+int main(int, char**) runtime : 0.00114646(s)

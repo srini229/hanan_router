@@ -1,0 +1,38 @@
+{
+  "global_signals": [],
+  "leaves": [
+    {
+      "abstract_name": "BLOCK_A",
+      "bbox": [0, 0, 200, 200],
+      "concrete_name": "BLOCK_A",
+      "terminals": [
+        {"name": "A", "rect": [0, 0, 32, 32]},
+        {"name": "B", "rect": [168, 168, 200, 200]}
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "abstract_name": "VG2VT",
+      "bbox": [0, 0, 700, 400],
+      "concrete_name": "VG2VT_CONC_0",
+      "instances": [
+        {
+          "abstract_template_name": "BLOCK_A",
+          "concrete_template_name": "BLOCK_A",
+          "fa_map": [{"actual": "X", "formal": "A"}],
+          "instance_name": "I_0",
+          "transformation": {"oX": 0, "oY": 100, "sX": 1, "sY": 1}
+        },
+        {
+          "abstract_template_name": "BLOCK_A",
+          "concrete_template_name": "BLOCK_A",
+          "fa_map": [{"actual": "X", "formal": "A"}],
+          "instance_name": "I_1",
+          "transformation": {"oX": 500, "oY": 100, "sX": 1, "sY": 1}
+        }
+      ],
+      "parameters": ["X"]
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+#include "Util.h"
+#include "Geom.h"
+#include "Layer.h"
+#include "Placement.h"
+#include "Router.h"
+
+int main(int argc, char* argv[])
+{
+  const std::string logfile = parseArgs(argc, argv, "-log", "route.log");
+  if (argc <= 1) {
+    std::cerr << "usage : " << argv[0] << "\n\t-d <layers.json>\n\t-p <placement file>\n\t-l <lef file>\n"
+      << "\t-s <lef scaling>\n\t-uu <user units scaling>\n\t-ndr <ndr constraints.json> -o <output dir> -r <precision>\n"
+      << "\t-reorder <N> (alternate net-ordering passes when nets remain unrouted; default 10)\n"
+      << "\t-threads <N> (route non-overlapping nets in parallel using N worker threads; default 1)\n"
+      << "\t-relaxvia (in the final pass, for a net that still fails to route, retry its escape via with spacing relaxed to as close as 5 to, but never on, a shape -- source pins first, then also target pins if that alone isn't enough)\n"
+      << "\t-v (verbose: emit high-volume per-element debug logging)\n";
+    exit(0);
+  }
+  setVerboseLog(checkArg(argc, argv, "-v") || getenv("HANAN_VERBOSE"));
+  SaveRestoreStream srs(logfile);
+  TIME_M();
+  std::string layerJSONFile = parseArgs(argc, argv, "-d");
+  std::string plfile = parseArgs(argc, argv, "-p");
+  std::string leffile = parseArgs(argc, argv, "-l");
+  const bool uuflayer = checkArg(argc, argv, "-s");
+  std::string ndrfile = parseArgs(argc, argv, "-ndr");
+  std::string prec = parseArgs(argc, argv, "-r");
+  SEPARATOR = parseArgs(argc, argv, "-sep", SEPARATOR);
+  std::string interlefdir = parseArgs(argc, argv, "-uil");
+  if (!interlefdir.empty() && interlefdir.back() != '/') {
+    interlefdir += '/';
+  }
+  std::string outdir = parseArgs(argc, argv, "-o", "./");
+  if (!outdir.empty() && outdir.back() != '/') {
+    outdir += '/';
+  }
+
+  int uu{1};
+  try {
+    uu = std::stoi(parseArgs(argc, argv, "-uu"));
+  } catch (const std::exception& e) {}
+  COUT << "Using options : -d " << layerJSONFile << " -p " << plfile << " -l " << leffile;
+  COUT << (uuflayer  ? " -s " : "") << " -uu " << uu;
+  COUT << (!ndrfile.empty() ? (" -ndr " + ndrfile) : "");
+  COUT << (!interlefdir.empty() ? (" -uil " + interlefdir) : "");
+  COUT << (!outdir.empty() ? (" -o " + outdir) : "./") << std::endl;
+
+  DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 1));
+  if (!linfo.populated())  {
+    CERR << "missing or unable to read layers.json file argument" << std::endl;
+    return 1;
+  }
+  try {
+    Router::Router::_precision = prec.empty() ? 1 : std::stoi(prec);
+  } catch (const std::exception& e) {
+    CERR << "invalid -r precision '" << prec << "', using 1" << std::endl;
+    Router::Router::_precision = 1;
+  }
+  Router::Router hrdb{linfo};
+  const std::string rp = parseArgs(argc, argv, "-reorder");
+  if (!rp.empty()) {
+    try {
+      const int n = std::stoi(rp);
+      hrdb.setReorderPasses(n < 0 ? 0 : n);
+    } catch (const std::exception& e) {
+      CERR << "invalid -reorder value '" << rp << "', using default 10" << std::endl;
+    }
+  }
+  const std::string tp = parseArgs(argc, argv, "-threads");
+  if (!tp.empty()) {
+    try {
+      const int n = std::stoi(tp);
+      hrdb.setThreads(n < 1 ? 1 : n);
+    } catch (const std::exception& e) {
+      CERR << "invalid -threads value '" << tp << "', using default 1" << std::endl;
+    }
+  }
+  const bool relaxViaOpt = checkArg(argc, argv, "-relaxvia");
+  if (!plfile.empty() && !leffile.empty()) {
+    Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile, interlefdir);
+    netlist.route(hrdb, outdir);
+    const int open = netlist.totalUnrouted();
+    if (open > 0) {
+      COUT << "centre-track pin escape left " << open
+           << " net(s) open; re-routing the design with corner pin-escape points\n";
+      hrdb.setCornerEscape(true);
+      hrdb.setDumpOpenNets(true);       // last pass: write a debug LEF for any net
+                                        // still left open (pins/srcs/tgts/obstacles)
+      if (relaxViaOpt) {
+        hrdb.setRelaxViaEscape(true);   // last pass: for a net that's still unrouted,
+                                        // retry its own escape via with spacing relaxed
+                                        // to as close as 5 to (never on) a shape --
+                                        // source pins first, then target pins too
+      }
+      Placement::Netlist netlist2(plfile, leffile, linfo, uu, ndrfile, interlefdir);
+      netlist2.route(hrdb, outdir);
+      netlist2.printRouteSummaries();   // one authoritative summary, final state
+      netlist2.checkShort();
+    } else {
+      netlist.printRouteSummaries();
+      netlist.checkShort();
+    }
+  }
+
+  return 0;
+}
