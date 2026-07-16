@@ -1,0 +1,12 @@
+subckt BLOCK_A A B
+ends BLOCK_A
+
+subckt BLOCK_B X Y
+    I_0 (X Y) BLOCK_A
+    I_1 (Y X) BLOCK_A
+ends BLOCK_B
+
+subckt TEST C D
+    J_0 (D C) BLOCK_B
+    J_1 (C D) BLOCK_B
+ends TEST
