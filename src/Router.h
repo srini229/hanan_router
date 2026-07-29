@@ -44,6 +44,13 @@ class Via {
     void setLB(const Geom::Rect& r) { _lb = r; _bbox.merge(_lb); }
     void setUB(const Geom::Rect& r) { _ub = r; _bbox.merge(_ub); }
     const Geom::Rects& cuts() const { return _cuts; }
+    // addCuts() only fills _cuts for a multi-cut via array (nrow/ncol > 1);
+    // the common single-cut case leaves _cuts empty and stores its one cut
+    // in _cut instead (see addShapes(), which already handles this split).
+    // Callers checking a candidate via's cuts for DRC (e.g. isViaValid's
+    // via-to-via spacing check) must use this, not cuts() directly, or a
+    // single-cut via silently has nothing to check against.
+    Geom::Rects effectiveCuts() const { return _cuts.empty() ? Geom::Rects{_cut} : _cuts; }
     const Geom::Rect& upad() const { return _ub; }
     const Geom::Rect& lpad() const { return _lb; }
     const int u() const { return _u; }
@@ -486,6 +493,17 @@ class Router {
     // check this instead of the returned shape list's emptiness, which is
     // also empty on a legitimate zero-length (already-coincident) solution.
     bool lastSolutionFound() const { return _lastSolFound; }
+    // A single findSol() call never checks a via it is about to place
+    // against a via it already placed earlier in the same search --
+    // obstacles are frozen for the whole call, built once up front from
+    // whatever was registered before findSol() started. So a route that
+    // needs two via transitions (e.g. a wide net dropping two cuts) can
+    // legally place them within DRC spacing of each other. This scans a
+    // solution's own via-layer shapes pairwise for such same-layer
+    // spacing violations and returns one offending rect (as an obstacle
+    // suitable for router.addObstacles(), to retry findSol() with it
+    // excluded), or an empty result if the solution is self-consistent.
+    Geom::LayerRects selfSpacingConflict(const Geom::LayerRects& sol) const;
     void setMBox(const Geom::Rect& box) { _mbox = box; }
     void printSol() const;
     void plot() const;

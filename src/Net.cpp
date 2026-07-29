@@ -201,81 +201,110 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       }
     }*/
     PortPairs ppairs = (_driver.empty() ? reorderPorts() : clockRouteOrder());
+    // Wire/via shapes this net has already placed for earlier port-pairs in
+    // this loop. Re-added as an obstacle for every later port-pair so a
+    // multi-pin net's own vias get the same cut-to-cut spacing check as
+    // vias from any other net (router.addObstacles(l1, ...) below only
+    // covers OTHER nets' finished routes). Safe to add unconditionally: a
+    // later port-pair's own source/target shapes are subtracted from the
+    // obstacle set before the routing grid is built (generateHananGrid()),
+    // so this never blocks a legitimate connection back into the growing
+    // net -- only spacing to a genuinely separate, nearby via.
+    Geom::LayerRects ownRoutedObst;
     for (auto& pp : ppairs) {
       const auto& port1 = pp.first;
       const auto& port2 = pp.second;
-      router.clearSourceTargets();
-      COUT << "routing ports : " << port1->name() << ' ' << port2->name() << '\n';
-      router.setName(_name + "__" + port1->name() + "__" + port2->name());
-      router.setMBox(bbox);
-      const auto& p1 = port1->shapes();
-      const auto& p2 = port2->shapes();
-      //bool preflayersrctgt{true};
-      Geom::LayerRects samenetobst;
-      for (auto src : {true, false}) {
-        bool preflayer{false};
-        for (auto& l : _preflayers) {
-          const auto& p = (src ? p1 : p2);
-          auto it = p.find(l);
-          if (it != p.end() && !it->second.empty()) {
-            preflayer = true;
-            break;
-          }
-        }
-        //preflayersrctgt &= preflayer;
-        if (!_preflayers.empty()) {
-          COUT << "pref layer pin" << (preflayer ? "" : " not") << " found for " << (src ? port1->name() : port2->name()) << '\n';
-        }
-        for (auto& l : (src ? p1 : p2)) {
-          if (l.first > router.maxLayer() || l.first < router.minLayer()) {
-            for (auto& s : l.second) samenetobst[l.first].push_back(s);
-            continue;
-          }
-          if (preflayer && _preflayers.find(l.first) == _preflayers.end()) continue;
-          //COUT << "port : " << (src ? port1->name() : port2->name()) << " layer " << l.first << '\n';
-          for (auto& s : l.second) {
-            if (src) {
-              router.addSourceShapes(s, l.first);
-            } else {
-              router.addTargetShapes(s, l.first);
+      // A single findSol() call below never checks a via it's about to place
+      // against a via it already placed earlier in that same search (its
+      // obstacle set is frozen once the search starts). A route needing two
+      // via transitions (e.g. a wide net dropping two cuts) can legally end
+      // up placing them within DRC spacing of each other. selfSpacingExclusion
+      // accumulates any such conflict findSol() produces and gets re-added as
+      // an obstacle to retry the same port-pair, bounded and best-effort: if
+      // it isn't resolved within a few tries, the last solution found is kept
+      // rather than looping forever.
+      Geom::LayerRects selfSpacingExclusion;
+      Geom::LayerRects sol;
+      for (int selfSpacingRetry = 0; ; ++selfSpacingRetry) {
+        router.clearSourceTargets();
+        COUT << "routing ports : " << port1->name() << ' ' << port2->name() << '\n';
+        router.setName(_name + "__" + port1->name() + "__" + port2->name());
+        router.setMBox(bbox);
+        const auto& p1 = port1->shapes();
+        const auto& p2 = port2->shapes();
+        //bool preflayersrctgt{true};
+        Geom::LayerRects samenetobst;
+        for (auto src : {true, false}) {
+          bool preflayer{false};
+          for (auto& l : _preflayers) {
+            const auto& p = (src ? p1 : p2);
+            auto it = p.find(l);
+            if (it != p.end() && !it->second.empty()) {
+              preflayer = true;
+              break;
             }
           }
-        }
-      }
-      router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers, _ndrvias);
-#if DEBUG
-      COUT << "adding line of sight nodes if they exist\n";
-#endif
-      /*for (auto& l : p1) {
-        auto it = p2.find(l.first);
-        if (preflayersrctgt && _preflayers.find(l.first) == _preflayers.end()) continue;
-        if (it != p2.end()) {
-          for (auto& s1 : l.second) {
-            for (auto& s2 : it->second) {
-              if (s1.xmin() < s2.xmax() && s1.xmax() > s2.xmin()) {
-                int xmin(std::max(s1.xmin(), s2.xmin())), xmax(std::min(s1.xmax(), s2.xmax()));
-                if (xmax - xmin >= router.widthy(l.first)) {
-                  router.addSource(Geom::Rect(xmin, s1.ymin(), xmax, s1.ymax()), l.first);
-                  router.addTarget(Geom::Rect(xmin, s2.ymin(), xmax, s2.ymax()), l.first);
-                }
-              } else if (s1.ymin() < s2.ymax() && s1.ymax() > s2.ymin()) {
-                int ymin(std::max(s1.ymin(), s2.ymin())), ymax(std::min(s1.ymax(), s2.ymax()));
-                if (ymax - ymin >= router.widthx(l.first)) {
-                  router.addSource(Geom::Rect(s1.xmin(), ymin, s1.xmax(), ymax), l.first);
-                  router.addTarget(Geom::Rect(s2.xmin(), ymin, s2.xmax(), ymax), l.first);
-                }
+          //preflayersrctgt &= preflayer;
+          if (!_preflayers.empty()) {
+            COUT << "pref layer pin" << (preflayer ? "" : " not") << " found for " << (src ? port1->name() : port2->name()) << '\n';
+          }
+          for (auto& l : (src ? p1 : p2)) {
+            if (l.first > router.maxLayer() || l.first < router.minLayer()) {
+              for (auto& s : l.second) samenetobst[l.first].push_back(s);
+              continue;
+            }
+            if (preflayer && _preflayers.find(l.first) == _preflayers.end()) continue;
+            //COUT << "port : " << (src ? port1->name() : port2->name()) << " layer " << l.first << '\n';
+            for (auto& s : l.second) {
+              if (src) {
+                router.addSourceShapes(s, l.first);
+              } else {
+                router.addTargetShapes(s, l.first);
               }
             }
           }
         }
-      }*/
-      if (_detour) router.allowDetour();
-      router.addObstacles(l1, true);
-      router.addObstacles(l2, true);
-      router.addObstacles(l3, true);
-      router.addObstacles(_obstacles, true);
-      router.addObstacles(samenetobst, true);
-      auto sol = router.findSol();
+        router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers, _ndrvias);
+#if DEBUG
+        COUT << "adding line of sight nodes if they exist\n";
+#endif
+        /*for (auto& l : p1) {
+          auto it = p2.find(l.first);
+          if (preflayersrctgt && _preflayers.find(l.first) == _preflayers.end()) continue;
+          if (it != p2.end()) {
+            for (auto& s1 : l.second) {
+              for (auto& s2 : it->second) {
+                if (s1.xmin() < s2.xmax() && s1.xmax() > s2.xmin()) {
+                  int xmin(std::max(s1.xmin(), s2.xmin())), xmax(std::min(s1.xmax(), s2.xmax()));
+                  if (xmax - xmin >= router.widthy(l.first)) {
+                    router.addSource(Geom::Rect(xmin, s1.ymin(), xmax, s1.ymax()), l.first);
+                    router.addTarget(Geom::Rect(xmin, s2.ymin(), xmax, s2.ymax()), l.first);
+                  }
+                } else if (s1.ymin() < s2.ymax() && s1.ymax() > s2.ymin()) {
+                  int ymin(std::max(s1.ymin(), s2.ymin())), ymax(std::min(s1.ymax(), s2.ymax()));
+                  if (ymax - ymin >= router.widthx(l.first)) {
+                    router.addSource(Geom::Rect(s1.xmin(), ymin, s1.xmax(), ymax), l.first);
+                    router.addTarget(Geom::Rect(s2.xmin(), ymin, s2.xmax(), ymax), l.first);
+                  }
+                }
+              }
+            }
+          }
+        }*/
+        if (_detour) router.allowDetour();
+        router.addObstacles(l1, true);
+        router.addObstacles(l2, true);
+        router.addObstacles(l3, true);
+        router.addObstacles(_obstacles, true);
+        router.addObstacles(samenetobst, true);
+        router.addObstacles(ownRoutedObst, true);
+        router.addObstacles(selfSpacingExclusion, true);
+        sol = router.findSol();
+        if (!router.lastSolutionFound() || selfSpacingRetry >= 3) break;
+        auto conflict = router.selfSpacingConflict(sol);
+        if (conflict.empty()) break;
+        Geom::MergeLayerRects(selfSpacingExclusion, conflict);
+      }
       // Not sol.empty(): a source and target that already coincide need zero
       // additional shapes and legitimately return an empty sol on success.
       if (router.lastSolutionFound()) {
@@ -316,6 +345,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
         Geom::MergeLayerRects(_routeshapeswithpins, sol, &_bbox);
         Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
+        Geom::MergeLayerRects(ownRoutedObst, sol, &_bbox);
       } else {
         _unroute = 1;
       }

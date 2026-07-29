@@ -193,18 +193,25 @@ void Module::route(Router::Router& router, const std::string& outdir)
     updateNets();
     mergeCoincidentNets();   // warn + merge nets whose pins sit on the same point
     {
-      std::set<const Pin*> connectedPins;
-      for (auto& n : _nets) {
-        for (auto& p : n.second.pins()) connectedPins.insert(p);
-      }
+      // Every instance pin's own geometry (fixed at placement time, e.g. a
+      // baked-in Source/Drain/Gate via from the primitive's LEF) is added
+      // to _obstacles -- not just unconnected pins as before. This is what
+      // gives router.addObstacles(_obstacles, true) (called for every net
+      // in Net::route()) the pin's via cuts to check DRC spacing against;
+      // previously a connected pin's geometry was invisible to any OTHER
+      // net's via placement, only ever showing up as a source/target for
+      // its own net. Safe for a pin's own net too: generateHananGrid()
+      // subtracts the current port-pair's source/target shapes from the
+      // obstacle set before the routing grid is built, so a route landing
+      // on (or reconnecting through) its own pin is never blocked -- only
+      // spacing to shapes it isn't actually connecting to is now checked.
       for (auto& inst : _instances) {
         for (auto& pp : inst->_pins) {
           const Pin* pin = pp.second;
-          if (connectedPins.count(pin)) continue;
           for (auto& port : pin->ports()) {
             for (auto& l : port->shapes()) {
               for (auto& r : l.second) {
-                COUT << "protecting unconnected pin " << pin->name() << " : adding obstacle layer "
+                COUT << "protecting pin " << pin->name() << " : adding obstacle layer "
                      << l.first << ' ' << r.str() << '\n';
                 _obstacles[l.first].push_back(r);
               }

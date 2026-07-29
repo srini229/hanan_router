@@ -1643,6 +1643,25 @@ Geom::LayerRects Router::findSol()
   return sol;
 }
 
+Geom::LayerRects Router::selfSpacingConflict(const Geom::LayerRects& sol) const
+{
+  for (auto& l : sol) {
+    const int layer = l.first;
+    if (layer < 0 || layer >= static_cast<int>(_lf.layers().size()) || !_lf.layers()[layer]->isVia()) continue;
+    const auto& rects = l.second;
+    for (size_t i = 0; i < rects.size(); ++i) {
+      for (size_t j = i + 1; j < rects.size(); ++j) {
+        if (rects[i].bloatby(_lf.spacex(layer), _lf.spacey(layer)).overlaps(rects[j], false)) {
+          Geom::LayerRects conflict;
+          conflict[layer].push_back(rects[j]);
+          return conflict;
+        }
+      }
+    }
+  }
+  return Geom::LayerRects();
+}
+
 void Router::printSol() const
 {
   for (auto& s : _sources) {
@@ -2017,7 +2036,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
             Geom::Rects nbrs;
             it->second.search(nbrs, via->bbox().bloatby(_lf.spacex(aboveLayer), _lf.spacey(aboveLayer)));
             for (auto& o : nbrs) {
-              for (auto& c : via->cuts()) {
+              for (auto& c : via->effectiveCuts()) {
                 if (o.bloatby(_lf.spacex(aboveLayer), _lf.spacey(aboveLayer)).overlaps(c, false)) {
                   delete via;
                   via = nullptr;
@@ -2086,7 +2105,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
             Geom::Rects nbrs;
             it->second.search(nbrs, via->bbox().bloatby(_lf.spacex(belowLayer), _lf.spacey(belowLayer)));
             for (auto& o : nbrs) {
-              for (auto& c : via->cuts()) {
+              for (auto& c : via->effectiveCuts()) {
                 if (o.bloatby(_lf.spacex(belowLayer), _lf.spacey(belowLayer)).overlaps(c, false)) {
                   delete via;
                   via = nullptr;
