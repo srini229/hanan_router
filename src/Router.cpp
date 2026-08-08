@@ -1468,7 +1468,7 @@ Geom::LayerRects Router::findSol()
         auto t = const_cast<Node*>(*_pq.begin());
         if (_targets.find(t) != _targets.end()) {
           _sol = t;
-          COUT << "sol found with " << _expansions << " expansions!" << std::endl;
+          COUT << "sol found for " << _name << " with " << _expansions << " expansions!" << std::endl;
           for (unsigned i = 0; i < layerExpansions.size(); ++i) {
             COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
           }

@@ -28,9 +28,20 @@ struct LayerModel {
   std::function<bool(int)> canDown; // a via connects z and z-1
 };
 
+// The escape the solver assigned to a pin: `fp` on layer `layer`, where `pin`
+// indexes the pins vector passed to feasible().
+struct Chosen {
+  size_t pin{0};
+  int layer{0};
+  Geom::Rect fp;
+};
+
+// `chosen`, when given and the instance is SAT, receives one entry per pin: the
+// escape that pin was assigned in a globally consistent solution. Reserving those
+// footprints keeps the corresponding escapes usable.
 bool feasible(const std::vector<Pin>& pins, const Geom::LayerRects& obstacles,
               const LayerModel& lm, std::vector<std::string>* blocked = nullptr,
-              std::string* reason = nullptr);
+              std::string* reason = nullptr, std::vector<Chosen>* chosen = nullptr);
 
 }
 #endif

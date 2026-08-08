@@ -315,6 +315,77 @@ void Module::route(Router::Router& router, const std::string& outdir)
       }
     };
 
+    // ---- pin escape. The SAT model in Escape.h picks, for every pin, a via or a
+    // same-layer stub it can get out on, such that no two pins' escapes clash.
+    auto layerModel = [&router]() {
+      Escape::LayerModel lm;
+      lm.minLayer = router.minLayer();
+      lm.maxLayer = router.maxLayer();
+      lm.width   = [&router](int z) { return std::max(router.baseWidthX(z), router.baseWidthY(z)); };
+      lm.space   = [&router](int z) { return std::max(router.baseSpaceX(z), router.baseSpaceY(z)); };
+      lm.canUp   = [&router](int z) { return router.canViaUp(z); };
+      lm.canDown = [&router](int z) { return router.canViaDown(z); };
+      return lm;
+    };
+    // A single-pin net is not routed here at all -- the parent is what connects it --
+    // so that pin is a module boundary pin.
+    auto buildEpins = [&](const bool boundaryOnly, std::vector<char>* isBoundary) {
+      std::vector<Escape::Pin> epins;
+      int netid = 0;
+      for (auto& nv : nets) {
+        const bool boundary = !nv->routable();
+        if (!nv->excluded() && !nv->pins().empty() && (!boundaryOnly || boundary)) {
+          for (auto& pin : nv->pins()) {
+            Escape::Pin ep;
+            ep.name = _name + SEPARATOR + pin->name();
+            ep.net = netid;
+            for (auto& port : pin->ports())
+              for (auto& l : port->shapes())
+                for (auto& r : l.second) ep.shapes[l.first].push_back(r);
+            if (!ep.shapes.empty()) {
+              epins.push_back(std::move(ep));
+              if (isBoundary) isBoundary->push_back(boundary ? 1 : 0);
+            }
+          }
+        }
+        ++netid;
+      }
+      return epins;
+    };
+
+    // Nothing in this module's own routing is obliged to leave a boundary pin
+    // reachable, so our wires can legally close in on every side of one and strand
+    // it. The parent then cannot reach that pin -- and by the time it finds out we
+    // are marked routed and our geometry can no longer change. So solve the escape
+    // assignment up front and reserve the escape each boundary pin was given,
+    // making our own nets route around it.
+    //
+    // The reservation is deliberately kept OUT of _obstacles: that set is handed to
+    // the parent by the instance loop above, and the parent must be free to route
+    // into the very escape we are preserving for it.
+    Geom::LayerRects escapeReserve;
+    {
+      std::vector<char> isBoundary;
+      auto epins = buildEpins(false, &isBoundary);
+      if (!epins.empty()) {
+        std::vector<Escape::Chosen> chosen;
+        Escape::LayerModel lm = layerModel();
+        if (Escape::feasible(epins, _obstacles, lm, nullptr, nullptr, &chosen)) {
+          for (const auto& c : chosen) {
+            if (c.pin < isBoundary.size() && isBoundary[c.pin]) {
+              escapeReserve[c.layer].push_back(c.fp);
+              COUT << "reserving escape for boundary pin " << epins[c.pin].name
+                   << " : layer " << c.layer << ' ' << c.fp.str() << '\n';
+            }
+          }
+        }
+      }
+    }
+    // What this module's own nets must keep clear: the real obstacles plus the
+    // escapes reserved above. _obstacles itself is left untouched.
+    Geom::LayerRects routeObstacles = _obstacles;
+    Geom::MergeLayerRects(routeObstacles, escapeReserve);
+
     // Generous super-set of a net's A* search box (pin bbox +50% + bloat*4); the
     // parPad term covers the bloat with room to spare, so an obstacle/pin outside
     // this box provably cannot overlap the search and is safe to drop.
@@ -325,7 +396,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
     };
 
     std::map<int, Geom::RTree2D> obsTree;
-    for (auto& lr : _obstacles) obsTree.emplace(lr.first, lr.second);
+    for (auto& lr : routeObstacles) obsTree.emplace(lr.first, lr.second);
     auto queryObs = [&](const Geom::Rect& box) -> Geom::LayerRects {
       Geom::LayerRects out;
       for (auto& lt : obsTree) {
@@ -338,7 +409,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
     auto netObstacles = [&](size_t i) -> Geom::LayerRects {
       Geom::Rect box = searchBox(i);
       if (nets[i]->isDetour() || !nets[i]->routable() || !box.valid())
-        return _obstacles;
+        return routeObstacles;
       Geom::LayerRects out = queryObs(box);
       auto pit = netToPair.find(nets[i]);
       if (pit != netToPair.end()) {
@@ -591,44 +662,32 @@ void Module::route(Router::Router& router, const std::string& outdir)
       return anyUnrouted;
     };
 
-    {
-      std::vector<Escape::Pin> epins;
-      int netid = 0;
-      for (auto& nv : nets) {
-        if (!nv->excluded() && nv->pins().size() >= 2) {
-          for (auto& pin : nv->pins()) {
-            Escape::Pin ep;
-            ep.name = _name + SEPARATOR + pin->name();
-            ep.net = netid;
-            for (auto& port : pin->ports()) {
-              for (auto& l : port->shapes()) {
-                for (auto& r : l.second) ep.shapes[l.first].push_back(r);
-              }
-            }
-            if (!ep.shapes.empty()) epins.push_back(std::move(ep));
-          }
-        }
-        ++netid;
+    // Pin-escape feasibility diagnostics (reporting only -- never gates routing).
+    //
+    // Single-pin nets are included: such a pin has nothing to connect to at this
+    // level, but the parent routes to it, so it must still own an escape once this
+    // module is finished. 'extra' folds in geometry that appears after the
+    // pre-route check (this module's own wires); 'boundaryOnly' then restricts the
+    // pins under test to those single-pin nets, since a routed net's own wire
+    // lands on its pin by design and would otherwise read as a blocked escape.
+    auto escapeCheck = [&](const char* when, const Geom::LayerRects* extra,
+                           const bool boundaryOnly) {
+      auto epins = buildEpins(boundaryOnly, nullptr);
+      if (epins.empty()) return;
+      Escape::LayerModel lm = layerModel();
+      Geom::LayerRects obs = _obstacles;
+      if (extra) Geom::MergeLayerRects(obs, *extra);
+      std::vector<std::string> blocked;
+      std::string reason;
+      if (Escape::feasible(epins, obs, lm, &blocked, &reason)) {
+        COUT << "pin escape SAT (" << when << ") : all " << epins.size() << " pins in " << _name
+             << " have a guaranteed escape\n";
+      } else {
+        COUT << "pin escape SAT (" << when << ") : " << _name << " is infeasible (" << reason << ")\n";
+        for (auto& b : blocked) COUT << "  no escape for pin : " << b << '\n';
       }
-      if (!epins.empty()) {
-        Escape::LayerModel lm;
-        lm.minLayer = router.minLayer();
-        lm.maxLayer = router.maxLayer();
-        lm.width   = [&router](int z) { return std::max(router.baseWidthX(z), router.baseWidthY(z)); };
-        lm.space   = [&router](int z) { return std::max(router.baseSpaceX(z), router.baseSpaceY(z)); };
-        lm.canUp   = [&router](int z) { return router.canViaUp(z); };
-        lm.canDown = [&router](int z) { return router.canViaDown(z); };
-        std::vector<std::string> blocked;
-        std::string reason;
-        if (Escape::feasible(epins, _obstacles, lm, &blocked, &reason)) {
-          COUT << "pin escape SAT : all " << epins.size() << " pins in " << _name
-               << " have a guaranteed escape\n";
-        } else {
-          COUT << "pin escape SAT : " << _name << " is infeasible (" << reason << ")\n";
-          for (auto& b : blocked) COUT << "  no escape for pin : " << b << '\n';
-        }
-      }
-    }
+    };
+    escapeCheck("pre-route", nullptr, false);
 
     for (auto& n : _nets) n.second.snapshotRoutes();
 
@@ -731,6 +790,19 @@ void Module::route(Router::Router& router, const std::string& outdir)
       router.setDumpOpenNets(false);
     }
     router.setDumpOpenNets(dumpOpen);   // restore for sibling hierarchies
+
+    // A boundary pin is not routed here, so nothing in this module's own routing
+    // was obliged to keep it reachable -- our wires can legally close in on every
+    // side of it. Re-check those pins against the wires we just laid so a pin that
+    // has been walled in is reported at the level that caused it, instead of
+    // surfacing much later as an unroutable net in the parent, by which point this
+    // module is marked routed and its geometry can no longer change.
+    {
+      Geom::LayerRects laid;
+      for (auto& n : _nets)
+        if (!n.second.excluded()) Geom::MergeLayerRects(laid, n.second.routeShapesWithPins());
+      escapeCheck("post-route", &laid, true);
+    }
 
     router.clearObstacles();
     std::set<std::string> _addednets;

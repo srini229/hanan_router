@@ -26,7 +26,8 @@ bool hitsObstacle(const Geom::Rect& r, const int layer, const Geom::LayerRects& 
 } // namespace
 
 bool feasible(const std::vector<Pin>& pins, const Geom::LayerRects& obstacles,
-              const LayerModel& lm, std::vector<std::string>* blocked, std::string* reason)
+              const LayerModel& lm, std::vector<std::string>* blocked, std::string* reason,
+              std::vector<Chosen>* chosen)
 {
   // Static blockers an escape may not land on: real obstacles plus every pin's
   // own fixed shapes (a pin cannot escape on top of another fixed pin). The
@@ -104,7 +105,16 @@ bool feasible(const std::vector<Pin>& pins, const Geom::LayerRects& obstacles,
   }
 
   const int res = sat.solve();
-  if (res == 1) return true;
+  if (res == 1) {
+    if (chosen) {
+      for (size_t pi = 0; pi < pinCands.size(); ++pi) {
+        for (const auto& c : pinCands[pi]) {
+          if (sat.value(c.var)) { chosen->push_back({pi, c.layer, c.fp}); break; }
+        }
+      }
+    }
+    return true;
+  }
   if (res == -1) {   // gave up: don't block routing on an unproven instance
     if (reason) *reason = "sat budget exceeded; assuming feasible";
     return true;
