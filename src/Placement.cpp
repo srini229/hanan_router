@@ -174,6 +174,11 @@ void Module::route(Router::Router& router, const std::string& outdir)
     router.clearObstacles(true);
     for (auto& inst : _instances) {
       auto m = inst->module();
+      if (!m) {
+        CERR << "ERROR: instance '" << inst->name() << "' in module '"
+             << _name << "' has no resolved template; skipping\n";
+        continue;
+      }
       if (!m->routed()) {
         const_cast<Module*>(m)->route(router, outdir);
       }

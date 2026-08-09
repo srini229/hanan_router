@@ -43,6 +43,7 @@ PortPairs Net::reorderPorts() const
     netbbox.merge(p->bbox());
   }
   double nethpwl{(netbbox.width() + netbbox.height()) * 1.};
+  if (nethpwl < 1.0) nethpwl = 1.0;  // guard against zero-area bbox (division by zero)
   for (unsigned i = 0; i < ports.size(); ++i) {
     auto& p1 = ports[i];
     auto& s1 = p1->shapes();
@@ -88,6 +89,9 @@ PortPairs Net::reorderPorts() const
       }
     }
   }
+  // Guard: if no valid pair was found (all port pairs had no common-layer shapes),
+  // there is nothing to route — return an empty order rather than crashing.
+  if (idx1 < 0 || idx2 < 0) return porder;
   std::vector<std::pair<int, int>> primorder;
   primorder.reserve(ports.size() - 1);
   primorder.push_back(std::make_pair(idx1, idx2));

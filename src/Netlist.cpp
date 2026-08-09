@@ -60,14 +60,22 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
         }
         auto terms = l.find("terminals");
         if (terms != l.end()) {
+          std::set<std::string> seenTerminals;
           for (auto& term : *terms) {
             auto nameit = term.find("name");
             if (nameit == term.end()) nameit = term.find("netName");
             if (nameit != term.end()) {
-                COUT << *nameit << std::endl;
-                auto p = modu->addPin(*nameit);
-                modu->addNet(*nameit);
-                modu->net(*nameit)->addPin(p);
+                const std::string tname = *nameit;
+                if (!seenTerminals.insert(tname).second) {
+                  CERR << "WARNING: leaf '" << *lname
+                       << "' has duplicate terminal '" << tname
+                       << "'; ignoring duplicate\n";
+                  continue;
+                }
+                COUT << tname << std::endl;
+                auto p = modu->addPin(tname);
+                modu->addNet(tname);
+                modu->net(tname)->addPin(p);
             }
           }
         }
@@ -174,8 +182,36 @@ void Netlist::build()
       auto it = _modules.find(inst->moduleName());
       if (it != _modules.end()) {
         inst->setModule(it->second);
+      } else {
+        CERR << "ERROR: module '" << m.second->name()
+             << "' instance '" << inst->name()
+             << "' references unknown template '" << inst->moduleName()
+             << "'; cannot route\n";
+        _valid = 0;
       }
     }
+  }
+  // Validate fa_map formal names against the resolved template's declared pins.
+  for (auto& m : _modules) {
+    for (auto& kv : m.second->_tmpnetpins) {
+      for (auto& instpin : kv.second) {
+        Instance* inst    = instpin.first;
+        const std::string& formal = instpin.second;
+        const Module* tmpl = inst->module();
+        if (tmpl && tmpl->pins().find(formal) == tmpl->pins().end()) {
+          CERR << "WARNING: module '" << m.second->name()
+               << "' instance '" << inst->name()
+               << "' (template '" << inst->moduleName()
+               << "'): fa_map formal '" << formal
+               << "' is not declared in the template; connection ignored\n";
+        }
+      }
+    }
+  }
+  if (!_valid) {
+    CERR << "ERROR: placement JSON has unresolvable templates;"
+            " aborting before routing\n";
+    return;
   }
   for (auto& m : _modules) m.second->build();
 }
