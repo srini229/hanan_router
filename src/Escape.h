@@ -28,9 +28,15 @@ struct LayerModel {
   std::function<bool(int)> canDown; // a via connects z and z-1
 };
 
+struct Chosen {
+  size_t pin{0};
+  int layer{0};
+  Geom::Rect fp;
+};
+
 bool feasible(const std::vector<Pin>& pins, const Geom::LayerRects& obstacles,
               const LayerModel& lm, std::vector<std::string>* blocked = nullptr,
-              std::string* reason = nullptr);
+              std::string* reason = nullptr, std::vector<Chosen>* chosen = nullptr);
 
 }
 #endif

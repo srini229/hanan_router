@@ -96,9 +96,11 @@ int main(int argc, char* argv[])
       netlist2.route(hrdb, outdir);
       netlist2.printRouteSummaries();   // one authoritative summary, final state
       netlist2.checkShort();
+      netlist2.checkDRC(hrdb);
     } else {
       netlist.printRouteSummaries();
       netlist.checkShort();
+      netlist.checkDRC(hrdb);
     }
   }
 

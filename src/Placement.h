@@ -435,6 +435,10 @@ class Module {
 
     const Geom::Rect& bbox() const { return _bbox; }
     void checkShort() const;
+    int checkDRC(const Router::Router& router) const;
+    int drcCount() const { return _drccount; }
+    mutable std::map<int, Geom::Rects> _drcmarkers;
+    mutable int _drccount{0};
 
     void writeDEF(const std::string& outdir, const std::string& nstr = "", const std::string& netname = "") const;
     void writeLEF(const std::string& outdir) const;
@@ -464,6 +468,13 @@ class Netlist {
     {
       if (!_valid) return;
       for (auto& m : _modules) m.second->checkShort();
+    }
+    void checkDRC(const Router::Router&) const
+    {
+      if (!_valid) return;
+      int total = 0;
+      for (auto& m : _modules) total += m.second->drcCount();
+      COUT << "DRC_SUMMARY router-caused spacing violations = " << total << '\n';
     }
     // Total nets left open across every hierarchy after a route() call.
     int totalUnrouted() const

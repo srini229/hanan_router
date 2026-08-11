@@ -44,17 +44,19 @@ typedef std::vector<Layer*> Layers;
 class MetalLayer : public Layer {
   private:
     int _pitch, _width, _minL, _maxL;
-    int _e2e, _offset;
+    int _e2e, _offset, _minSpace;
     Direction _dir;
   public:
     MetalLayer(const std::string& name, const float mur, const float lr, const float ur)
       : Layer(name, mur, lr, ur, LayerType::METAL), _pitch(0), _width(0), _minL(0), _maxL(0), _e2e(0), _offset(0),
-    _dir(Direction::ORTHOGONAL) {}
+    _minSpace(0), _dir(Direction::ORTHOGONAL) {}
     int width() const { return _width;}
     int space() const
     {
       return (_pitch > _width) ? (_pitch - _width) : _pitch;
     }
+    int minSpace() const { return _minSpace; }
+    void setMinSpace(const int s) { _minSpace = s; }
     void setPitch(const int p) {_pitch = p;}
     void setWidth(const int w) {_width = w;}
     void setMinL(const int l) {_minL = l;}

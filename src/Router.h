@@ -60,14 +60,72 @@ class CostFn {
     std::vector<CostType> _layerHCost, _layerVCost;
     std::vector<CostType> _savedLayerHCost, _savedLayerVCost;
     std::vector<std::vector<CostType>> _layerPairCost;
+    std::vector<std::vector<CostType>> _baseLayerPairCost;
+    std::vector<CostType> _bendCost;
+    static constexpr double BEND_PITCHES = 0.75;
     std::set<int> _preflayers;
+    std::map<int, Geom::Rects> _relaxzones;
+    std::map<int, std::vector<int>> _relaxuf;   // union-find over overlapping zones
+    CostType _minMetalCost{0};
+    static int root(const std::vector<int>& uf, int a)
+    {
+      while (uf[a] != a) a = uf[a];
+      return a;
+    }
   public:
     CostType deltaCost(const Node& n1, const Node& n2) const;
     CostFn(const DRC::LayerInfo& lf);
+    void setRelaxFloor(const CostType c) { if (c > 0 && c < COST_MAX) _minMetalCost = c; }
+    void clearRelaxZones() { _relaxzones.clear(); _relaxuf.clear(); }
+    void addRelaxZone(const int z, const Geom::Rect& r)
+    {
+      auto& v = _relaxzones[z];
+      auto& uf = _relaxuf[z];
+      const int idx = static_cast<int>(v.size());
+      v.push_back(r);
+      uf.push_back(idx);
+      for (int i = 0; i < idx; ++i) {
+        if (v[i].overlaps(r)) {
+          const int a = root(uf, i), b = root(uf, idx);
+          if (a != b) uf[a] = b;
+        }
+      }
+    }
+    CostType relaxed(const CostType base, const int z, const int x1, const int y1,
+                     const int x2, const int y2) const
+    {
+      if (base <= _minMetalCost || _relaxzones.empty()) return base;
+      auto it = _relaxzones.find(z);
+      if (it == _relaxzones.end()) return base;
+      const auto& v = it->second;
+      const auto& uf = _relaxuf.at(z);
+      const Geom::Point p1(x1, y1), p2(x2, y2);
+      int g1[8], g2[8];
+      int n1 = 0, n2 = 0;
+      for (size_t i = 0; i < v.size(); ++i) {
+        if (n1 < 8 && v[i].contains(p1, false)) g1[n1++] = root(uf, static_cast<int>(i));
+        if (n2 < 8 && v[i].contains(p2, false)) g2[n2++] = root(uf, static_cast<int>(i));
+      }
+      for (int a = 0; a < n1; ++a)
+        for (int b = 0; b < n2; ++b)
+          if (g1[a] == g2[b]) return _minMetalCost;
+      return base;
+    }
     bool isVert(const int l) const { return _layerVCost[l] <= _layerHCost[l]; }
     bool isHor(const int l) const { return _layerHCost[l] <= _layerVCost[l]; }
     int topRoutingLayer() const { return _topRoutingLayer; }
 
+    void addViaPadCost(const int z1, const int z2, const CostType c)
+    {
+      if (z1 < 0 || z2 < 0 || _baseLayerPairCost.empty()) return;
+      if (_baseLayerPairCost[z1][z2] < COST_MAX) _layerPairCost[z1][z2] = _baseLayerPairCost[z1][z2] + c;
+      if (_baseLayerPairCost[z2][z1] < COST_MAX) _layerPairCost[z2][z1] = _baseLayerPairCost[z2][z1] + c;
+    }
+    CostType offCentreEscapeCost(const int dist) const
+    {
+      return (_minMetalCost * dist) / ESCAPE_OFFCENTRE_DIV;
+    }
+    static const int ESCAPE_OFFCENTRE_DIV = 4;
     CostType hcost(int i) const { return _layerHCost[i]; }
     CostType vcost(int i) const { return _layerVCost[i]; }
     void updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::set<int>& preflayers);
@@ -242,6 +300,7 @@ class Router {
     // return an empty list. This captures which one actually happened.
     bool _lastSolFound{false};
     std::vector<int> _widthx, _ndrwidthx, _spacex, _ndrspacex;
+    std::vector<int> _drcspacex, _drcspacey;
     std::vector<int> _widthy, _ndrwidthy, _spacey, _ndrspacey;
     int _minLayer, _maxLayer, _maxRoutingLayer;
     Vias _vias;
@@ -268,6 +327,19 @@ class Router {
     bool _relaxSrcViaEscape{false};
     bool _relaxTgtViaEscape{false};
     static const int MIN_ESCAPE_SPACE = 5;
+    // How far around a pin the on-layer cost is relaxed, in multiples of that
+    // layer's spacing. Two spacings covers a hop to a pin one or two tracks away,
+    // which is the case where escaping to another layer costs a via pair to cross
+    // a gap the via's own pad would have bridged.
+    static const int RELAX_PIN_SPACINGS = 2;
+    // How close a pin's extent must be to the routing width, as a percentage, for
+    // its escapes to be offered on the centre line only. At 100 every pin
+    // qualifies, so escapes are always centred rather than pushed to the edges.
+    static const int PIN_CENTRE_ESCAPE_PCT = 100;
+    static bool centreEscapeOnly(const int extent, const int w)
+    {
+      return 100 * std::abs(extent - w) <= PIN_CENTRE_ESCAPE_PCT * std::max(extent, w);
+    }
     // In the default centre-track pin escape, if a shape's centre track yields
     // this few (or fewer) candidate points, the corner/edge escape points are
     // added too -- so a nearly-blocked pin gets a way out on the very first
@@ -461,6 +533,8 @@ class Router {
     // base (non-NDR) width/space, valid before any net's updatendr() runs.
     int baseWidthX(const int z) const { return (z >= 0 && z < static_cast<int>(_widthx.size())) ? _widthx[z] : 0; }
     int baseWidthY(const int z) const { return (z >= 0 && z < static_cast<int>(_widthy.size())) ? _widthy[z] : 0; }
+    int drcSpaceX(const int z) const { return (z >= 0 && z < static_cast<int>(_drcspacex.size())) ? _drcspacex[z] : 0; }
+    int drcSpaceY(const int z) const { return (z >= 0 && z < static_cast<int>(_drcspacey.size())) ? _drcspacey[z] : 0; }
     int baseSpaceX(const int z) const { return (z >= 0 && z < static_cast<int>(_spacex.size())) ? _spacex[z] : 0; }
     int baseSpaceY(const int z) const { return (z >= 0 && z < static_cast<int>(_spacey.size())) ? _spacey[z] : 0; }
 
@@ -469,6 +543,7 @@ class Router {
       _sources.clear();
       _targets.clear();
       _sourceshapes.clear();
+      _cf.clearRelaxZones();
       _psources.clear();
       _targetshapes.clear();
       _ptargets.clear();

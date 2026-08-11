@@ -21,7 +21,7 @@ class Solver {
       std::fill(_val.begin(), _val.end(), 0);
       return dpll();
     }
-    //bool value(int var) const { return _val[var - 1] == 1; }
+    bool value(int var) const { return _val[var - 1] == 1; }
 
   private:
     std::vector<int8_t> _val;

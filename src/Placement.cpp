@@ -1,10 +1,12 @@
 #include "Util.h"
 #include "Placement.h"
 #include "Escape.h"
+#include "Router.h"
 #include <unordered_map>
 #include <unordered_set>
 #include <tuple>
 #include <exception>
+#include <functional>
 
 #include <algorithm>
 #include <thread>
@@ -324,8 +326,71 @@ void Module::route(Router::Router& router, const std::string& outdir)
       return b;
     };
 
+    Geom::LayerRects escapeReserve;
+    {
+      std::vector<Escape::Pin> epins;
+      std::vector<char> isPort;
+      int netid = 0;
+      for (auto& nv : nets) {
+        const bool outwardPort = (nv->pins().size() == 1 && _pins.count(nv->name()) > 0);
+        if (!nv->excluded() && (nv->pins().size() >= 2 || outwardPort)) {
+          for (auto& pin : nv->pins()) {
+            Escape::Pin ep;
+            ep.name = _name + SEPARATOR + pin->name();
+            ep.net = netid;
+            for (auto& port : pin->ports())
+              for (auto& l : port->shapes())
+                for (auto& r : l.second) ep.shapes[l.first].push_back(r);
+            if (!ep.shapes.empty()) {
+              epins.push_back(std::move(ep));
+              isPort.push_back(outwardPort ? 1 : 0);
+            }
+          }
+        }
+        ++netid;
+      }
+      if (!epins.empty()) {
+        Escape::LayerModel lm;
+        lm.minLayer = router.minLayer();
+        lm.maxLayer = router.maxLayer();
+        lm.width   = [&router](int z) { return std::max(router.baseWidthX(z), router.baseWidthY(z)); };
+        lm.space   = [&router](int z) { return std::max(router.baseSpaceX(z), router.baseSpaceY(z)); };
+        lm.canUp   = [&router](int z) { return router.canViaUp(z); };
+        lm.canDown = [&router](int z) { return router.canViaDown(z); };
+        std::vector<Escape::Chosen> chosen;
+        if (Escape::feasible(epins, _obstacles, lm, nullptr, nullptr, &chosen)) {
+          for (const auto& c : chosen) {
+            if (c.pin < isPort.size() && isPort[c.pin]) {
+              // Reserve only what one escape actually needs, not the whole pin: a
+              // via-up candidate's footprint is the entire pin rect on the layer
+              // above, and holding all of that hostage costs far more routing
+              // resource than the port needs and pushes other nets onto higher
+              // layers. A landing box one routing width across, centred in the
+              // footprint, keeps exactly one escape alive and frees the rest.
+              Geom::Rect fp = c.fp;
+              const int wz = std::max(router.baseWidthX(c.layer), router.baseWidthY(c.layer));
+              if (fp.width() > wz || fp.height() > wz) {
+                const int hx = std::min(fp.width(),  wz) / 2;
+                const int hy = std::min(fp.height(), wz) / 2;
+                const int cx = fp.xcenter(), cy = fp.ycenter();
+                fp = Geom::Rect(cx - hx, cy - hy, cx + hx, cy + hy);
+              }
+              escapeReserve[c.layer].push_back(fp);
+              COUT << "reserving escape for port " << epins[c.pin].name
+                   << " : layer " << c.layer << ' ' << fp.str()
+                   << " (of " << c.fp.str() << ")\n";
+            }
+          }
+        }
+      }
+    }
+    // What this module's own nets must keep clear: the real obstacles plus the
+    // escapes reserved above. _obstacles itself is left untouched.
+    Geom::LayerRects routeObstacles = _obstacles;
+    Geom::MergeLayerRects(routeObstacles, escapeReserve);
+
     std::map<int, Geom::RTree2D> obsTree;
-    for (auto& lr : _obstacles) obsTree.emplace(lr.first, lr.second);
+    for (auto& lr : routeObstacles) obsTree.emplace(lr.first, lr.second);
     auto queryObs = [&](const Geom::Rect& box) -> Geom::LayerRects {
       Geom::LayerRects out;
       for (auto& lt : obsTree) {
@@ -338,7 +403,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
     auto netObstacles = [&](size_t i) -> Geom::LayerRects {
       Geom::Rect box = searchBox(i);
       if (nets[i]->isDetour() || !nets[i]->routable() || !box.valid())
-        return _obstacles;
+        return routeObstacles;
       Geom::LayerRects out = queryObs(box);
       auto pit = netToPair.find(nets[i]);
       if (pit != netToPair.end()) {
@@ -407,8 +472,24 @@ void Module::route(Router::Router& router, const std::string& outdir)
       if (addAdj && m1Layer >= 0 && layerName(m1Layer + 1)[0] == 'M') {
         auto itm1 = u.find(m1Layer);
         if (itm1 != u.end() && !itm1->second.empty()) {
+          const int adjSpace = std::max(router.baseSpaceX(m1Layer + 1),
+                                        router.baseSpaceY(m1Layer + 1));
+          Geom::Rects own;      // this net's own M1 pin footprints = its landing pads
+          for (auto virt : {true, false})
+            for (auto& pin : (virt ? nets[pi]->virtualpins() : nets[pi]->pins()))
+              for (auto& p : pin->ports()) {
+                auto sit = p->shapes().find(m1Layer);
+                if (sit != p->shapes().end())
+                  own.insert(own.end(), sit->second.begin(), sit->second.end());
+              }
           auto& adj = u[m1Layer + 1];
-          adj.insert(adj.end(), itm1->second.begin(), itm1->second.end());
+          for (auto& r : itm1->second) {
+            bool blocksOwnVia = false;
+            for (auto& o : own) {
+              if (o.bloatby(adjSpace).overlaps(r, true)) { blocksOwnVia = true; break; }
+            }
+            if (!blocksOwnVia) adj.push_back(r);
+          }
         }
       }
       return u;
@@ -591,11 +672,14 @@ void Module::route(Router::Router& router, const std::string& outdir)
       return anyUnrouted;
     };
 
-    {
+    auto escapeCheck = [&](const char* when, const Geom::LayerRects* extra,
+                           const bool portsOnly) {
       std::vector<Escape::Pin> epins;
       int netid = 0;
       for (auto& nv : nets) {
-        if (!nv->excluded() && nv->pins().size() >= 2) {
+        const bool outwardPort = (nv->pins().size() == 1 && _pins.count(nv->name()) > 0);
+        const bool want = portsOnly ? outwardPort : (nv->pins().size() >= 2 || outwardPort);
+        if (!nv->excluded() && want) {
           for (auto& pin : nv->pins()) {
             Escape::Pin ep;
             ep.name = _name + SEPARATOR + pin->name();
@@ -620,15 +704,20 @@ void Module::route(Router::Router& router, const std::string& outdir)
         lm.canDown = [&router](int z) { return router.canViaDown(z); };
         std::vector<std::string> blocked;
         std::string reason;
-        if (Escape::feasible(epins, _obstacles, lm, &blocked, &reason)) {
-          COUT << "pin escape SAT : all " << epins.size() << " pins in " << _name
-               << " have a guaranteed escape\n";
+        Geom::LayerRects obs = _obstacles;
+        if (extra) Geom::MergeLayerRects(obs, *extra);
+        if (Escape::feasible(epins, obs, lm, &blocked, &reason)) {
+          COUT << "pin escape SAT (" << when << ") : all " << epins.size() << " pins in "
+               << _name << " have a guaranteed escape\n";
         } else {
-          COUT << "pin escape SAT : " << _name << " is infeasible (" << reason << ")\n";
+          COUT << "pin escape SAT (" << when << ") : " << _name << " is infeasible ("
+               << reason << ")\n";
           for (auto& b : blocked) COUT << "  no escape for pin : " << b << '\n';
         }
       }
-    }
+    };
+    escapeCheck("pre-route", nullptr, false);
+
 
     for (auto& n : _nets) n.second.snapshotRoutes();
 
@@ -759,8 +848,15 @@ void Module::route(Router::Router& router, const std::string& outdir)
         Geom::MergeLayerRects(_internalroutes, n.second.routeShapesWithPins());
       }
     }
+    {
+      Geom::LayerRects laid;
+      for (auto& n : _nets)
+        if (!n.second.excluded()) Geom::MergeLayerRects(laid, n.second.routeShapesWithPins());
+      escapeCheck("post-route", &laid, true);
+    }
     writeDEF(outdir);
   }
+  checkDRC(router);
   if (!_leaf) {
     writeLEF(outdir);
   }
@@ -844,6 +940,119 @@ void Module::checkShort() const
       }
     }
   }
+}
+
+int Module::checkDRC(const Router::Router& router) const
+{
+  if (_leaf) return 0;
+  // route() is re-entered for a module already routed as someone's child, so this
+  // can run more than once: start from a clean slate rather than accumulating.
+  _drcmarkers.clear();
+  _drccount = 0;
+  struct Shape {
+    Geom::Rect r;
+    const void* owner;   // net identity; shapes of one net never conflict
+    bool routed;
+  };
+  std::map<int, std::vector<Shape>> byLayer;
+  for (auto& n : _nets) {
+    if (n.second.excluded()) continue;
+    const void* id = &n.second;
+    for (auto& l : n.second.routeShapes())
+      for (auto& r : l.second) byLayer[l.first].push_back({r, id, true});
+    // A net's own pins are input geometry, but carry its identity so that a
+    // route landing on the pin it is connecting to is never reported.
+    for (auto& pin : n.second.pins())
+      for (auto& p : pin->ports())
+        for (auto& l : p->shapes())
+          for (auto& r : l.second) byLayer[l.first].push_back({r, id, false});
+  }
+  // Only pairs with a routed side are ever reported, so input geometry that is
+  // nowhere near a route can neither raise a violation nor bridge one polygon to
+  // another that we would compare. Bound each layer by the routed extent, grown
+  // by the spacing, and drop everything outside -- without this the union and the
+  // pair scan both run over every obstacle in the module and become the dominant
+  // cost on a large hierarchy.
+  std::map<int, Geom::Rect> routedBox;
+  for (auto& lv : byLayer) {
+    Geom::Rect b;
+    for (auto& s : lv.second) if (s.routed) b.merge(s.r);
+    if (b.valid()) {
+      const int pad = std::max(router.drcSpaceX(lv.first), router.drcSpaceY(lv.first)) + 1;
+      routedBox[lv.first] = b.bloatby(pad, pad);
+    }
+  }
+  auto nearRoutes = [&](int l, const Geom::Rect& r) {
+    auto it = routedBox.find(l);
+    return it != routedBox.end() && it->second.overlaps(r);
+  };
+  for (auto& l : _obstacles)
+    for (auto& r : l.second)
+      if (nearRoutes(l.first, r)) byLayer[l.first].push_back({r, nullptr, false});
+
+  // Rectangles that touch or overlap are one piece of metal, so spacing between
+  // them is meaningless -- a wire and the via pad it lands on, or a pin and the
+  // route that connects to it, are a single polygon however many rects describe
+  // it. Merge per layer with boost::polygon first and only ever measure across
+  // merged polygons; comparing raw rectangles fires on two halves of one shape.
+  //
+  // Per routed polygon P: anything that lies within the spacing of P but is not
+  // part of P is a violation. Grow P by the spacing, intersect with all the metal
+  // on the layer, and subtract P itself -- what survives is exactly the intruding
+  // metal, and it doubles as the marker geometry.
+  using namespace boost::polygon::operators;
+  int count = 0;
+  std::set<std::tuple<int, int, int, int, int>> seen;
+  for (auto& lv : byLayer) {
+    const int z = lv.first;
+    if (z < router.minLayer() || z > router.maxLayer()) continue;
+    const int sx = router.drcSpaceX(z), sy = router.drcSpaceY(z);
+    if (sx <= 0 && sy <= 0) continue;
+    // Merge each net's own metal (its routes plus the pins they land on) into
+    // polygons. Merging is deliberately per net: the obstacle set is a bag of
+    // unrelated metal from many cells, so unioning everything chains a route to
+    // half the layer through shapes it has nothing to do with and hides real
+    // violations.
+    std::map<const void*, PolySet> byOwner;
+    std::set<const void*> routedOwners;
+    for (const auto& s : lv.second) {
+      byOwner[s.owner].insert(PRect(s.r.xmin(), s.r.ymin(), s.r.xmax(), s.r.ymax()));
+      if (s.routed) routedOwners.insert(s.owner);
+    }
+    for (const void* id : routedOwners) {
+      PRects selfr;
+      get_max_rectangles(selfr, byOwner[id]);   // this net as merged polygons
+      for (const auto& s : lv.second) {
+        if (s.owner == id) continue;            // same net: never a spacing check
+        const Geom::Rect& b = s.r;
+        bool touching = false;
+        for (const auto& pr : selfr) {
+          const Geom::Rect a(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
+          if (a.overlaps(b)) { touching = true; break; }   // one polygon, or a short
+        }
+        if (touching) continue;
+        for (const auto& pr : selfr) {
+          const Geom::Rect a(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
+          const int dx = std::max(0, std::max(b.xmin() - a.xmax(), a.xmin() - b.xmax()));
+          const int dy = std::max(0, std::max(b.ymin() - a.ymax(), a.ymin() - b.ymax()));
+          if (dx == 0 && dy == 0) continue;               // overlap: checkShort's job
+          if (dx >= sx || dy >= sy) continue;             // clear on at least one axis
+          Geom::Rect m(a);
+          m.merge(b);
+          if (!seen.emplace(z, m.xmin(), m.ymin(), m.xmax(), m.ymax()).second) continue;
+          COUT << "DRC spacing " << _name << " layer " << layerName(z) << " : "
+               << a.str() << " vs " << b.str()
+               << " dx=" << dx << " dy=" << dy << " need " << sx << 'x' << sy << '\n';
+          _drcmarkers[z].push_back(m);
+          ++count;
+        }
+      }
+    }
+  }
+  if (count)
+    COUT << "DRC module " << _name << " : " << count << " router-caused spacing violation(s)\n";
+  _drccount = count;
+  return count;
 }
 
 void Module::writeDEF(const std::string& outdir, const std::string& nstr, const std::string& netname) const
@@ -976,6 +1185,12 @@ void Module::writeLEF(const std::string& outdir) const
       }
       for (auto& l : _internalroutes) {
         ofs << "      LAYER " << layerName(l.first) << " ;\n";
+        for (auto& r : l.second) {
+          ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+        }
+      }
+      for (auto& l : _drcmarkers) {
+        ofs << "      LAYER DRC_" << layerName(l.first) << " ;\n";
         for (auto& r : l.second) {
           ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
         }

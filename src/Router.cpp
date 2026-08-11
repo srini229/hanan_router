@@ -66,6 +66,7 @@ CostFn::CostFn(const DRC::LayerInfo& lf)
   auto& layers = lf.layers();
   _layerHCost.resize(layers.size(), COST_MAX);
   _layerVCost.resize(layers.size(), COST_MAX);
+  _bendCost.resize(layers.size(), 0);
   for (unsigned i = 0; i < layers.size(); ++i) {
     if (layers[i]->isMetal()) {
       auto r = std::max(1, static_cast<int>(layers[i]->meanR()));
@@ -74,6 +75,10 @@ CostFn::CostFn(const DRC::LayerInfo& lf)
       }
       if (static_cast<DRC::MetalLayer*>(layers[i])->isVertical()) {
         _layerVCost[i] = r;
+      }
+      {
+        auto ml = static_cast<DRC::MetalLayer*>(layers[i]);
+        _bendCost[i] = static_cast<CostType>(r) * (ml->width() + ml->space()) * BEND_PITCHES;
       }
       _topRoutingLayer = static_cast<int>(i);
     }
@@ -89,9 +94,16 @@ CostFn::CostFn(const DRC::LayerInfo& lf)
       }
     }
   }
+  _baseLayerPairCost = _layerPairCost;
+  _minMetalCost = COST_MAX;
+  for (int i = 0; i <= _topRoutingLayer; ++i) {
+    _minMetalCost = std::min(_minMetalCost, std::min(_layerHCost[i], _layerVCost[i]));
+  }
+  if (_minMetalCost >= COST_MAX) _minMetalCost = 1;
   for (int i = 0; i <= _topRoutingLayer; ++i) {
     COUT << "layer : " << i << " cost : " << _layerHCost[i] << ' ' << _layerVCost[i] << '\n';
   }
+  COUT << "cheapest metal cost (used inside pin neighbourhoods) : " << _minMetalCost << '\n';
   for (int i = 0; i <= _topRoutingLayer; ++i) {
     if (i > 0) {
       COUT << "layerPairCost : " << i << ' ' << i - 1 << ' ' << _layerPairCost[i][i-1] << '\n';
@@ -111,7 +123,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
     if (n1.parent() == &n2 && n2.parent() && n2.parent()->z() == n2.z()) {
       if ((n1.x() == n2.x() && n2.parent()->x() != n1.x())
           || (n1.y() == n2.y() && n2.parent()->y() != n1.y())){
-        bendCost = (n1.z() < _topRoutingLayer) ? _layerPairCost[n1.z()][n1.z() + 1] * 0.2 : _layerPairCost[n1.z()][n1.z() - 1] * 0.2;
+        bendCost = _bendCost[n1.z()];
         /*COUT << "bend cost : " << bendCost << ' ' << std::min(_layerVCost[n1.z()], _layerHCost[n1.z()]) << '\n' ;
         n1.print("bend1 : ");
         n2.print("bend2 : ");
@@ -119,10 +131,12 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
       }
     }
     if (n1.x() == n2.x() && _layerVCost[n1.z()] < COST_MAX) {
-      return (bendCost + _layerVCost[n1.z()] * std::abs(n1.y() - n2.y()));
+      const CostType c = relaxed(_layerVCost[n1.z()], n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
+      return (bendCost + c * std::abs(n1.y() - n2.y()));
     }
     if (n1.y() == n2.y() && _layerHCost[n1.z()] < COST_MAX) {
-      return (bendCost + _layerHCost[n1.z()] * std::abs(n1.x() - n2.x()));
+      const CostType c = relaxed(_layerHCost[n1.z()], n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
+      return (bendCost + c * std::abs(n1.x() - n2.x()));
     }
   }
   if (n1.x() == n2.x() && n1.y() == n2.y()) {
@@ -141,6 +155,10 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   for (int i = minz; i <= maxz; ++i) {
     minHCost = std::min(minHCost, _layerHCost[i]);
     minVCost = std::min(minVCost, _layerVCost[i]);
+  }
+  if (n1.z() == n2.z()) {
+    minHCost = relaxed(minHCost, n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
+    minVCost = relaxed(minVCost, n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
   }
   dc += (minHCost * std::abs(n1.x() - n2.x())) + (minVCost * std::abs(n1.y() - n2.y()));
   if (std::abs(n1.x() - n2.x()) && std::abs(n1.y() - n2.y())) {
@@ -297,6 +315,16 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
       _widthy.push_back(mlayer->width());
       _spacex.push_back(mlayer->space());
       _spacey.push_back(mlayer->space());
+      const int drcs = std::max(mlayer->space(), mlayer->minSpace());
+      _drcspacex.push_back(drcs);
+      _drcspacey.push_back(drcs);
+      if (mlayer->minSpace() > mlayer->space()) {
+        CERR << "WARNING: layer " << mlayer->name() << " pitch gives spacing "
+             << mlayer->space() << " but MinSpacing is " << mlayer->minSpace()
+             << "; routing will pack to " << mlayer->space()
+             << " and the final DRC check will flag it (pitch should be >= "
+             << (mlayer->width() + mlayer->minSpace()) << ")\n";
+      }
       COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << " v : " << _cf.isVert(i) << " h : " << _cf.isHor(i) << '\n';
     }
   }
@@ -312,6 +340,8 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
       _widthy.push_back(vlayer->widthy());
       _spacex.push_back(vlayer->spacex());
       _spacey.push_back(vlayer->spacey());
+      _drcspacex.push_back(vlayer->spacex());
+      _drcspacey.push_back(vlayer->spacey());
     }
   }
   for (unsigned i = 0; i < _aboveViaLayer.size(); ++i) {
@@ -319,6 +349,14 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
   }
   _minLayer = lf.signalBottomLayer();
   _maxLayer = lf.signalTopLayer();
+  {
+    CostType floorc = COST_MAX;
+    for (int z = _minLayer; z <= _maxLayer; ++z) {
+      floorc = std::min(floorc, std::min(_cf.hcost(z), _cf.vcost(z)));
+    }
+    _cf.setRelaxFloor(floorc);
+    COUT << "pin-neighbourhood relaxed cost floor : " << floorc << '\n';
+  }
   _maxRoutingLayer = static_cast<int>(_widthx.size()) - 1;
   COUT << "min routing layer : " << LAYER_NAMES[_minLayer] << " max routing layer : " << LAYER_NAMES[_maxLayer] << '\n';
   _nodes.clear();
@@ -484,10 +522,15 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       // waiting for a full second design pass is pure waste; offering the
       // corner points immediately lets the first attempt succeed instead.
       if (_cornerEscape || points.size() <= MIN_ESCAPE_POINTS) {
+        const int fxlo = r.xmin() + width/2, fxhi = r.xmax() - width/2;
+        const bool fitx = (fxhi >= fxlo);
+        const bool cx = centreEscapeOnly(r.width(), width);
+        const int bxlo = (cx || !fitx) ? roundup(r.xcenter()) : roundup(fxlo);
+        const int bxhi = (cx || !fitx) ? roundup(r.xcenter()) : roundup(fxhi);
         if (width < r.height()) {
           int space = roundup(std::max(spacex(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1)), r.height()/NUM_POINTS));
           for (auto right : {true, false}) {
-            int ex = (right ? r.xmax() : r.xmin());
+            int ex = (right ? bxhi : bxlo);
             int yn = y;
             while (yn < r.ymax()) { points.insert(std::make_pair(Geom::Point(ex,yn), width)); yn += space; }
             yn = r.ycenter();
@@ -497,30 +540,20 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
           }
           int yn = roundup(r.ycenter());
           while (yn <= (r.ymax() - width/2)) {
-            if (r.width() >= width) {
-              points.insert(std::make_pair(Geom::Point(roundup(r.xmin() + width/2),yn), width));
-              points.insert(std::make_pair(Geom::Point(roundup(r.xmax() - width/2),yn), width));
-            } else {
-              points.insert(std::make_pair(Geom::Point(r.xmin(),yn), width));
-              points.insert(std::make_pair(Geom::Point(r.xmax(),yn), width));
-            }
+            points.insert(std::make_pair(Geom::Point(bxlo,yn), width));
+            points.insert(std::make_pair(Geom::Point(bxhi,yn), width));
             yn += space;
           }
           yn = roundup(r.ycenter());
           while (yn >= (r.ymin() + width/2)) {
-            if (r.width() >= width) {
-              points.insert(std::make_pair(Geom::Point(roundup(r.xmin() + width/2),yn), width));
-              points.insert(std::make_pair(Geom::Point(roundup(r.xmax() - width/2),yn), width));
-            } else {
-              points.insert(std::make_pair(Geom::Point(r.xmin(),yn), width));
-              points.insert(std::make_pair(Geom::Point(r.xmax(),yn), width));
-            }
+            points.insert(std::make_pair(Geom::Point(bxlo,yn), width));
+            points.insert(std::make_pair(Geom::Point(bxhi,yn), width));
             yn -= space;
           }
         }
         if (width != r.width()) {
-          points.insert(std::make_pair(Geom::Point(r.xmin(),r.ycenter()), width));
-          points.insert(std::make_pair(Geom::Point(r.xmax(),r.ycenter()), width));
+          points.insert(std::make_pair(Geom::Point(bxlo,r.ycenter()), width));
+          points.insert(std::make_pair(Geom::Point(bxhi,r.ycenter()), width));
         }
       }
     }
@@ -546,34 +579,31 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
       // pass, and ALSO added here when the centre track left very few
       // candidates (see the EAST/WEST branch above for the rationale).
       if (_cornerEscape || points.size() <= MIN_ESCAPE_POINTS) {
+        // See the EAST/WEST branch: pull the edge candidates in by half a width so
+        // the escape is flush with the pin rather than hanging outside it.
+        const int fylo = r.ymin() + width/2, fyhi = r.ymax() - width/2;
+        const bool fity = (fyhi >= fylo);
+        const bool cy = centreEscapeOnly(r.height(), width);
+        const int bylo = (cy || !fity) ? roundup(r.ycenter()) : roundup(fylo);
+        const int byhi = (cy || !fity) ? roundup(r.ycenter()) : roundup(fyhi);
         if (width < r.width()) {
           int space = roundup(std::max(spacey(z) + ((width % 2 == 0) ? width/2 : (width/2 + 1)), r.width() / NUM_POINTS));
           int xn = roundup(r.xcenter());
           while (xn <= (r.xmax() - width/2)) {
-            if (r.height() >= width) {
-              points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymin() + width/2)), width));
-              points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymax() - width/2)), width));
-            } else {
-              points.insert(std::make_pair(Geom::Point(xn,r.ymin()), width));
-              points.insert(std::make_pair(Geom::Point(xn,r.ymax()), width));
-            }
+            points.insert(std::make_pair(Geom::Point(xn,bylo), width));
+            points.insert(std::make_pair(Geom::Point(xn,byhi), width));
             xn += space;
           }
           xn = roundup(r.xcenter());
           while (xn >= (r.xmin() + width/2)) {
-            if (r.height() >= width) {
-              points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymin() + width/2)), width));
-              points.insert(std::make_pair(Geom::Point(xn,roundup(r.ymax() - width/2)), width));
-            } else {
-              points.insert(std::make_pair(Geom::Point(xn,r.ymin()), width));
-              points.insert(std::make_pair(Geom::Point(xn,r.ymax()), width));
-            }
+            points.insert(std::make_pair(Geom::Point(xn,bylo), width));
+            points.insert(std::make_pair(Geom::Point(xn,byhi), width));
             xn -= space;
           }
         }
         if (width != r.height()) {
-          points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymin()), width));
-          points.insert(std::make_pair(Geom::Point(r.xcenter(),r.ymax()), width));
+          points.insert(std::make_pair(Geom::Point(r.xcenter(),bylo), width));
+          points.insert(std::make_pair(Geom::Point(r.xcenter(),byhi), width));
         }
       }
     }
@@ -585,6 +615,11 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
 void Router::addSourceTargetShapes(const Geom::Rect& r, const int z, const bool src)
 {
   if (z >= _minLayer && z <= _maxLayer) {
+    // Charge this layer at the cheapest metal rate within RELAX_PIN_SPACINGS
+    // spacings of the pin, so a short hop to a neighbouring pin stays on-layer
+    // instead of paying for a via pair to escape an expensive layer.
+    _cf.addRelaxZone(z, r.bloatby(RELAX_PIN_SPACINGS * spacex(z),
+                                  RELAX_PIN_SPACINGS * spacey(z)));
     auto& shapes = (src ? _sourceshapes : _targetshapes);
     if (src) {
       _psources[z] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
@@ -637,7 +672,11 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
     //COUT << "num points : " << points.size() << ' ' << "dir : " << dir << '\n';
     for (auto& pp : points) {
       auto& p = pp.first;
-      auto n = createNode(p.x(), p.y(), z, nullptr, fcost, tcost);
+      const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
+      const int pen = static_cast<int>(_cf.offCentreEscapeCost(offc));
+      auto n = createNode(p.x(), p.y(), z, nullptr,
+                          src ? fcost + pen : fcost,
+                          src ? tcost : tcost + pen);
       n->expand(dir, true);
       if ((dir == UP && z >= _maxLayer) || (dir == DOWN && z <= _minLayer)) {
         n->expand(dir, false);
@@ -2228,6 +2267,26 @@ void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
 
   for (auto& v : _vias) {
     COUT << "via : " << v->str() << '\n';
+  }
+
+  for (int z = _minLayer; z < _maxLayer; ++z) {
+    if (_upVias[z].empty()) continue;
+    const Via* v = _upVias[z][0].get();
+    const auto& lp = v->lpad();
+    const auto& up = v->upad();
+    const CostType lo = std::min(_cf.hcost(z),     _cf.vcost(z));
+    const CostType hi = std::min(_cf.hcost(z + 1), _cf.vcost(z + 1));
+    const int lex = std::max(0, std::max(lp.width(), lp.height()) - widthx(z));
+    const int uex = std::max(0, std::max(up.width(), up.height()) - widthx(z + 1));
+    CostType extra = 0;
+    if (lo < COST_MAX) extra += lo * lex;
+    if (hi < COST_MAX) extra += hi * uex;
+    if (extra > 0) {
+      _cf.addViaPadCost(z, z + 1, extra);
+      COUT << "via pad cost : layers " << z << '-' << (z + 1)
+           << " pads " << lp.str() << ' ' << up.str()
+           << " -> +" << extra << '\n';
+    }
   }
 }
 

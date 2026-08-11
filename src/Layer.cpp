@@ -58,6 +58,8 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
           if (mlayer != nullptr) {
             it = l.find("Width");
             if (it != l.end() && it->is_number()) mlayer->setWidth(static_cast<int>(*it) * uu);
+            it = l.find("MinSpacing");
+            if (it != l.end() && it->is_number()) mlayer->setMinSpace(static_cast<int>(*it) * uu);
             it = l.find("MinL");
             if (it != l.end() && it->is_number()) mlayer->setMinL(static_cast<int>(*it) * uu);
             it = l.find("MaxL");
