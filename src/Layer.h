@@ -82,8 +82,9 @@ struct ViaArray {
   SpaceWidth _sw;
   int _coverl[2], _coveru[2]; // 0 : low, 1 : high
   int _nx, _ny;
-  ViaArray() : _sw{}, _nx{0}, _ny{0} {}
+  ViaArray() : _sw{}, _coverl{0, 0}, _coveru{0, 0}, _nx{0}, _ny{0} {}
   ViaArray(const int  wx, const int wy, const int sx, const int sy, const int nx, const int ny)
+    : _coverl{0, 0}, _coveru{0, 0}
   {
     _sw._space = std::make_pair(sx, sy);
     _sw._width = std::make_pair(wx, wy);
