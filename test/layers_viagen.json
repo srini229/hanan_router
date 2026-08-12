@@ -124,16 +124,16 @@
                 "SpaceY": 52,
                 "WidthX": 32,
                 "WidthY": 32,
-                "NumX": 2,
-                "NumY": 1
+                "NumX": 1,
+                "NumY": 2
                 },
                 {
                 "SpaceX": 48,
                 "SpaceY": 52,
                 "WidthX": 32,
                 "WidthY": 32,
-                "NumX": 1,
-                "NumY": 2
+                "NumX": 2,
+                "NumY": 1
                 }
                 ]
             },

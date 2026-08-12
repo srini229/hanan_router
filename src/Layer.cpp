@@ -156,7 +156,11 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
                 if (itv != it->end() && itv->is_number()) nx = static_cast<int>(*itv);
                 itv = it->find("NumY");
                 if (itv != it->end() && itv->is_number()) ny = static_cast<int>(*itv);
-                vlayer->addViaArray(wx, wy, sx, sy, nx, ny);
+                auto va = vlayer->addViaArray(wx, wy, sx, sy, nx, ny);
+                va._coverl[0] = vlayer->coverlx();
+                va._coverl[1] = vlayer->coverly();
+                va._coveru[0] = vlayer->coverux();
+                va._coveru[1] = vlayer->coveruy();
               }
               if (itv != it->end() && *itv == "ViaArrayGenerators") {
                 itv = it->find("Array");
@@ -175,8 +179,20 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
                     if (itva != itvg.end() && itva->is_number()) nx = static_cast<int>(*itva);
                     itva = itvg.find("NumY");
                     if (itva != itvg.end() && itva->is_number()) ny = static_cast<int>(*itva);
-                    COUT << wx << ' ' << wy << ' ' << sx << ' ' << sy << ' ' << nx << ' ' << ny <<std::endl;
-                    vlayer->addViaArray(wx, wy, sx, sy, nx, ny);
+                    auto va = vlayer->addViaArray(wx, wy, sx, sy, nx, ny);
+                    it = l.find("VencX_L");
+                    x = (it != l.end() && it->is_number()) ? static_cast<int>(*it) * uu : vlayer->coverlx();
+                    it = l.find("VencY_L");
+                    y = (it != l.end() && it->is_number()) ? static_cast<int>(*it) * uu : vlayer->coverly();
+                    va._coverl[0] = x;
+                    va._coverl[1] = y;
+                    it = l.find("VencX_H");
+                    x = (it != l.end() && it->is_number()) ? static_cast<int>(*it) * uu : vlayer->coverux();
+                    it = l.find("VencY_H");
+                    y = (it != l.end() && it->is_number()) ? static_cast<int>(*it) * uu : vlayer->coveruy();
+                    va._coveru[0] = x;
+                    va._coveru[1] = y;
+                    //COUT << wx << ' ' << wy << ' ' << sx << ' ' << sy << ' ' << nx << ' ' << ny <<std::endl;
                   }
                 }
               }
@@ -217,13 +233,13 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
         COUT << "\t va : " << it._sw._space.first << ' ' << it._sw._space.second << ' ' << it._nx << ' ' << it._ny << '\n';
       }
       COUT << " cover : l: " << vl->coverlx() << ',' << vl->coverly() << " u: " << vl->coverux() << ',' << vl->coveruy() << '\n';
-      auto lp = vl->layers();
-      if (lp.first && lp.first->isVertical()) {
-        vl->swapcover(false);
-      }
-      if (lp.second && lp.second->isVertical()) {
-        vl->swapcover(true);
-      }
+      //auto lp = vl->layers();
+      //if (lp.first && lp.first->isVertical()) {
+      //  vl->swapcover(false);
+      //}
+      //if (lp.second && lp.second->isVertical()) {
+      //  vl->swapcover(true);
+      //}
     }
   }
   COUT << "top metal layer : " << LAYER_NAMES[_topMetal] << '\n';

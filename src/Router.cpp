@@ -2249,10 +2249,10 @@ void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
               }
               via->addCuts(c, wx, wy, va._nx, va._ny, sx, sy);
               Geom::Rect cbbox = via->bbox();
-              auto lx = cbbox.width() + 2 * vl->coverlx();
-              auto ly = cbbox.height() + 2 * vl->coverly();
-              auto ux = cbbox.width() + 2 * vl->coverux();
-              auto uy = cbbox.height() + 2 * vl->coveruy();
+              auto lx = cbbox.width() + 2 * va.coverlx();
+              auto ly = cbbox.height() + 2 * va.coverly();
+              auto ux = cbbox.width() + 2 * va.coverux();
+              auto uy = cbbox.height() + 2 * va.coveruy();
               via->setLB(Geom::Rect(-lx/2, -ly/2, lx/2, ly/2));
               via->setUB(Geom::Rect(-ux/2, -uy/2, ux/2, uy/2));
               _vias.push_back(via);

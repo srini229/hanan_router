@@ -80,6 +80,7 @@ struct SpaceWidth {
 };
 struct ViaArray {
   SpaceWidth _sw;
+  int _coverl[2], _coveru[2]; // 0 : low, 1 : high
   int _nx, _ny;
   ViaArray() : _sw{}, _nx{0}, _ny{0} {}
   ViaArray(const int  wx, const int wy, const int sx, const int sy, const int nx, const int ny)
@@ -89,6 +90,10 @@ struct ViaArray {
     _nx = nx;
     _ny = ny;
   }
+  int coverlx() const { return _coverl[0]; }
+  int coverly() const { return _coverl[1]; }
+  int coverux() const { return _coveru[0]; }
+  int coveruy() const { return _coveru[1]; }
 };
 typedef std::vector<ViaArray> ViaArrays;
 
@@ -96,7 +101,7 @@ class ViaLayer : public Layer {
   private:
     SpaceWidth _sw;
     std::pair<const MetalLayer*, const MetalLayer*> _layerPair; // first : lower, second : upper
-    int _coverl[2], _coveru[2]; // 0 : low, 1 : high
+    int _coverl[2], _coveru[2];
     ViaArrays _va;
   public:
     ViaLayer(const std::string& name, const float mur, const float lr, const float ur)
@@ -107,9 +112,10 @@ class ViaLayer : public Layer {
     void setCoverL(const int x, const int y) {_coverl[0] = x; _coverl[1] = y;}
     void setCoverU(const int x, const int y) {_coveru[0] = x; _coveru[1] = y;}
     void setLayerPair(const MetalLayer* m1, const MetalLayer* m2) {_layerPair = std::make_pair(m1, m2); }
-    void addViaArray(const int wx, const int wy, const int sx, const int sy, const int nx, const int ny)
+    ViaArray& addViaArray(const int wx, const int wy, const int sx, const int sy, const int nx, const int ny)
     {
       _va.push_back(ViaArray(wx, wy, sx, sy, nx, ny));
+      return _va.back();
     }
     ~ViaLayer()
     {
