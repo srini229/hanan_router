@@ -127,7 +127,7 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
             if (it != l.end() && it->is_number()) y = static_cast<int>(*it) * uu;
             vlayer->setSpace(x, y);
             auto axialIsY = [](const MetalLayer* m) {
-              return m && m->isHorizontal() && !m->isVertical();
+              return m && !m->isHorizontal() && m->isVertical();
             };
             x = y = 0;
             it = l.find("VencA_L");
