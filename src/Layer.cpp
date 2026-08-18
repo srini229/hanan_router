@@ -126,17 +126,30 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
             it = l.find("SpaceY");
             if (it != l.end() && it->is_number()) y = static_cast<int>(*it) * uu;
             vlayer->setSpace(x, y);
+            auto axialIsY = [](const MetalLayer* m) {
+              return m && m->isHorizontal() && !m->isVertical();
+            };
             x = y = 0;
             it = l.find("VencA_L");
-            if (it != l.end() && it->is_number()) x = static_cast<int>(*it) * uu;
+            int vencA_L = (it != l.end() && it->is_number()) ? static_cast<int>(*it) * uu : 0;
             it = l.find("VencP_L");
-            if (it != l.end() && it->is_number()) y = static_cast<int>(*it) * uu;
+            int vencP_L = (it != l.end() && it->is_number()) ? static_cast<int>(*it) * uu : 0;
+            if (axialIsY(layer1)) {
+              x = vencP_L; y = vencA_L;
+            } else {
+              x = vencA_L; y = vencP_L;
+            }
             vlayer->setCoverL(x, y);
             x = y = 0;
             it = l.find("VencA_H");
-            if (it != l.end() && it->is_number()) x = static_cast<int>(*it) * uu;
+            int vencA_H = (it != l.end() && it->is_number()) ? static_cast<int>(*it) * uu : 0;
             it = l.find("VencP_H");
-            if (it != l.end() && it->is_number()) y = static_cast<int>(*it) * uu;
+            int vencP_H = (it != l.end() && it->is_number()) ? static_cast<int>(*it) * uu : 0;
+            if (axialIsY(layer2)) {
+              x = vencP_H; y = vencA_H;
+            } else {
+              x = vencA_H; y = vencP_H;
+            }
             vlayer->setCoverU(x, y);
             x = y = 0;
             it = l.find("ViaCut");
