@@ -118,6 +118,7 @@ class Net {
     void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname);
     const Geom::LayerRects& routeShapesWithPins() const { return _routeshapeswithpins; }
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
+    Geom::LayerRects dropSameNetObstacles(const Geom::LayerRects& obs) const;
     bool unrouted() const { return _unroute ? true : false; }
     // A net needs at least two connection points (real or virtual pins) before
     // there is anything to route; single-pin nets (e.g. a global signal that

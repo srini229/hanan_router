@@ -732,7 +732,9 @@ void Module::route(Router::Router& router, const std::string& outdir)
     // one full routing attempt on the current 'nets' ordering: route once, and
     // if anything is open retry with adjacent-layer pin obstacles. Always starts
     // from a clean (snapshot-restored) state so attempts are independent.
+    int attemptNo = 0;
     auto attempt = [&]() -> int {
+      router.setAttemptNo(++attemptNo);
       // Open-net dumping (when enabled) must fire only on the LAST routing of this
       // attempt -- the adjacent-obstacle retry if it runs, else the base route --
       // so an open net gets exactly one debug LEF reflecting its final context.
@@ -867,79 +869,65 @@ void Module::route(Router::Router& router, const std::string& outdir)
 void Module::checkShort() const
 {
   COUT << "Checking SHORTS for module : " << _name << '\n';
-  // Pre-compute each net's overall routed bounding box (in _nets order, so the
-  // reported pairs are unchanged) and skip net pairs whose boxes are disjoint --
-  // they cannot short, which avoids the O(shapes^2) inner comparison for the vast
-  // majority of pairs in a spread-out design.
-  std::vector<std::pair<const Net*, Geom::Rect>> nb;
-  nb.reserve(_nets.size());
+  using namespace boost::polygon::operators;
+  std::map<int, std::map<const Net*, PolySet>> byLayer;
   for (auto& n : _nets) {
-    Geom::Rect b;
-    for (auto& l : n.second.routeShapesWithPins())
-      for (auto& r : l.second) b.merge(r);
-    nb.emplace_back(&n.second, b);
+    if (n.second.excluded()) continue;
+    for (auto& l : n.second.routeShapesWithPins()) {
+      auto& ps = byLayer[l.first][&n.second];
+      for (auto& r : l.second) ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+    }
   }
-  for (size_t i = 0; i < nb.size(); ++i) {
-    for (size_t j = i + 1; j < nb.size(); ++j) {
-      if (!nb[i].second.valid() || !nb[j].second.valid()) continue;
-      if (!nb[i].second.overlaps(nb[j].second)) continue;  // disjoint -> cannot short
-      auto& s1 = nb[i].first->routeShapesWithPins();
-      auto& s2 = nb[j].first->routeShapesWithPins();
-      for (auto& l : s1) {
-        auto its2 = s2.find(l.first);
-        if (its2 == s2.end()) continue;
-        for (auto& o1 : l.second) {
-          for (auto& o2 : its2->second) {
-            if (o1.overlaps(o2) && o1 != o2) {
-              COUT << "SHORT (router or pin) between " << nb[i].first->name() << " & " << nb[j].first->name() << " @ layer : " << l.first << '\n';
-              COUT << o1.str() << ' ' << o2.str() << '\n';
-            }
-          }
+
+  int shorts = 0;
+  // net vs net
+  for (auto& lv : byLayer) {
+    const int z = lv.first;
+    std::vector<std::pair<const Net*, const PolySet*>> v;
+    v.reserve(lv.second.size());
+    for (auto& kv : lv.second) v.emplace_back(kv.first, &kv.second);
+    for (size_t i = 0; i < v.size(); ++i) {
+      for (size_t j = i + 1; j < v.size(); ++j) {
+        PolySet x(*v[i].second);
+        x &= *v[j].second;
+        PRects rs;
+        get_rectangles(rs, x);
+        for (const auto& r : rs) {
+          const Geom::Rect o(bp::xl(r), bp::yl(r), bp::xh(r), bp::yh(r));
+          COUT << "SHORT (router or pin) between " << v[i].first->name() << " & "
+               << v[j].first->name() << " @ layer : " << z << '\n';
+          COUT << o.str() << '\n';
+          ++shorts;
         }
       }
     }
   }
-  // Net-vs-obstacle shorts. Two redundancies are avoided: (1) whether an
-  // obstacle is covered by a pin (a legitimate route-to-pin overlap to ignore)
-  // depends only on the obstacle, so it is answered once via a pin R-tree instead
-  // of re-scanning every pin for every net; (2) a net only needs the obstacles
-  // near its routed bbox, found via an obstacle R-tree, rather than the whole set.
-  std::map<int, Geom::RTree2D> obsTree;
-  for (auto& l : _obstacles) obsTree.emplace(l.first, l.second);
-  std::map<int, Geom::Rects> pinShapes;
-  for (auto& pin : _pins)
-    for (auto& p : pin.second->ports())
-      for (auto& l : p->shapes())
-        for (auto& r : l.second) pinShapes[l.first].push_back(r);
-  std::map<int, Geom::RTree2D> pinTree;
-  for (auto& l : pinShapes) pinTree.emplace(l.first, l.second);
-  auto pinCovered = [&](int layer, const Geom::Rect& o2) -> bool {
-    auto it = pinTree.find(layer);
-    if (it == pinTree.end()) return false;
-    Geom::Rects hits;
-    it->second.search(hits, o2);
-    for (auto& h : hits) if (h.overlaps(o2)) return true;
-    return false;
-  };
-  for (auto& n : nb) {
-    if (!n.second.valid()) continue;
-    auto& s1 = n.first->routeShapesWithPins();
-    for (auto& l : s1) {
-      auto oit = obsTree.find(l.first);
-      if (oit == obsTree.end()) continue;
-      Geom::Rects obs;
-      oit->second.search(obs, n.second);   // only obstacles near this net's routes
-      for (auto& o2 : obs) {
-        if (pinCovered(l.first, o2)) continue;
-        for (auto& o1 : l.second) {
-          if (o1.overlaps(o2) && o1 != o2) {
-            COUT << "SHORT between " << n.first->name() << " & obstacle @ layer : " << l.first << '\n';
-            COUT << o1.str() << ' ' << o2.str() << '\n';
-          }
-        }
+
+  for (auto& n : _nets) {
+    if (n.second.excluded()) continue;
+    auto lit = n.second.routeShapesWithPins();
+    if (lit.empty()) continue;
+    const Geom::LayerRects obs = n.second.dropSameNetObstacles(_obstacles);
+    for (auto& lv : byLayer) {
+      const int z = lv.first;
+      auto nit = lv.second.find(&n.second);
+      if (nit == lv.second.end()) continue;
+      auto oit = obs.find(z);
+      if (oit == obs.end() || oit->second.empty()) continue;
+      PolySet ops;
+      for (const auto& r : oit->second) ops.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+      ops &= nit->second;
+      PRects rs;
+      get_rectangles(rs, ops);
+      for (const auto& r : rs) {
+        const Geom::Rect o(bp::xl(r), bp::yl(r), bp::xh(r), bp::yh(r));
+        COUT << "SHORT between " << n.second.name() << " & obstacle @ layer : " << z << '\n';
+        COUT << o.str() << '\n';
+        ++shorts;
       }
     }
   }
+  if (shorts) COUT << "SHORT_SUMMARY module " << _name << " : " << shorts << " short(s)\n";
 }
 
 int Module::checkDRC(const Router::Router& router) const

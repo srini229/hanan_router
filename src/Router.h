@@ -319,6 +319,7 @@ class Router {
     bool _usepinwidth{false}, _debugplot{false};
     int _reorderPasses{10};
     int _threads{1};
+    int _attemptno{1};
     bool _cornerEscape{false};
     bool _relaxViaEscape{false};
     // Transient per-net state: only true while findSol() is retrying a still-
@@ -606,6 +607,10 @@ class Router {
     bool relaxViaEscape() const { return _relaxViaEscape; }
     void setDumpOpenNets(const bool b) { _dumpOpenNets = b; }
     bool dumpOpenNets() const { return _dumpOpenNets; }
+    static const int TRACE_SAMENET_FROM_ATTEMPT = 3;
+    void setAttemptNo(const int n) { _attemptno = n; }
+    int attemptNo() const { return _attemptno; }
+    bool traceSameNetObstacles() const { return _attemptno >= TRACE_SAMENET_FROM_ATTEMPT; }
     void setThreads(const int n) { _threads = n; }
     int threads() const { return _threads; }
     const DRC::LayerInfo& layerInfo() const { return _lf; }
