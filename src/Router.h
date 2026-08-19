@@ -126,6 +126,7 @@ class CostFn {
       return (_minMetalCost * dist) / ESCAPE_OFFCENTRE_DIV;
     }
     static const int ESCAPE_OFFCENTRE_DIV = 4;
+    static const int SMALL_PIN_WIDTHS = 10;
     CostType hcost(int i) const { return _layerHCost[i]; }
     CostType vcost(int i) const { return _layerVCost[i]; }
     void updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::set<int>& preflayers);

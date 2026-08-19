@@ -667,13 +667,22 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
   if (!inserted) shapes[z].insert(r);
   pshapes[z] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
   //COUT << "shape : " << r.str() << " z : " << z << '\n';
+  const int minw = std::min(baseWidthX(z), baseWidthY(z));
+  const bool smallx = (minw <= 0) || (r.width()  < CostFn::SMALL_PIN_WIDTHS * minw);
+  const bool smally = (minw <= 0) || (r.height() < CostFn::SMALL_PIN_WIDTHS * minw);
   for (auto dir : {UP, DOWN, EAST, NORTH}) {
+    const bool viaEscape = (dir == UP || dir == DOWN);
+    const bool smallPin = (dir == EAST) ? smallx : smally;
+    const bool biased = viaEscape || smallPin;
     auto points = findValidPoints(r, z, dir);
     //COUT << "num points : " << points.size() << ' ' << "dir : " << dir << '\n';
     for (auto& pp : points) {
       auto& p = pp.first;
-      const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
-      const int pen = static_cast<int>(_cf.offCentreEscapeCost(offc));
+      int pen = 0;
+      if (biased) {
+        const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
+        pen = static_cast<int>(_cf.offCentreEscapeCost(offc));
+      }
       auto n = createNode(p.x(), p.y(), z, nullptr,
                           src ? fcost + pen : fcost,
                           src ? tcost : tcost + pen);
