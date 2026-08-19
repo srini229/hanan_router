@@ -319,6 +319,7 @@ class Router {
     bool _usepinwidth{false}, _debugplot{false};
     int _reorderPasses{10};
     int _threads{1};
+    bool _rsmtcorridor{true};
     bool _cornerEscape{false};
     bool _relaxViaEscape{false};
     // Transient per-net state: only true while findSol() is retrying a still-
@@ -606,6 +607,13 @@ class Router {
     bool relaxViaEscape() const { return _relaxViaEscape; }
     void setDumpOpenNets(const bool b) { _dumpOpenNets = b; }
     bool dumpOpenNets() const { return _dumpOpenNets; }
+    // Reorder passes after which the RSMT corridor stops being enforced. The
+    // corridor is a compactness heuristic; once reordering has failed to close the
+    // remaining nets a few times over, the corridor is more likely to be what is
+    // blocking them than a help, so it is dropped and the search runs unconfined.
+    static const int RSMT_RELAX_AFTER_PASS = 3;
+    void setRSMTCorridor(const bool b) { _rsmtcorridor = b; }
+    bool rsmtCorridor() const { return _rsmtcorridor; }
     void setThreads(const int n) { _threads = n; }
     int threads() const { return _threads; }
     const DRC::LayerInfo& layerInfo() const { return _lf; }

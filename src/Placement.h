@@ -95,6 +95,7 @@ class Net {
     std::string _driver;
     std::map<int, DRC::ViaArray> _ndrvias;
     std::vector<std::pair<Port*, Geom::LayerRects>> _pinSnapshot;
+    Geom::Rects _corridor, _corridorEdges;
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0}, _detour{0}, _driver{} {}
     ~Net()
@@ -118,6 +119,13 @@ class Net {
     void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname);
     const Geom::LayerRects& routeShapesWithPins() const { return _routeshapeswithpins; }
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
+    // Corridor from a FLUTE rectilinear Steiner tree over the pin centres, each
+    // branch widened by `margin`. Routing is confined to it (see Net::route).
+    Geom::Rects rsmtCorridor(const int margin) const;
+    // The corridor actually used, kept so writeLEF can draw it.
+    const Geom::Rects& corridor() const { return _corridor; }
+    // The corridor's outline, each polygon edge as a thin box, for drawing.
+    const Geom::Rects& corridorEdges() const { return _corridorEdges; }
     bool unrouted() const { return _unroute ? true : false; }
     // A net needs at least two connection points (real or virtual pins) before
     // there is anything to route; single-pin nets (e.g. a global signal that

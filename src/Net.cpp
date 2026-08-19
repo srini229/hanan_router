@@ -1,5 +1,12 @@
 #include "Util.h"
 #include "Placement.h"
+#include "Router.h"
+#include "flute.h"
+#include <mutex>
+
+using namespace boost::polygon::operators;
+static const int RSMT_CORRIDOR_PITCHES = 4;
+static const int RSMT_EDGE_WIDTH = 5;   // drawn width of the corridor outline
 
 #include <algorithm>
 #include <mutex>
@@ -165,6 +172,115 @@ PortPairs Net::clockRouteOrder() const
   return porder;
 }
 
+
+// FLUTE's lookup tables are loaded once and shared; construction is not thread
+// safe, so the first caller builds the state under a lock. The tables are
+// compiled into the binary, hence the null paths.
+static Flute::FluteState* fluteState()
+{
+  static std::mutex m;
+  static Flute::FluteState* st = nullptr;
+  static bool tried = false;
+  std::lock_guard<std::mutex> g(m);
+  if (!tried) {
+    tried = true;
+    st = Flute::flute_init(nullptr, nullptr);
+    if (!st) CERR << "WARNING: FLUTE tables failed to load; RSMT corridor disabled\n";
+  }
+  return st;
+}
+
+// A rectilinear Steiner tree over the net's pin centres, each branch turned into
+// a band `margin` wide. Confining the maze search to this corridor stops a net
+// wandering far outside the region its own pins occupy -- the detours that show
+// up as long excursions on an expensive layer -- while still leaving the Steiner
+// topology's own freedom inside the band.
+
+// Trace the outline of a rectilinear region and return each edge as a thin box.
+// Drawing the corridor as its boundary rather than as the slabs it decomposes
+// into keeps the picture readable -- the slabs tile the interior and bury the
+// routing underneath them.
+static Geom::Rects outlineBoxes(const Geom::Rects& region, const int w)
+{
+  Geom::Rects edges;
+  if (region.empty()) return edges;
+  PolySet ps;
+  for (const auto& r : region) ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+  PPolys polys;
+  ps.get(polys);
+  const int lo = w / 2, hi = w - lo;
+  for (const auto& poly : polys) {
+    std::vector<Geom::Point> pts;
+    for (auto it = poly.begin(); it != poly.end(); ++it) {
+      pts.emplace_back(static_cast<int>(bp::x(*it)), static_cast<int>(bp::y(*it)));
+    }
+    for (size_t i = 0; i < pts.size(); ++i) {
+      const auto& a = pts[i];
+      const auto& b = pts[(i + 1) % pts.size()];
+      if (a.y() == b.y()) {
+        edges.emplace_back(std::min(a.x(), b.x()) - lo, a.y() - lo,
+                           std::max(a.x(), b.x()) + hi, a.y() + hi);
+      } else if (a.x() == b.x()) {
+        edges.emplace_back(a.x() - lo, std::min(a.y(), b.y()) - lo,
+                           a.x() + hi, std::max(a.y(), b.y()) + hi);
+      }
+    }
+  }
+  return edges;
+}
+
+Geom::Rects Net::rsmtCorridor(const int margin) const
+{
+  Geom::Rects corridor;
+  std::vector<Geom::Rect> boxes;
+  for (auto virt : {true, false}) {
+    for (auto& p : (virt ? _vpins : _pins)) {
+      Geom::Rect b;
+      for (auto& port : p->ports()) if (port->bbox().valid()) b.merge(port->bbox());
+      if (b.valid()) boxes.push_back(b);
+    }
+  }
+  if (boxes.empty()) return corridor;
+  for (auto& b : boxes) corridor.push_back(b.bloatby(margin, margin));
+  if (boxes.size() < 2) return corridor;
+
+  auto* st = fluteState();
+  if (!st) return corridor;                 // no tables: corridor stays the pins
+  std::vector<FLUTE_DTYPE> xs, ys;
+  xs.reserve(boxes.size()); ys.reserve(boxes.size());
+  for (auto& b : boxes) {                   // pin centres, as asked
+    xs.push_back(static_cast<FLUTE_DTYPE>(b.xcenter()));
+    ys.push_back(static_cast<FLUTE_DTYPE>(b.ycenter()));
+  }
+  Flute::Tree t = Flute::flute(st, static_cast<int>(xs.size()), xs.data(), ys.data(), FLUTE_ACCURACY);
+  const int nb = 2 * t.deg - 2;
+  for (int i = 0; i < nb; ++i) {
+    const int j = t.branch[i].n;
+    if (j < 0 || j >= nb) continue;
+    const int x1 = t.branch[i].x, y1 = t.branch[i].y;
+    const int x2 = t.branch[j].x, y2 = t.branch[j].y;
+    // Each branch is rectilinear: lay it as an L, both legs widened to a band.
+    corridor.emplace_back(std::min(x1, x2) - margin, y1 - margin,
+                          std::max(x1, x2) + margin, y1 + margin);
+    corridor.emplace_back(x2 - margin, std::min(y1, y2) - margin,
+                          x2 + margin, std::max(y1, y2) + margin);
+  }
+  Flute::free_tree(st, t);
+
+  // The bands overlap heavily where branches meet. Merge them with
+  // boost::polygon so the corridor is one rectilinear polygon rather than a pile
+  // of boxes, and return its rectangle decomposition -- that is what gets
+  // subtracted from the net's bbox and what gets drawn in the LEF.
+  PolySet ps;
+  for (const auto& r : corridor) ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+  PRects merged;
+  get_rectangles(merged, ps);
+  Geom::Rects out;
+  out.reserve(merged.size());
+  for (const auto& m : merged) out.emplace_back(bp::xl(m), bp::yl(m), bp::xh(m), bp::yh(m));
+  return out;
+}
+
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname)
 {
   //TIME_M();
@@ -205,6 +321,50 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       }
     }*/
     PortPairs ppairs = (_driver.empty() ? reorderPorts() : clockRouteOrder());
+
+    // Confine this net to the neighbourhood of its own Steiner tree: build the
+    // FLUTE corridor over the pin centres, then hand the maze search everything
+    // OUTSIDE it as an obstacle. The MST pair routing below is unchanged -- it
+    // simply can no longer wander far from the tree that connects the pins.
+    Geom::LayerRects keepout;
+    if (router.rsmtCorridor()) {
+      int pitch = 0;
+      for (int z = router.minLayer(); z <= router.maxLayer(); ++z) {
+        pitch = std::max(pitch, std::max(router.baseWidthX(z), router.baseWidthY(z))
+                              + std::max(router.baseSpaceX(z), router.baseSpaceY(z)));
+      }
+      auto corridor = rsmtCorridor(pitch * RSMT_CORRIDOR_PITCHES);
+      if (!corridor.empty() && bbox.valid()) {
+        // Clip to the module before taking the outline. The bands are bloated well
+        // past the die on a small block, and an outline that sits outside the
+        // routable area is a wall nothing can reach -- which is exactly why the
+        // corridor appeared to be ignored.
+        PolySet cs;
+        for (const auto& r : corridor) cs.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+        PolySet box;
+        box.insert(PRect(bbox.xmin(), bbox.ymin(), bbox.xmax(), bbox.ymax()));
+        cs &= box;
+        PRects crects;
+        get_rectangles(crects, cs);
+        corridor.clear();
+        for (const auto& c : crects) corridor.emplace_back(bp::xl(c), bp::yl(c), bp::xh(c), bp::yh(c));
+      }
+      _corridor = corridor;
+      _corridorEdges = outlineBoxes(corridor, RSMT_EDGE_WIDTH);
+      // The obstacle is the corridor's boundary itself -- the same thin walls the
+      // LEF draws -- on every routing layer. A wall plus its spacing halo is
+      // enough to stop the search crossing it, and it is a handful of rectangles
+      // instead of a filled complement.
+      if (!_corridorEdges.empty()) {
+        for (const auto& r : _corridorEdges) {
+          for (int z = router.minLayer(); z <= router.maxLayer(); ++z) keepout[z].push_back(r);
+        }
+        COUT << "RSMT corridor for net " << _name << " : " << corridor.size()
+             << " band(s), boundary " << _corridorEdges.size() << " wall(s) on layers "
+             << router.minLayer() << ".." << router.maxLayer() << '\n';
+      }
+    }
+
     for (auto& pp : ppairs) {
       const auto& port1 = pp.first;
       const auto& port2 = pp.second;
@@ -279,7 +439,23 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.addObstacles(l3, true);
       router.addObstacles(_obstacles, true);
       router.addObstacles(samenetobst, true);
+      router.addObstacles(keepout, true);
       auto sol = router.findSol();
+      // The corridor is a heuristic bound, never a hard constraint: if a pair
+      // cannot be routed inside it, drop it and try again unconfined rather than
+      // leave the net open. Only the corridor is removed -- every real obstacle is
+      // put back exactly as it was.
+      if (!router.lastSolutionFound() && !keepout.empty()) {
+        COUT << "RSMT corridor blocked " << port1->name() << " -> " << port2->name()
+             << " ; retrying without it\n";
+        router.clearObstacles(true);
+        router.addObstacles(l1, true);
+        router.addObstacles(l2, true);
+        router.addObstacles(l3, true);
+        router.addObstacles(_obstacles, true);
+        router.addObstacles(samenetobst, true);
+        sol = router.findSol();
+      }
       // Not sol.empty(): a source and target that already coincide need zero
       // additional shapes and legitimately return an empty sol on success.
       if (router.lastSolutionFound()) {

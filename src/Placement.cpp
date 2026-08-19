@@ -774,6 +774,13 @@ void Module::route(Router::Router& router, const std::string& outdir)
       for (size_t i = pinned; i < nets.size(); ++i) baseIdx[nets[i]] = static_cast<int>(i);
 
       for (int pass = 0; pass < passes && bestUnrouted > 0; ++pass) {
+        // Reordering has had a few goes at the open nets; if they are still open
+        // the corridor is the more likely culprit, so stop enforcing it.
+        if (pass == Router::Router::RSMT_RELAX_AFTER_PASS && router.rsmtCorridor()) {
+          COUT << "module " << _name << " : relaxing RSMT corridors after "
+               << pass << " reorder pass(es)\n";
+          router.setRSMTCorridor(false);
+        }
         // raise the priority of every net the latest attempt left open: a net
         // that stays blocked keeps climbing until it routes before the rest.
         bool any = false;
@@ -819,6 +826,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
       attempt();
       router.setDumpOpenNets(false);
     }
+    router.setRSMTCorridor(true);       // restore for sibling hierarchies
     router.setDumpOpenNets(dumpOpen);   // restore for sibling hierarchies
 
     router.clearObstacles();
@@ -1187,6 +1195,30 @@ void Module::writeLEF(const std::string& outdir) const
         ofs << "      LAYER " << layerName(l.first) << " ;\n";
         for (auto& r : l.second) {
           ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+        }
+      }
+      // Each net's own routed shapes, on SOL_<layer>_<net> layers, so a solution
+      // can be looked at per net and per layer alongside the corridor that shaped
+      // it and the DRC markers it produced.
+      for (auto& n : _nets) {
+        if (n.second.excluded()) continue;
+        for (auto& l : n.second.routeShapes()) {
+          if (l.second.empty()) continue;
+          ofs << "      LAYER SOL_" << layerName(l.first) << '_' << n.first << " ;\n";
+          for (auto& r : l.second) {
+            ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' '
+                << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+          }
+        }
+      }
+      // Routing corridors: the outline of the merged RSMT polygon each net was
+      // confined to, one layer per net so a viewer can toggle them individually.
+      for (auto& n : _nets) {
+        if (n.second.corridorEdges().empty()) continue;
+        ofs << "      LAYER RSMT_" << n.first << " ;\n";
+        for (auto& r : n.second.corridorEdges()) {
+          ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' '
+              << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
         }
       }
       for (auto& l : _drcmarkers) {
