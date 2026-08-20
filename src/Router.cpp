@@ -1172,6 +1172,50 @@ Geom::Rects splitRects(const Geom::Rects& tobs)
   return false;
 }*/
 
+static inline int snapLow(const int v, const int prec)
+{
+  if (prec == 0) return v;
+  const int r = v % prec;
+  return (r != 0) ? (v - r) : v;
+}
+
+static inline int snapHigh(const int v, const int prec)
+{
+  if (prec == 0) return v;
+  const int r = v % prec;
+  return (r != 0) ? (v + (prec - r)) : v;
+}
+
+template <class Iter>
+static void addRingCoords(Iter first, Iter last, const Geom::Rect& bbox, const int prec,
+    std::set<int>& xcoords, std::set<int>& ycoords)
+{
+  std::vector<typename std::iterator_traits<Iter>::value_type> pts(first, last);
+  const size_t n = pts.size();
+  if (n < 3) return;
+  long long area2 = 0;
+  for (size_t i = 0; i < n; ++i) {
+    const auto& p = pts[i];
+    const auto& q = pts[(i + 1) % n];
+    area2 += static_cast<long long>(p.x()) * q.y() - static_cast<long long>(q.x()) * p.y();
+  }
+  const bool ccw = (area2 > 0);
+  for (size_t i = 0; i < n; ++i) {
+    const auto& p = pts[i];
+    const auto& q = pts[(i + 1) % n];
+    if (p.x() == q.x() && p.y() == q.y()) continue;
+    if (p.x() == q.x()) {
+      if (std::min(p.y(), q.y()) > bbox.ymax() || std::max(p.y(), q.y()) < bbox.ymin()) continue;
+      const int x = ((q.y() > p.y()) == ccw) ? snapHigh(p.x(), prec) : snapLow(p.x(), prec);
+      if (x >= bbox.xmin() && x <= bbox.xmax()) xcoords.insert(x);
+    } else if (p.y() == q.y()) {
+      if (std::min(p.x(), q.x()) > bbox.xmax() || std::max(p.x(), q.x()) < bbox.xmin()) continue;
+      const int y = ((q.x() > p.x()) == ccw) ? snapLow(p.y(), prec) : snapHigh(p.y(), prec);
+      if (y >= bbox.ymin() && y <= bbox.ymax()) ycoords.insert(y);
+    }
+  }
+}
+
 void coverHoles(PolySet& ps, const PolySet& src, const PolySet& tgt)
 {
   PPolyWHs pwhs;
@@ -1239,16 +1283,23 @@ void Router::generateHananGrid()
   for (auto& it: _tobstacles) {
     _ltree.emplace(it.first, Geom::RTree2D(it.second));
   }
-  for (auto& l : _tobstacles) {
+  for (auto& l : _ptobstacles) {
     if (l.first > _maxLayer) continue;
-    for (auto& o : l.second) {
-      if (!o.overlaps(_bbox)) continue;
-      auto osnapped{o};
-      osnapped.snap(_precision);
-      xcoords.insert(osnapped.xmin());
-      xcoords.insert(osnapped.xmax());
-      ycoords.insert(osnapped.ymin());
-      ycoords.insert(osnapped.ymax());
+    const auto layer = l.first;
+    int sx{0}, sy{0};
+    if (layer < static_cast<int>(_widthx.size())) {
+      sx = spacex(layer) + ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1));
+      sy = spacey(layer) + ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1));
+    }
+    PolySet bloated(l.second);
+    if (sx > 0 || sy > 0) bloated.bloat(sx, sx, sy, sy);
+    PPolyWHs pwhs;
+    bloated.get(pwhs);
+    for (auto& pwh : pwhs) {
+      addRingCoords(pwh.begin(), pwh.end(), _bbox, _precision, xcoords, ycoords);
+      for (auto ith = pwh.begin_holes(); ith != pwh.end_holes(); ++ith) {
+        addRingCoords(ith->begin(), ith->end(), _bbox, _precision, xcoords, ycoords);
+      }
     }
   }
   for (bool src : {true, false}) {
