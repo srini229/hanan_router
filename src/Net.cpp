@@ -241,6 +241,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   SaveRestoreStream src(_name + "_route.log");
 #endif
   _unroute = 0;
+  _openwires.clear();
   std::vector<const Pin*> sortedpins(_pins.begin(), _pins.end());
   std::sort(sortedpins.begin(), sortedpins.end(),
       [](const Pin* a, const Pin* b) { return a->name() < b->name(); });
@@ -389,6 +390,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
       } else {
         _unroute = 1;
+        addOpenWire(router.name());
       }
       if (!port1->isVirtualPort() || !_driver.empty()) {
         COUT << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;

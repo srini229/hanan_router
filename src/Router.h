@@ -535,6 +535,7 @@ class Router {
     bool canViaDown(const int z) const
     { return z >= 0 && z < static_cast<int>(_belowViaLayer.size()) && _belowViaLayer[z] >= 0; }
     void setName(const std::string& n) { _name = n; }
+    const std::string& name() const { return _name; }
     void setusepinwidth(const bool u) { _usepinwidth = u; }
 
     int widthx(const int z) const { return (_ndrwidthx[z] != INT_MAX ? _ndrwidthx[z] : _widthx[z]); }

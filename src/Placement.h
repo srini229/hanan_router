@@ -85,6 +85,7 @@ class Net {
     Router::Vias _vias;
     Geom::Rect _bbox;
     unsigned int _unroute : 1;
+    std::vector<std::string> _openwires;
     unsigned int _exclude : 1;
     unsigned int _detour : 1;
     PortPairs reorderPorts() const;
@@ -120,6 +121,9 @@ class Net {
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
     Geom::LayerRects dropSameNetObstacles(const Geom::LayerRects& obs) const;
     bool unrouted() const { return _unroute ? true : false; }
+    const std::vector<std::string>& openWires() const { return _openwires; }
+    void addOpenWire(const std::string& w) { _openwires.push_back(w); }
+    void clearOpenWires() { _openwires.clear(); }
     // A net needs at least two connection points (real or virtual pins) before
     // there is anything to route; single-pin nets (e.g. a global signal that
     // lands on only one instance) have no source/target pair and must not be
@@ -147,6 +151,7 @@ class Net {
       _routeshapeswithpins.clear();
       _bbox = Geom::Rect();
       _unroute = 1;
+      _openwires.clear();
       for (auto& ps : _pinSnapshot) {
         ps.first->setShapes(ps.second);
       }
@@ -435,6 +440,9 @@ class Module {
       for (auto& n : _nets) {
         if (!n.second.excluded() && n.second.routable() && n.second.unrouted()) {
           COUT << "OPEN NET: " << n.first << '\n';
+          for (auto& w : n.second.openWires()) {
+            COUT << "OPEN_WIRE " << w << '\n';
+          }
         }
       }
     }
