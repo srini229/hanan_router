@@ -1455,6 +1455,179 @@ void Router::buildSol(Geom::LayerRects& sol)
   }
 }
 
+bool Router::patternRun(const int x, const int y, const int z, const bool vert, const int to) const
+{
+  const int from = vert ? y : x;
+  if (to == from) return true;
+  const Node probe(x, y, z);
+  const int reach = snap(&probe, vert, to > from);
+  return (to > from) ? (reach >= to) : (reach <= to);
+}
+
+bool Router::patternVias(const int x, const int y, int zf, const int zt, std::vector<PatWp>& w,
+    ViaCache& vc) const
+{
+  while (zf != zt) {
+    const bool up = (zt > zf);
+    if (up ? (zf >= _maxLayer) : (zf <= _minLayer)) return false;
+    // isViaValid builds a Via and hits the R-tree, which is far too expensive to
+    // repeat for every shape and layer pair that probes the same spot.
+    const auto key = std::make_tuple(x, y, zf, up);
+    auto it = vc.find(key);
+    if (it == vc.end()) {
+      const Node probe(x, y, zf);
+      const Via* v = isViaValid(&probe, up);
+      it = vc.emplace(key, v != nullptr).first;
+      delete v;   // only probing; the winner re-queries when it materialises
+    }
+    if (!it->second) return false;
+    zf += up ? 1 : -1;
+    w.push_back({x, y, zf, true});
+  }
+  return true;
+}
+
+CostType Router::patternCost(const std::vector<PatWp>& w) const
+{
+  if (w.size() < 2) return 0;
+  std::vector<Node*> tmp;         // Node's ctor/dtor are private to Router
+  tmp.reserve(w.size());
+  for (size_t i = 0; i < w.size(); ++i) {
+    tmp.push_back(new Node(w[i].x, w[i].y, w[i].z, 0, 0, i ? tmp[i - 1] : nullptr));
+  }
+  CostType c{0};
+  for (size_t i = 1; i < tmp.size(); ++i) c += _cf.deltaCost(*tmp[i], *tmp[i - 1]);
+  for (auto* n : tmp) delete n;
+  return c;
+}
+
+bool Router::patternRoute()
+{
+  if (_sources.empty() || _targets.empty()) return false;
+  std::vector<int> hl, vl;
+  for (int z = _minLayer; z <= _maxLayer; ++z) {
+    if (_cf.hcost(z) < COST_MAX) hl.push_back(z);
+    if (_cf.vcost(z) < COST_MAX) vl.push_back(z);
+  }
+  if (hl.empty() || vl.empty()) return false;
+
+  ViaCache vc;                    // shared across every shape tried this call
+  auto push = [](std::vector<PatWp>& w, const int x, const int y, const int z) {
+    if (w.empty() || w.back().x != x || w.back().y != y || w.back().z != z) w.push_back({x, y, z, false});
+  };
+
+  auto buildL = [&](const Node* s, const Node* t, const bool xfirst, const int za, const int zb,
+                    std::vector<PatWp>& w) -> bool {
+    w.clear();
+    w.push_back({s->x(), s->y(), s->z(), false});
+    int cx = s->x(), cy = s->y();
+    if (!patternVias(cx, cy, s->z(), za, w, vc)) return false;
+    if (!patternRun(cx, cy, za, !xfirst, xfirst ? t->x() : t->y())) return false;
+    if (xfirst) cx = t->x(); else cy = t->y();
+    push(w, cx, cy, za);
+    if (!patternVias(cx, cy, za, zb, w, vc)) return false;
+    if (!patternRun(cx, cy, zb, xfirst, xfirst ? t->y() : t->x())) return false;
+    if (xfirst) cy = t->y(); else cx = t->x();
+    push(w, cx, cy, zb);
+    if (!patternVias(cx, cy, zb, t->z(), w, vc)) return false;
+    return w.back().x == t->x() && w.back().y == t->y() && w.back().z == t->z();
+  };
+
+  auto buildZ = [&](const Node* s, const Node* t, const bool xfirst, const int za, const int zb,
+                    const int mid, std::vector<PatWp>& w) -> bool {
+    w.clear();
+    w.push_back({s->x(), s->y(), s->z(), false});
+    int cx = s->x(), cy = s->y();
+    if (!patternVias(cx, cy, s->z(), za, w, vc)) return false;
+    if (!patternRun(cx, cy, za, !xfirst, mid)) return false;
+    if (xfirst) cx = mid; else cy = mid;
+    push(w, cx, cy, za);
+    if (!patternVias(cx, cy, za, zb, w, vc)) return false;
+    if (!patternRun(cx, cy, zb, xfirst, xfirst ? t->y() : t->x())) return false;
+    if (xfirst) cy = t->y(); else cx = t->x();
+    push(w, cx, cy, zb);
+    if (!patternVias(cx, cy, zb, za, w, vc)) return false;
+    if (!patternRun(cx, cy, za, !xfirst, xfirst ? t->x() : t->y())) return false;
+    if (xfirst) cx = t->x(); else cy = t->y();
+    push(w, cx, cy, za);
+    if (!patternVias(cx, cy, za, t->z(), w, vc)) return false;
+    return w.back().x == t->x() && w.back().y == t->y() && w.back().z == t->z();
+  };
+
+  std::vector<PatWp> w, best;
+  CostType bestcost{CostTypeMax}, bestlb{CostTypeMax};
+  const Node* bests{nullptr};
+  const Node* bestt{nullptr};
+
+  std::vector<std::pair<CostType, std::pair<const Node*, const Node*>>> pairs;
+  pairs.reserve(_sources.size() * _targets.size());
+  for (auto* s : _sources) {
+    for (auto* t : _targets) pairs.emplace_back(_cf.deltaCost(*s, *t), std::make_pair(s, t));
+  }
+  std::sort(pairs.begin(), pairs.end(),
+      [](const auto& a, const auto& b) { return a.first < b.first; });
+  if (pairs.size() > PATTERN_PAIRS) pairs.resize(PATTERN_PAIRS);
+  {
+    for (auto& pr : pairs) {
+      const CostType lb = pr.first;
+      const Node* s = pr.second.first;
+      const Node* t = pr.second.second;
+      if (lb >= bestcost) break;              // sorted: nothing later can win
+      auto keep = [&]() {
+        const CostType c = patternCost(w);
+        if (c < bestcost) { bestcost = c; best = w; bests = s; bestt = t; bestlb = lb; }
+      };
+      for (const bool xfirst : {true, false}) {
+        const auto& first  = xfirst ? hl : vl;
+        const auto& second = xfirst ? vl : hl;
+        for (const int za : first) {
+          if (bestcost <= lb) break;              // already at the bound, nothing to gain
+          for (const int zb : second) {
+            if (buildL(s, t, xfirst, za, zb, w)) keep();
+            if (bestcost <= lb) break;
+          }
+        }
+      }
+      if (bestcost <= lb) continue;               // an L already hit the bound
+      for (const bool xfirst : {true, false}) {
+        const auto& first  = xfirst ? hl : vl;
+        const auto& second = xfirst ? vl : hl;
+        const int lo = std::min(xfirst ? s->x() : s->y(), xfirst ? t->x() : t->y());
+        const int hi = std::max(xfirst ? s->x() : s->y(), xfirst ? t->x() : t->y());
+        for (const int za : first) {
+          for (const int zb : second) {
+            const auto& g = xfirst ? _hanangridv[zb] : _hanangridh[zb];
+            int tried = 0;
+            for (auto it = g.upper_bound(lo); it != g.end() && it->first < hi && tried < PATTERN_MIDS; ++it, ++tried) {
+              if (buildZ(s, t, xfirst, za, zb, it->first, w)) keep();
+              if (bestcost <= lb) break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!bests || bestcost > bestlb) return false;   // not provably optimal: let A* run
+
+  const Node* prev = bests;
+  for (size_t i = 1; i < best.size(); ++i) {
+    Node* cur = createNode(best[i].x, best[i].y, best[i].z, prev);
+    if (!cur) return false;
+    cur->setParent(prev);
+    if (best[i].z != prev->z()) {
+      const Via* v = isViaValid(prev, best[i].z > prev->z());
+      if (!v) return false;
+      Node* p = const_cast<Node*>(prev);
+      if (best[i].z > prev->z()) p->upVia(v); else p->dnVia(v);
+    }
+    evalFCost(cur);
+    prev = cur;
+  }
+  _sol = const_cast<Node*>(prev);
+  return _sol == bestt;
+}
+
 Geom::LayerRects Router::findSol()
 {
   TIME_M();
@@ -1572,7 +1745,11 @@ Geom::LayerRects Router::findSol()
 #endif
 
       std::vector<unsigned> layerExpansions(_maxLayer + 1, 0);
-      while (!_pq.empty()) {
+      const bool patterned = patternRoute();
+      if (patterned) {
+        COUT << "sol found with pattern! cost " << _sol->fcost() << " for " << _name << std::endl;
+      }
+      while (!patterned && !_pq.empty()) {
         auto t = const_cast<Node*>(*_pq.begin());
         if (_targets.find(t) != _targets.end()) {
           _sol = t;

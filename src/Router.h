@@ -25,6 +25,8 @@ typedef std::vector<PRect> PRects ;
 typedef std::map<int, PolySet> LayerPolySet ;
 
 #define COST_MAX 10000
+#define PATTERN_MIDS 12
+#define PATTERN_PAIRS 8u
 
 namespace Router {
 
@@ -597,6 +599,13 @@ class Router {
     void addTargetShapes(const Geom::Rect& r, const int z) { addSourceTargetShapes(r, z, false); }
     void addSourceTarget(const Geom::Rect& r, const int z, const bool src);
     const Via* isViaValid(const Node* n, const bool up) const;
+
+    struct PatWp { int x, y, z; bool via; };
+    bool patternRun(const int x, const int y, const int z, const bool vert, const int to) const;
+    typedef std::map<std::tuple<int,int,int,bool>, bool> ViaCache;
+    bool patternVias(const int x, const int y, int zf, const int zt, std::vector<PatWp>& w, ViaCache& vc) const;
+    CostType patternCost(const std::vector<PatWp>& w) const;
+    bool patternRoute();
     std::vector<ViaEscapeAttempt> diagnoseViaEscape(const Node* n, const bool up) const;
     void updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
         const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs,
