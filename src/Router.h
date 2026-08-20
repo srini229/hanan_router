@@ -6,6 +6,7 @@
 #include <bitset>
 #include <limits>
 #include <memory>
+#include <array>
 
 #include "Util.h"
 #include "Geom.h"
@@ -48,11 +49,21 @@ class Via {
     const Geom::Rect& lpad() const { return _lb; }
     const int u() const { return _u; }
     const int l() const { return _l; }
+    const int c() const { return _c; }
     void addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow = 1, const int ncol = 1, const int sx = 0, const int sy = 0);
     std::string str() const;
     void addShapes(Geom::LayerRects& lr) const;
 };
 typedef std::vector<std::shared_ptr<Via>> Vias;
+
+struct ViaEscapeAttempt {
+  bool accessible{false};
+  int lowerLayer{-1}, upperLayer{-1}, viaLayer{-1};
+  Geom::Rect lpad, upad;
+  Geom::Rects cuts;
+  int blockedLayer{-1};
+  Geom::Rects blockingObs;
+};
 
 class CostFn {
   private:
@@ -294,12 +305,8 @@ class Router {
     std::vector<std::map<int, IntRangeSet>> _hanangridh, _hanangridv;
     Geom::Rect _bbox, _mbox;
     const Node *_sol;
-    // findSol() clears _sol (via clearSourceTargets()) before returning, so a
-    // caller can't tell "no path found" apart from "found a trivial path
-    // needing zero additional shapes" (source and target already coincide)
-    // just by checking whether the returned shape list is empty -- both
-    // return an empty list. This captures which one actually happened.
     bool _lastSolFound{false};
+    std::vector<std::array<int, 6>> _exploredEdges;
     std::vector<int> _widthx, _ndrwidthx, _spacex, _ndrspacex;
     std::vector<int> _drcspacex, _drcspacey;
     std::vector<int> _widthy, _ndrwidthy, _spacey, _ndrspacey;
@@ -590,6 +597,7 @@ class Router {
     void addTargetShapes(const Geom::Rect& r, const int z) { addSourceTargetShapes(r, z, false); }
     void addSourceTarget(const Geom::Rect& r, const int z, const bool src);
     const Via* isViaValid(const Node* n, const bool up) const;
+    std::vector<ViaEscapeAttempt> diagnoseViaEscape(const Node* n, const bool up) const;
     void updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
         const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs,
         const std::set<int>& preflayers, const std::map<int, DRC::ViaArray>& ndrvias);

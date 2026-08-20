@@ -1482,6 +1482,7 @@ Geom::LayerRects Router::findSol()
         evalTCost(s);
         if (!s->closed()) insertToPQ(s);
       }
+      _exploredEdges.clear();
 #if DEBUG
 #else
       if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
@@ -1524,6 +1525,9 @@ Geom::LayerRects Router::findSol()
         }
         _pq.erase(_pq.begin());
         ++layerExpansions[t->z()];
+        if (auto parent = t->parent()) {
+          _exploredEdges.push_back({t->x(), t->y(), t->z(), parent->x(), parent->y(), parent->z()});
+        }
         expandNode(t);
         ++_expansions;
         if (_expansions >= _maxExpansions) break;
@@ -1533,6 +1537,11 @@ Geom::LayerRects Router::findSol()
         for (unsigned i = 0; i < layerExpansions.size(); ++i) {
           COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
         }
+#if DEBUG
+#else
+        if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
+#endif
+          writeLEF(attempt ? "ATTEMPT_1" : "ATTEMPT_0");
       }
       minExpansions = std::min(minExpansions, _expansions);
       _pq.clear();
@@ -2190,6 +2199,100 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
   return via;
 }
 
+Geom::Rects intersectPObstacles(const LayerPolySet& pobs, const LayerPolySet& ptobs,
+                                 const int layer, const Geom::Rect& query)
+{
+  Geom::Rects hit;
+  PolySet q;
+  q += PRect(query.xmin(), query.ymin(), query.xmax(), query.ymax());
+  for (const LayerPolySet* lps : {&pobs, &ptobs}) {
+    auto it = lps->find(layer);
+    if (it == lps->end()) continue;
+    PolySet overlap = q & it->second;
+    PRects prects;
+    get_rectangles(prects, overlap);
+    for (auto& pr : prects) {
+      hit.emplace_back(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
+    }
+  }
+  return hit;
+}
+
+std::vector<ViaEscapeAttempt> Router::diagnoseViaEscape(const Node* n, const bool up) const
+{
+  std::vector<ViaEscapeAttempt> attempts;
+  const auto& vias = up ? _upVias[n->z()] : _dnVias[n->z()];
+  if ((up && n->z() >= _maxLayer) || (!up && n->z() <= _minLayer) || vias.empty()) return attempts;
+  const auto adjLayer = up ? _aboveViaLayer[n->z()] : _belowViaLayer[n->z()];
+  if (adjLayer < 0) return attempts;
+  for (auto& v : vias) {
+    Via via(*v, Geom::Point(n->x(), n->y()));
+    ViaEscapeAttempt att;
+    att.lowerLayer = via.l();
+    att.upperLayer = via.u();
+    att.viaLayer = via.c();
+    att.lpad = via.lpad();
+    att.upad = via.upad();
+    for (auto& c : via.cuts()) att.cuts.push_back(c);
+
+    bool ok = true;
+    // cut-to-obstacle spacing, on the via layer itself
+    auto it = _ltree.find(adjLayer);
+    if (it != _ltree.end()) {
+      Geom::Rects nbrs;
+      it->second.search(nbrs, via.bbox().bloatby(_lf.spacex(adjLayer), _lf.spacey(adjLayer)));
+      for (auto& c : via.cuts()) {
+        bool cutBlocked = false;
+        for (auto& o : nbrs) {
+          if (o.bloatby(_lf.spacex(adjLayer), _lf.spacey(adjLayer)).overlaps(c, false)) {
+            cutBlocked = true;
+            break;
+          }
+        }
+        if (cutBlocked) {
+          ok = false;
+          att.blockedLayer = adjLayer;
+          auto obs = intersectPObstacles(_pobstacles, _ptobstacles, adjLayer, c.bloatby(_lf.spacex(adjLayer), _lf.spacey(adjLayer)));
+          att.blockingObs.insert(att.blockingObs.end(), obs.begin(), obs.end());
+        }
+      }
+    }
+
+    const bool relaxThisVia =
+        (_relaxSrcViaEscape && (isSourceAt(n->x(), n->y(), via.l()) || isSourceAt(n->x(), n->y(), via.u()))) ||
+        (_relaxTgtViaEscape && (isTargetAt(n->x(), n->y(), via.l()) || isTargetAt(n->x(), n->y(), via.u())));
+    for (bool lower : {true, false}) {
+      auto l = (lower ? via.l() : via.u());
+      auto itp = _ltree.find(l);
+      if (itp == _ltree.end()) continue;
+      Geom::Rect p = (lower ? via.lpad() : via.upad());
+      Geom::Rects nbrs;
+      itp->second.search(nbrs, p.bloatby(spacex(l), spacey(l)));
+      bool padBlocked = false;
+      for (auto o : nbrs) {
+        o.expand(-widthy(l)/2, -widthx(l)/2);
+        if (relaxThisVia) {
+          o.expand(-std::max(0, spacex(l) - MIN_ESCAPE_SPACE),
+                   -std::max(0, spacey(l) - MIN_ESCAPE_SPACE));
+        }
+        if (o.overlaps(p, true)) {
+          padBlocked = true;
+          break;
+        }
+      }
+      if (padBlocked) {
+        ok = false;
+        att.blockedLayer = l;
+        auto obs = intersectPObstacles(_pobstacles, _ptobstacles, l, p.bloatby(spacex(l), spacey(l)));
+        att.blockingObs.insert(att.blockingObs.end(), obs.begin(), obs.end());
+      }
+    }
+    att.accessible = ok;
+    attempts.push_back(std::move(att));
+  }
+  return attempts;
+}
+
 void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
 {
   _upVias.clear();
@@ -2339,6 +2442,53 @@ void Router::writeLEF(const std::string& prefix, const Geom::LayerRects* sol) co
       ofs << "          RECT " << (1.*(s->x() - 10)/_uu) << ' ' << (1.*(s->y() - 10)/_uu) << ' ' << (1.*(s->x() + 10)/_uu) << ' ' << (1.*(s->y() + 10)/_uu) << " ;\n";
     }
     ofs << "      END\n    END TGTNODES\n";
+    auto emitViaAttempts = [&](const NodeSet& nodes, const char* srcOrTgt) {
+      int idx = 0;
+      for (auto& n : nodes) {
+        for (bool up : {true, false}) {
+          auto attempts = diagnoseViaEscape(n, up);
+          if (attempts.empty()) continue;
+          const bool allBlocked = std::all_of(attempts.begin(), attempts.end(),
+              [](const ViaEscapeAttempt& a) { return !a.accessible; });
+          if (!allBlocked) continue;
+          int viaNum = 1;
+          for (auto& att : attempts) {
+            std::string viaSuffix = "_" + std::to_string(viaNum);
+            std::string pinName = "BLOCKED_VIA_" + std::string(srcOrTgt) + "_" + std::to_string(idx)
+                                 + "_" + (up ? "UP" : "DN") + viaSuffix;
+            ofs << "    PIN " << pinName << "\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+            ofs << "        LAYER VIA_" << LAYER_NAMES[att.lowerLayer] << viaSuffix << " ;\n";
+            ofs << "          RECT " << (1.*att.lpad.xmin()/_uu) << ' ' << (1.*att.lpad.ymin()/_uu) << ' '
+                << (1.*att.lpad.xmax()/_uu) << ' ' << (1.*att.lpad.ymax()/_uu) << " ;\n";
+            ofs << "        LAYER VIA_" << LAYER_NAMES[att.upperLayer] << viaSuffix << " ;\n";
+            ofs << "          RECT " << (1.*att.upad.xmin()/_uu) << ' ' << (1.*att.upad.ymin()/_uu) << ' '
+                << (1.*att.upad.xmax()/_uu) << ' ' << (1.*att.upad.ymax()/_uu) << " ;\n";
+            if (!att.cuts.empty() && att.viaLayer >= 0 && static_cast<size_t>(att.viaLayer) < LAYER_NAMES.size()) {
+              ofs << "        LAYER VIA_" << LAYER_NAMES[att.viaLayer] << viaSuffix << " ;\n";
+              for (auto& c : att.cuts) {
+                ofs << "          RECT " << (1.*c.xmin()/_uu) << ' ' << (1.*c.ymin()/_uu) << ' '
+                    << (1.*c.xmax()/_uu) << ' ' << (1.*c.ymax()/_uu) << " ;\n";
+              }
+            }
+            ofs << "      END\n    END " << pinName << "\n";
+            if (!att.blockingObs.empty() && att.blockedLayer >= 0) {
+              std::string drcName = "DRC_" + pinName;
+              ofs << "    PIN " << drcName << "\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+              ofs << "        LAYER VIA_" << LAYER_NAMES[att.blockedLayer] << "_DRC" << viaSuffix << " ;\n";
+              for (auto& o : att.blockingObs) {
+                ofs << "          RECT " << (1.*o.xmin()/_uu) << ' ' << (1.*o.ymin()/_uu) << ' '
+                    << (1.*o.xmax()/_uu) << ' ' << (1.*o.ymax()/_uu) << " ;\n";
+              }
+              ofs << "      END\n    END " << drcName << "\n";
+            }
+            ++viaNum;
+          }
+        }
+        ++idx;
+      }
+    };
+    emitViaAttempts(_sources, "SRC");
+    emitViaAttempts(_targets, "TGT");
     if (sol) {
       ofs << "    PIN SOL\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
       for (auto& l : *sol) {
@@ -2365,6 +2515,31 @@ void Router::writeLEF(const std::string& prefix, const Geom::LayerRects* sol) co
       }
     }
     ofs << "      END\n    END GRID\n";
+    std::map<int, Geom::Rects> exploredByLayer;
+    for (auto& e : _exploredEdges) {
+      const int x = e[0], y = e[1], z = e[2], px = e[3], py = e[4], pz = e[5];
+      if (z == pz) {
+        const int xlo = std::min(x, px), xhi = std::max(x, px);
+        const int ylo = std::min(y, py), yhi = std::max(y, py);
+        if (xlo == xhi) {
+          exploredByLayer[z].emplace_back(xlo - 1, ylo, xhi + 1, yhi);
+        } else {
+          exploredByLayer[z].emplace_back(xlo, ylo - 1, xhi, yhi + 1);
+        }
+      } else {
+        exploredByLayer[z].emplace_back(x - 5, y - 5, x + 5, y + 5);
+      }
+    }
+    for (auto& l : exploredByLayer) {
+      if (l.first < 0 || static_cast<size_t>(l.first) >= LAYER_NAMES.size()) continue;
+      ofs << "    PIN EXPLORED_GRIDS_" << LAYER_NAMES[l.first] << "\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+      ofs << "        LAYER " << LAYER_NAMES[l.first] << "_EXPLORED ;\n";
+      for (auto& r : l.second) {
+        ofs << "          RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' '
+          << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+      }
+      ofs << "      END\n    END EXPLORED_GRIDS_" << LAYER_NAMES[l.first] << "\n";
+    }
     ofs << "    OBS\n";
     if (!_tobstacles.empty() || !_obstacles.empty()) {
       for (auto temp : {true, false}) {

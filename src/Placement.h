@@ -432,6 +432,11 @@ class Module {
       if (_leaf) return;
       COUT << "ROUTE_SUMMARY module=" << _name << " nets=" << _nets.size()
            << " unrouted=" << numUnrouted() << '\n';
+      for (auto& n : _nets) {
+        if (!n.second.excluded() && n.second.routable() && n.second.unrouted()) {
+          COUT << "OPEN NET: " << n.first << '\n';
+        }
+      }
     }
 
     const Geom::Rect& bbox() const { return _bbox; }
