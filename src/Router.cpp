@@ -144,24 +144,32 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
       return _layerPairCost[n1.z()][n2.z()];
     }
   }
+  const int dx = std::abs(n1.x() - n2.x());
+  const int dy = std::abs(n1.y() - n2.y());
   auto minz = std::min(n1.z(), n2.z());
   auto maxz = std::max(n1.z(), n2.z());
   CostType minHCost(COST_MAX), minVCost(COST_MAX);
-  //if (true)
+  auto window = [&]() {
+    minHCost = COST_MAX;
+    minVCost = COST_MAX;
+    for (int i = minz; i <= maxz; ++i) {
+      minHCost = std::min(minHCost, _layerHCost[i]);
+      minVCost = std::min(minVCost, _layerVCost[i]);
+    }
+  };
   if (_layerHCost[minz] != _layerVCost[minz]) {
     if (minz < _topRoutingLayer) maxz = minz + 1;
     else minz -= 1;
   }
-  for (int i = minz; i <= maxz; ++i) {
-    minHCost = std::min(minHCost, _layerHCost[i]);
-    minVCost = std::min(minVCost, _layerVCost[i]);
-  }
+  window();
+  if (dx > 0 && minHCost >= COST_MAX) minHCost = _minMetalCost;
+  if (dy > 0 && minVCost >= COST_MAX) minVCost = _minMetalCost;
   if (n1.z() == n2.z()) {
     minHCost = relaxed(minHCost, n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
     minVCost = relaxed(minVCost, n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
   }
-  dc += (minHCost * std::abs(n1.x() - n2.x())) + (minVCost * std::abs(n1.y() - n2.y()));
-  if (std::abs(n1.x() - n2.x()) && std::abs(n1.y() - n2.y())) {
+  dc += (minHCost * dx) + (minVCost * dy);
+  if (dx && dy) {
     for (int i = minz; i <= maxz; ++i) {
       if (_layerHCost[i] == minHCost && minHCost == minVCost && _layerVCost[i] == _layerHCost[i]) {
         dc += (i < _topRoutingLayer) ? _layerPairCost[i][i + 1] / 2 : _layerPairCost[i][i - 1] / 2;
@@ -1568,7 +1576,7 @@ Geom::LayerRects Router::findSol()
         auto t = const_cast<Node*>(*_pq.begin());
         if (_targets.find(t) != _targets.end()) {
           _sol = t;
-          COUT << "sol found with " << _expansions << " expansions!" << std::endl;
+          COUT << "sol found with " << _expansions << " expansions! cost " << t->fcost() << " for " << _name << std::endl;
           for (unsigned i = 0; i < layerExpansions.size(); ++i) {
             COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
           }
