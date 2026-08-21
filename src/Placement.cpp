@@ -9,6 +9,7 @@
 #include <functional>
 
 #include <algorithm>
+#include <random>
 #include <thread>
 #include <mutex>
 #include <queue>
@@ -807,33 +808,51 @@ void Module::route(Router::Router& router, const std::string& outdir)
       NetsVec routedOrder = nets;                 // ordering the live routes came from
       tried[OrderKey(Router::Router::attemptMode(attemptNo), nets)] = openNets;
 
+      std::mt19937 rng(0);
+      bool randomOrder = false;
       const int maxIters = passes * 8;
+      const int maxShuffles = 64;
       int pass = 0;
       for (int iter = 0; pass < passes && iter < maxIters && bestUnrouted > 0; ++iter) {
         if (openNets.empty()) break;
         for (Net* v : openNets) ++blockCount[v];
 
-        // re-sort descending block priority (original HPWL order breaks ties):
-        // nets that have been left open rise toward the front so they get first
-        // claim on the contested resources next time.
-        NetsVec newOrder = nets;
-        std::stable_sort(newOrder.begin() + pinned, newOrder.end(),
-          [&](const Net* a, const Net* b) {
-            const int ba = blockCount[a], bb = blockCount[b];
-            if (ba != bb) return ba > bb;
-            return baseIdx[a] < baseIdx[b];
-          });
-        newOrder = normalize(std::move(newOrder));
-        if (newOrder == nets) break;              // order already converged; no progress
-
-        nets = std::move(newOrder);
-        const OrderKey key = keyFor(nets);
-        auto it = tried.find(key);
-        if (it != tried.end()) {
-          openNets = it->second;
-          continue;
+        if (!randomOrder) {
+          NetsVec newOrder = nets;
+          std::stable_sort(newOrder.begin() + pinned, newOrder.end(),
+            [&](const Net* a, const Net* b) {
+              const int ba = blockCount[a], bb = blockCount[b];
+              if (ba != bb) return ba > bb;
+              return baseIdx[a] < baseIdx[b];
+            });
+          newOrder = normalize(std::move(newOrder));
+          if (newOrder == nets) {
+            randomOrder = true;
+            COUT << "module " << _name << " : promotion converged after " << pass
+                 << " pass(es); trying random net orderings (seed 0) for the rest\n";
+          } else {
+            nets = std::move(newOrder);
+            auto it = tried.find(keyFor(nets));
+            if (it != tried.end()) {
+              openNets = it->second;
+              continue;
+            }
+          }
+        }
+        if (randomOrder) {
+          NetsVec cand;
+          bool found = false;
+          for (int t = 0; t < maxShuffles && !found; ++t) {
+            cand = nets;
+            std::shuffle(cand.begin() + pinned, cand.end(), rng);
+            cand = normalize(std::move(cand));
+            found = (tried.find(keyFor(cand)) == tried.end());
+          }
+          if (!found) break;      // nothing left that has not already been routed
+          nets = std::move(cand);
         }
 
+        const OrderKey key = keyFor(nets);
         const int u = attempt();
         routedOrder = nets;
         openNets = openTail();
