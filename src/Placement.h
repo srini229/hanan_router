@@ -441,7 +441,7 @@ class Module {
         if (!n.second.excluded() && n.second.routable() && n.second.unrouted()) {
           COUT << "OPEN NET: " << n.first << '\n';
           for (auto& w : n.second.openWires()) {
-            COUT << "OPEN_WIRE " << w << '\n';
+            COUT << "  OPEN_WIRE : " << w << '\n';
           }
         }
       }

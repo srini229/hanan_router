@@ -650,6 +650,14 @@ void Module::route(Router::Router& router, const std::string& outdir)
 
     auto routeAllNets = [&](const bool addAdjObstacles) -> bool {
       if (!_sympairs.empty()) enforceSymOrder(nets);
+      COUT << "ROUTING_ORDER : ";
+      if (nets.size()) {
+          COUT << nets[0]->name();
+          for (int i = 1; i < nets.size(); ++i) {
+              COUT << ", " << nets[i]->name();
+          }
+          COUT << '\n';
+      }
       Geom::LayerRects netObstaclesRouted;
       bool anyUnrouted{false};
       std::vector<std::vector<size_t>> batches = buildBatches();
