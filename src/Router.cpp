@@ -1806,7 +1806,7 @@ Geom::LayerRects Router::findSol()
 #else
       if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
 #endif
-        writeLEF(attempt ? "ATTEMPT_1" : "ATTEMPT_0");
+        writeLEF("ATTEMPT_" + std::to_string(_attemptno) + (attempt ? "_1" : "_0"));
 
 #if DEBUG
       for (unsigned l = 0; l < _hanangridh.size(); ++l) {
@@ -1864,7 +1864,7 @@ Geom::LayerRects Router::findSol()
 #else
         if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
 #endif
-          writeLEF(attempt ? "ATTEMPT_1" : "ATTEMPT_0");
+          writeLEF("ATTEMPT_" + std::to_string(_attemptno) + (attempt ? "_1" : "_0"));
       }
       minExpansions = std::min(minExpansions, _expansions);
       _pq.clear();
@@ -1880,7 +1880,7 @@ Geom::LayerRects Router::findSol()
 #else
       if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
 #endif
-        writeLEF("ATTEMPT_2");
+        writeLEF("ATTEMPT_" + std::to_string(_attemptno) + "_2");
       auto savedNdrWidthx = _ndrwidthx;
       auto savedNdrWidthy = _ndrwidthy;
       for (auto src : {true, false}) {
