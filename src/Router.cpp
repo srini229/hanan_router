@@ -620,6 +620,54 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
   return points;
 }
 
+Geom::PointWidthSet Router::findBoundaryPoints(const Geom::Rect& r, const int z,
+    const Direction dir, const Geom::PointWidthSet& centre) const
+{
+  Geom::PointWidthSet points;
+  if (!boundaryEscape()) return points;
+  const bool vert = _cf.isVert(z);
+  const bool hor  = _cf.isHor(z);
+  const int xc = roundup(r.xcenter()), yc = roundup(r.ycenter());
+  const int xlo = roundup(r.xmin()), xhi = roundup(r.xmax());
+  const int ylo = roundup(r.ymin()), yhi = roundup(r.ymax());
+  if (dir == EAST && hor) {
+    const int w = widthx(z);
+    points.insert(std::make_pair(Geom::Point(xlo, yc), w));
+    points.insert(std::make_pair(Geom::Point(xhi, yc), w));
+    if (vert) {
+      const bool fits = (r.height() >= w);
+      const int plo = fits ? roundup(r.ymin() + w/2) : ylo;
+      const int phi = fits ? roundup(r.ymax() - w/2) : yhi;
+      for (auto& pp : centre) {
+        if (pp.first.y() != yc) continue;
+        points.insert(std::make_pair(Geom::Point(pp.first.x(), plo), w));
+        points.insert(std::make_pair(Geom::Point(pp.first.x(), phi), w));
+      }
+    }
+  } else if (dir == NORTH && vert) {
+    const int w = widthy(z);
+    points.insert(std::make_pair(Geom::Point(xc, ylo), w));
+    points.insert(std::make_pair(Geom::Point(xc, yhi), w));
+    if (hor) {
+      const bool fits = (r.width() >= w);
+      const int plo = fits ? roundup(r.xmin() + w/2) : xlo;
+      const int phi = fits ? roundup(r.xmax() - w/2) : xhi;
+      for (auto& pp : centre) {
+        if (pp.first.x() != xc) continue;
+        points.insert(std::make_pair(Geom::Point(plo, pp.first.y()), w));
+        points.insert(std::make_pair(Geom::Point(phi, pp.first.y()), w));
+      }
+    }
+  }
+  for (auto& pp : points) {
+    COUT << "pointb : " << pp.first.x() << ',' << pp.first.y() << ',' << pp.second
+         << " dir " << ((dir == EAST) ? 'E' : 'N') << " layer " << z
+         << (hor ? " H" : "") << (vert ? " V" : "")
+         << " pin " << r.str() << '\n';
+  }
+  return points;
+}
+
 void Router::addSourceTargetShapes(const Geom::Rect& r, const int z, const bool src)
 {
   if (z >= _minLayer && z <= _maxLayer) {
@@ -678,12 +726,23 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
   const int minw = std::min(baseWidthX(z), baseWidthY(z));
   const bool smallx = (minw <= 0) || (r.width()  < CostFn::SMALL_PIN_WIDTHS * minw);
   const bool smally = (minw <= 0) || (r.height() < CostFn::SMALL_PIN_WIDTHS * minw);
+  std::set<std::pair<int, int>> boundaryAdded;
   for (auto dir : {UP, DOWN, EAST, NORTH}) {
     const bool viaEscape = (dir == UP || dir == DOWN);
     const bool smallPin = (dir == EAST) ? smallx : smally;
     const bool biased = viaEscape || smallPin;
     auto points = findValidPoints(r, z, dir);
     //COUT << "num points : " << points.size() << ' ' << "dir : " << dir << '\n';
+    Geom::PointWidthSet bpoints;
+    if (!viaEscape) {
+      for (auto& bp : findBoundaryPoints(r, z, dir, points)) {
+        const auto coord = std::make_pair(bp.first.x(), bp.first.y());
+        if (points.find(bp) != points.end()) continue;
+        if (_nodes[z].count(coord) && !boundaryAdded.count(coord)) continue;
+        bpoints.insert(bp);
+        boundaryAdded.insert(coord);
+      }
+    }
     for (auto& pp : points) {
       auto& p = pp.first;
       int pen = 0;
@@ -709,6 +768,26 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
 #if DEBUG
       n->print((src ? "src" : "tgt"));
 #endif
+      dest.insert(n);
+      _bbox.merge(n->x(), n->y(), n->x(), n->y());
+    }
+    for (auto& pp : bpoints) {
+      auto& p = pp.first;
+      const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
+      const int pen = static_cast<int>(_cf.offCentreEscapeCost(offc));
+      auto n = createNode(p.x(), p.y(), z, nullptr,
+                          src ? fcost + pen : fcost,
+                          src ? tcost : tcost + pen);
+      n->setNoVia();
+      n->expand(dir, true);
+      if (dir == EAST) {
+        n->sethwx(pp.second/2);
+        n->expand(WEST, true);
+      }
+      if (dir == NORTH) {
+        n->sethwy(pp.second/2);
+        n->expand(SOUTH, true);
+      }
       dest.insert(n);
       _bbox.merge(n->x(), n->y(), n->x(), n->y());
     }
@@ -786,6 +865,10 @@ void Router::setexpand(Node* newn, const Node* parent) const
         newn->expand(DOWN, true);
       }
     }
+  }
+  if (newn->noVia()) {
+    newn->expand(UP, false);
+    newn->expand(DOWN, false);
   }
   if (_cf.hcost(newn->z()) == _cf.vcost(newn->z()) && _cf.hcost(newn->z()) == COST_MAX) {
     newn->expand(NORTH, false);

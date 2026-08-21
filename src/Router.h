@@ -170,6 +170,7 @@ class Node {
     Node const* _parent;
     const Via *_upVia, *_dnVia;
     std::bitset<MAXDIR> _expanddir;
+    bool _noVia{false};
     Node(const int x = 0, const int y = 0, const int z = -1,
         const CostType fcost = -1, const CostType tcost = -1, Node const* parent = nullptr)
       : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _fcost(fcost), _tcost(tcost),
@@ -208,6 +209,8 @@ class Node {
     bool expandsouth() const { return _expanddir.test(SOUTH); }
 
     void expand(const int dir, const bool val) { if (dir < MAXDIR) _expanddir.set(dir, val); }
+    bool noVia() const { return _noVia; }
+    void setNoVia() { _noVia = true; }
     void setexpand() { _expanddir.set(); }
     void resetexpand() { _expanddir.reset(); }
 
@@ -487,6 +490,8 @@ class Router {
       _bbox = Geom::Rect();
     }
     Geom::PointWidthSet findValidPoints(const Geom::Rect& r, const int z, const Direction dir) const;
+    Geom::PointWidthSet findBoundaryPoints(const Geom::Rect& r, const int z, const Direction dir,
+        const Geom::PointWidthSet& centre) const;
 
     bool isTarget(const Node* n) const { return _targets.find(const_cast<Node*>(n)) != _targets.end(); }
     bool isSource(const Node* n) const { return _sources.find(const_cast<Node*>(n)) != _sources.end(); }
@@ -627,13 +632,20 @@ class Router {
     void setDumpOpenNets(const bool b) { _dumpOpenNets = b; }
     bool dumpOpenNets() const { return _dumpOpenNets; }
     static const int TRACE_SAMENET_FROM_ATTEMPT = 3;
+    static const int BOUNDARY_ESCAPE_FROM_ATTEMPT = 3;
     void setAttemptNo(const int n) { _attemptno = n; }
     int attemptNo() const { return _attemptno; }
     static bool traceSameNetObstaclesAt(const int n) { return n >= TRACE_SAMENET_FROM_ATTEMPT; }
     bool traceSameNetObstacles() const { return traceSameNetObstaclesAt(_attemptno); }
-    static int attemptMode(const int n) { return traceSameNetObstaclesAt(n) ? 1 : 0; }
-    static const char* attemptModeName(const int n)
-    { return traceSameNetObstaclesAt(n) ? "same-net-tracing=on" : "same-net-tracing=off"; }
+    static bool boundaryEscapeAt(const int n) { return n >= BOUNDARY_ESCAPE_FROM_ATTEMPT; }
+    bool boundaryEscape() const { return boundaryEscapeAt(_attemptno); }
+    static int attemptMode(const int n)
+    { return (traceSameNetObstaclesAt(n) ? 1 : 0) | (boundaryEscapeAt(n) ? 2 : 0); }
+    static std::string attemptModeName(const int n)
+    {
+      return std::string(traceSameNetObstaclesAt(n) ? "same-net-tracing=on" : "same-net-tracing=off")
+           + (boundaryEscapeAt(n) ? " boundary-escapes=on" : " boundary-escapes=off");
+    }
     void setThreads(const int n) { _threads = n; }
     int threads() const { return _threads; }
     const DRC::LayerInfo& layerInfo() const { return _lf; }
