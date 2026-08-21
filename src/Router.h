@@ -629,7 +629,11 @@ class Router {
     static const int TRACE_SAMENET_FROM_ATTEMPT = 3;
     void setAttemptNo(const int n) { _attemptno = n; }
     int attemptNo() const { return _attemptno; }
-    bool traceSameNetObstacles() const { return _attemptno >= TRACE_SAMENET_FROM_ATTEMPT; }
+    static bool traceSameNetObstaclesAt(const int n) { return n >= TRACE_SAMENET_FROM_ATTEMPT; }
+    bool traceSameNetObstacles() const { return traceSameNetObstaclesAt(_attemptno); }
+    static int attemptMode(const int n) { return traceSameNetObstaclesAt(n) ? 1 : 0; }
+    static const char* attemptModeName(const int n)
+    { return traceSameNetObstaclesAt(n) ? "same-net-tracing=on" : "same-net-tracing=off"; }
     void setThreads(const int n) { _threads = n; }
     int threads() const { return _threads; }
     const DRC::LayerInfo& layerInfo() const { return _lf; }

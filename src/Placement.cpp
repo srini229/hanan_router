@@ -650,14 +650,15 @@ void Module::route(Router::Router& router, const std::string& outdir)
 
     auto routeAllNets = [&](const bool addAdjObstacles) -> bool {
       if (!_sympairs.empty()) enforceSymOrder(nets);
-      COUT << "ROUTING_ORDER : ";
-      if (nets.size()) {
-          COUT << nets[0]->name();
-          for (int i = 1; i < nets.size(); ++i) {
-              COUT << ", " << nets[i]->name();
-          }
-          COUT << '\n';
+      COUT << "ROUTING_ORDER attempt=" << router.attemptNo()
+           << " phase=" << (addAdjObstacles ? "adj-retry" : "base")
+           << ' ' << Router::Router::attemptModeName(router.attemptNo()) << " : ";
+      for (size_t i = 0; i < nets.size(); ++i) {
+        if (i) COUT << ", ";
+        COUT << nets[i]->name();
       }
+      if (nets.empty()) COUT << "(none)";
+      COUT << '\n';
       Geom::LayerRects netObstaclesRouted;
       bool anyUnrouted{false};
       std::vector<std::vector<size_t>> batches = buildBatches();
@@ -783,15 +784,34 @@ void Module::route(Router::Router& router, const std::string& outdir)
       std::unordered_map<const Net*, int> baseIdx;      // original tail position (tie-break)
       for (size_t i = pinned; i < nets.size(); ++i) baseIdx[nets[i]] = static_cast<int>(i);
 
-      for (int pass = 0; pass < passes && bestUnrouted > 0; ++pass) {
-        // raise the priority of every net the latest attempt left open: a net
-        // that stays blocked keeps climbing until it routes before the rest.
-        bool any = false;
+      auto normalize = [&](NetsVec o) -> NetsVec {
+        if (!_sympairs.empty()) enforceSymOrder(o);
+        return o;
+      };
+      auto openTail = [&]() -> NetsVec {          // nets the live routes left open
+        NetsVec o;
         for (size_t i = pinned; i < nets.size(); ++i) {
           Net* v = nets[i];
-          if (!v->excluded() && v->routable() && v->unrouted()) { ++blockCount[v]; any = true; }
+          if (!v->excluded() && v->routable() && v->unrouted()) o.push_back(v);
         }
-        if (!any) break;
+        return o;
+      };
+
+      typedef std::pair<int, NetsVec> OrderKey;   // (attempt mode, ordering)
+      auto keyFor = [&](const NetsVec& o) -> OrderKey {
+        // the attempt this ordering would be routed as is the next one
+        return OrderKey(Router::Router::attemptMode(attemptNo + 1), o);
+      };
+      std::map<OrderKey, NetsVec> tried;          // (mode, ordering) -> nets it left open
+      NetsVec openNets = openTail();              // open nets of the latest ordering
+      NetsVec routedOrder = nets;                 // ordering the live routes came from
+      tried[OrderKey(Router::Router::attemptMode(attemptNo), nets)] = openNets;
+
+      const int maxIters = passes * 8;
+      int pass = 0;
+      for (int iter = 0; pass < passes && iter < maxIters && bestUnrouted > 0; ++iter) {
+        if (openNets.empty()) break;
+        for (Net* v : openNets) ++blockCount[v];
 
         // re-sort descending block priority (original HPWL order breaks ties):
         // nets that have been left open rise toward the front so they get first
@@ -803,19 +823,31 @@ void Module::route(Router::Router& router, const std::string& outdir)
             if (ba != bb) return ba > bb;
             return baseIdx[a] < baseIdx[b];
           });
+        newOrder = normalize(std::move(newOrder));
         if (newOrder == nets) break;              // order already converged; no progress
 
         nets = std::move(newOrder);
+        const OrderKey key = keyFor(nets);
+        auto it = tried.find(key);
+        if (it != tried.end()) {
+          openNets = it->second;
+          continue;
+        }
+
         const int u = attempt();
-        COUT << "  reorder pass " << (pass + 1) << "/" << passes << " : "
+        routedOrder = nets;
+        openNets = openTail();
+        tried[key] = openNets;
+        ++pass;
+        COUT << "  reorder pass " << pass << "/" << passes << " : "
              << u << " unrouted (best so far " << std::min(u, bestUnrouted) << ")\n";
         if (u < bestUnrouted) { bestUnrouted = u; bestOrder = nets; }
       }
-      // reproduce the best ordering found unless the last attempt already was it.
-      if (nets != bestOrder) {
+      const bool reroute = (routedOrder != bestOrder);
+      nets = bestOrder;
+      if (reroute) {
         COUT << "module " << _name << " : re-routing with best ordering ("
              << bestUnrouted << " unrouted)\n";
-        nets = bestOrder;
         attempt();
       }
     }
