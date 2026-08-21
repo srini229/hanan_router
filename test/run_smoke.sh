@@ -747,6 +747,31 @@ else
   ERRS="${ERRS}via_escape_blocking_obstacles:no-drc-blocked-via-pin;\n"
 fi
 
+# 39. replay: -replay re-routes a single wire straight out of a HANAN_DEBUG_WIRE
+#     dump, with no placement or LEF, so a failing net can be debugged on its
+#     own in the context it failed in. Reuses the ATTEMPT_*.lef that case 38
+#     just wrote for the via_escape net, which cannot route without -relaxvia,
+#     and checks the replay reaches the same verdict from the file alone.
+RPDUMP=$(ls "$OUTROOT/via_escape_blocked_diag"/ATTEMPT_*_0_*.lef 2>/dev/null | head -1)
+if [ -n "$RPDUMP" ]; then
+  RPDIR="$OUTROOT/replay"; rm -rf "$RPDIR"; mkdir -p "$RPDIR"
+  ( cd "$RPDIR" && "$ROUTER" -d "$IN/layers.json" -replay "../../$RPDUMP" \
+      -ndr "$IN/via_escape_ndr.json" -o ./ >/dev/null 2>stderr.log )
+  rperrs=""
+  grep -q "REPLAY RESULT open" "$RPDIR/route.log" 2>/dev/null || rperrs="$rperrs no-open-verdict;"
+  grep -q "obstacles=[1-9]" "$RPDIR/route.log" 2>/dev/null || rperrs="$rperrs no-obstacles-loaded;"
+  grep -q "num src : [1-9]" "$RPDIR/route.log" 2>/dev/null || rperrs="$rperrs no-source-nodes;"
+  grep -q "ndr=" "$RPDIR/route.log" 2>/dev/null || rperrs="$rperrs ndr-not-applied;"
+  if [ -z "$rperrs" ]; then
+    echo "PASS replay"; PASS=$((PASS+1))
+  else
+    echo "FAIL replay :$rperrs"; FAIL=$((FAIL+1)); ERRS="${ERRS}replay:$rperrs\n"
+  fi
+else
+  echo "FAIL replay :no-attempt-dump-to-replay;"; FAIL=$((FAIL+1))
+  ERRS="${ERRS}replay:no-attempt-dump-to-replay;\n"
+fi
+
 # 33. parallel speedup (opt-in, timing-based, ~2-4s): a batch of many disjoint,
 #     individually-expensive nets routes substantially faster with N worker
 #     threads than sequentially -- and lays down exactly the same wires. Off by

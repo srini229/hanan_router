@@ -294,6 +294,9 @@ typedef std::set<IntPair, IntPairComp> IntRangeSet;
 typedef std::set<Node*, NodeComp> NodeSet;
 typedef std::multiset<const Node*, NodeCostComp> PriorityQueue;
 typedef std::vector<std::map<IntPair, Node*, IntPairComp>> NodeMap;
+bool replay(class Router& r, const std::string& leffile, const int uu, const bool detour,
+    const std::string& ndrfile, const DRC::LayerInfo& lf);
+
 class Router {
   private:
     PriorityQueue _pq;
