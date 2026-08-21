@@ -4,3 +4,4 @@ bin/*.o
 **/*.def
 **/.DS_Store
 docs/**
+coverage/**

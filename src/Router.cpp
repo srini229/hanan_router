@@ -338,6 +338,10 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
   }
   _aboveViaLayer.resize(_widthx.size(), -1);
   _belowViaLayer.resize(_widthx.size(), -1);
+  _ndrwidthx.resize(_widthx.size(), INT_MAX);
+  _ndrwidthy.resize(_widthy.size(), INT_MAX);
+  _ndrspacex.resize(_spacex.size(), INT_MAX);
+  _ndrspacey.resize(_spacey.size(), INT_MAX);
   for (unsigned i = 0; i < layers.size(); ++i) {
     if (layers[i]->isVia()) {
       auto vlayer = static_cast<DRC::ViaLayer*>(layers[i]);

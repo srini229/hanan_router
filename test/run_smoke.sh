@@ -698,6 +698,55 @@ if [ -n "${MAZE_STRESS:-}" ]; then
     -l $IN/m1adj_escape.lef -ndr $IN/maze30_ndr.json
 fi
 
+# 36. MinSpacing: a metal layer whose "MinSpacing" is tighter than its pitch can
+#     deliver (M1 pitch 56 - width 32 = 24, MinSpacing 40). The router keeps
+#     routing at the pitch spacing but must warn that the final DRC check uses
+#     the larger of the two, naming both numbers and the pitch that would be
+#     needed. Covers DRC::MetalLayer::setMinSpace, which no other fixture sets.
+run_case minspacing "BLOCK_B_CONC_0.def" \
+  -d $IN/layers_minspace.json -p $IN/test1.placement_verilog.json -l $IN/test.lef
+MSLOG="$OUTROOT/minspacing/err.log"
+if grep -q "layer M1 pitch gives spacing 24 but MinSpacing is 40" "$MSLOG" 2>/dev/null; then
+  echo "PASS minspacing_warning"
+  PASS=$((PASS+1))
+else
+  echo "FAIL minspacing_warning :no-minspacing-warning;"
+  FAIL=$((FAIL+1))
+  ERRS="${ERRS}minspacing_warning:no-minspacing-warning;\n"
+fi
+
+# 37. deviation_cost: the symmetric-pair guide weight, read from the NDR module
+#     entry alongside symmetric_nets. Pins the JSON key -> Module::_devweight
+#     wiring (DRC/Placement::Module::setDeviationCost); this fixture's mirrored
+#     route is already the natural optimum, so the value itself does not change
+#     the result -- 0, 4 and 200 all give maxdev=0 -- and the assertion is that
+#     a non-default weight parses and still produces the exact mirror.
+LOGMUST="symmetric net : routing INM guided by INP|SYMMETRY module=SYM_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
+run_case deviation_cost "SYM_CONC_0.def" \
+  -d $IN/layers.json -p $IN/symmetric.placement_verilog.json -l $IN/symmetric.lef \
+  -ndr $IN/symmetric_devcost_ndr.json
+
+# 38. blocked-via diagnostics: the via_escape fixture (net A cannot route without
+#     -relaxvia) with per-wire debug dumping on. Every via escape is blocked, so
+#     writeLEF emits a BLOCKED_VIA_* pin per attempt, and for each one the
+#     obstacles that actually block it as a DRC_BLOCKED_VIA_* pin -- the latter
+#     only appears when Router::intersectPObstacles returns shapes, which no
+#     other case reaches.
+export HANAN_DEBUG_WIRE=1
+ALLOW_UNROUTED=1
+run_case via_escape_blocked_diag "" \
+  -d $IN/layers.json -p $IN/via_escape.placement_verilog.json \
+  -l $IN/via_escape.lef -ndr $IN/via_escape_ndr.json
+unset HANAN_DEBUG_WIRE
+if grep -lq "PIN DRC_BLOCKED_VIA" "$OUTROOT/via_escape_blocked_diag"/ATTEMPT_*.lef 2>/dev/null; then
+  echo "PASS via_escape_blocking_obstacles"
+  PASS=$((PASS+1))
+else
+  echo "FAIL via_escape_blocking_obstacles :no-drc-blocked-via-pin;"
+  FAIL=$((FAIL+1))
+  ERRS="${ERRS}via_escape_blocking_obstacles:no-drc-blocked-via-pin;\n"
+fi
+
 # 33. parallel speedup (opt-in, timing-based, ~2-4s): a batch of many disjoint,
 #     individually-expensive nets routes substantially faster with N worker
 #     threads than sequentially -- and lays down exactly the same wires. Off by
