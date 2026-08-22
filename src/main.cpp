@@ -11,6 +11,8 @@ int main(int argc, char* argv[])
     std::cerr << "usage : " << argv[0] << "\n\t-d <layers.json>\n\t-p <placement file>\n\t-l <lef file>\n"
       << "\t-s <lef scaling>\n\t-uu <user units scaling>\n\t-ndr <ndr constraints.json> -o <output dir> -r <precision>\n"
       << "\t-reorder <N> (alternate net-ordering passes when nets remain unrouted; default 10)\n"
+      << "\t-replay <ATTEMPT_*.lef> (re-route one wire from a HANAN_DEBUG_WIRE dump; needs -d only)\n"
+      << "\t-detour (with -replay: allow a large detour even without NDR saying so)\n"
       << "\t-threads <N> (route non-overlapping nets in parallel using N worker threads; default 1)\n"
       << "\t-relaxvia (in the final pass, for a net that still fails to route, retry its escape via with spacing relaxed to as close as 5 to, but never on, a shape -- source pins first, then also target pins if that alone isn't enough)\n"
       << "\t-v (verbose: emit high-volume per-element debug logging)\n";
@@ -76,6 +78,12 @@ int main(int argc, char* argv[])
     }
   }
   const bool relaxViaOpt = checkArg(argc, argv, "-relaxvia");
+  const std::string replayfile = parseArgs(argc, argv, "-replay");
+  if (!replayfile.empty()) {
+    hrdb.setCornerEscape(checkArg(argc, argv, "-cornerescape"));
+    hrdb.setRelaxViaEscape(relaxViaOpt);
+    return Router::replay(hrdb, replayfile, uu, checkArg(argc, argv, "-detour"), ndrfile, linfo) ? 0 : 1;
+  }
   if (!plfile.empty() && !leffile.empty()) {
     Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile, interlefdir);
     netlist.route(hrdb, outdir);

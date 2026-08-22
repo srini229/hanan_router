@@ -6,6 +6,7 @@
 #include <bitset>
 #include <limits>
 #include <memory>
+#include <array>
 
 #include "Util.h"
 #include "Geom.h"
@@ -24,6 +25,8 @@ typedef std::vector<PRect> PRects ;
 typedef std::map<int, PolySet> LayerPolySet ;
 
 #define COST_MAX 10000
+#define PATTERN_MIDS 12
+#define PATTERN_PAIRS 8u
 
 namespace Router {
 
@@ -48,11 +51,21 @@ class Via {
     const Geom::Rect& lpad() const { return _lb; }
     const int u() const { return _u; }
     const int l() const { return _l; }
+    const int c() const { return _c; }
     void addCuts(const Geom::Point& o, const int wx, const int wy, const int nrow = 1, const int ncol = 1, const int sx = 0, const int sy = 0);
     std::string str() const;
     void addShapes(Geom::LayerRects& lr) const;
 };
 typedef std::vector<std::shared_ptr<Via>> Vias;
+
+struct ViaEscapeAttempt {
+  bool accessible{false};
+  int lowerLayer{-1}, upperLayer{-1}, viaLayer{-1};
+  Geom::Rect lpad, upad;
+  Geom::Rects cuts;
+  int blockedLayer{-1};
+  Geom::Rects blockingObs;
+};
 
 class CostFn {
   private:
@@ -126,6 +139,7 @@ class CostFn {
       return (_minMetalCost * dist) / ESCAPE_OFFCENTRE_DIV;
     }
     static const int ESCAPE_OFFCENTRE_DIV = 4;
+    static const int SMALL_PIN_WIDTHS = 10;
     CostType hcost(int i) const { return _layerHCost[i]; }
     CostType vcost(int i) const { return _layerVCost[i]; }
     void updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::set<int>& preflayers);
@@ -156,6 +170,7 @@ class Node {
     Node const* _parent;
     const Via *_upVia, *_dnVia;
     std::bitset<MAXDIR> _expanddir;
+    bool _noVia{false};
     Node(const int x = 0, const int y = 0, const int z = -1,
         const CostType fcost = -1, const CostType tcost = -1, Node const* parent = nullptr)
       : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _fcost(fcost), _tcost(tcost),
@@ -194,6 +209,8 @@ class Node {
     bool expandsouth() const { return _expanddir.test(SOUTH); }
 
     void expand(const int dir, const bool val) { if (dir < MAXDIR) _expanddir.set(dir, val); }
+    bool noVia() const { return _noVia; }
+    void setNoVia() { _noVia = true; }
     void setexpand() { _expanddir.set(); }
     void resetexpand() { _expanddir.reset(); }
 
@@ -277,6 +294,9 @@ typedef std::set<IntPair, IntPairComp> IntRangeSet;
 typedef std::set<Node*, NodeComp> NodeSet;
 typedef std::multiset<const Node*, NodeCostComp> PriorityQueue;
 typedef std::vector<std::map<IntPair, Node*, IntPairComp>> NodeMap;
+bool replay(class Router& r, const std::string& leffile, const int uu, const bool detour,
+    const std::string& ndrfile, const DRC::LayerInfo& lf);
+
 class Router {
   private:
     PriorityQueue _pq;
@@ -293,12 +313,8 @@ class Router {
     std::vector<std::map<int, IntRangeSet>> _hanangridh, _hanangridv;
     Geom::Rect _bbox, _mbox;
     const Node *_sol;
-    // findSol() clears _sol (via clearSourceTargets()) before returning, so a
-    // caller can't tell "no path found" apart from "found a trivial path
-    // needing zero additional shapes" (source and target already coincide)
-    // just by checking whether the returned shape list is empty -- both
-    // return an empty list. This captures which one actually happened.
     bool _lastSolFound{false};
+    std::vector<std::array<int, 6>> _exploredEdges;
     std::vector<int> _widthx, _ndrwidthx, _spacex, _ndrspacex;
     std::vector<int> _drcspacex, _drcspacey;
     std::vector<int> _widthy, _ndrwidthy, _spacey, _ndrspacey;
@@ -320,6 +336,7 @@ class Router {
     int _reorderPasses{10};
     int _threads{1};
     bool _rsmtcorridor{true};
+    int _attemptno{1};
     bool _cornerEscape{false};
     bool _relaxViaEscape{false};
     // Transient per-net state: only true while findSol() is retrying a still-
@@ -477,6 +494,8 @@ class Router {
       _bbox = Geom::Rect();
     }
     Geom::PointWidthSet findValidPoints(const Geom::Rect& r, const int z, const Direction dir) const;
+    Geom::PointWidthSet findBoundaryPoints(const Geom::Rect& r, const int z, const Direction dir,
+        const Geom::PointWidthSet& centre) const;
 
     bool isTarget(const Node* n) const { return _targets.find(const_cast<Node*>(n)) != _targets.end(); }
     bool isSource(const Node* n) const { return _sources.find(const_cast<Node*>(n)) != _sources.end(); }
@@ -525,6 +544,7 @@ class Router {
     bool canViaDown(const int z) const
     { return z >= 0 && z < static_cast<int>(_belowViaLayer.size()) && _belowViaLayer[z] >= 0; }
     void setName(const std::string& n) { _name = n; }
+    const std::string& name() const { return _name; }
     void setusepinwidth(const bool u) { _usepinwidth = u; }
 
     int widthx(const int z) const { return (_ndrwidthx[z] != INT_MAX ? _ndrwidthx[z] : _widthx[z]); }
@@ -589,6 +609,14 @@ class Router {
     void addTargetShapes(const Geom::Rect& r, const int z) { addSourceTargetShapes(r, z, false); }
     void addSourceTarget(const Geom::Rect& r, const int z, const bool src);
     const Via* isViaValid(const Node* n, const bool up) const;
+
+    struct PatWp { int x, y, z; bool via; };
+    bool patternRun(const int x, const int y, const int z, const bool vert, const int to) const;
+    typedef std::map<std::tuple<int,int,int,bool>, bool> ViaCache;
+    bool patternVias(const int x, const int y, int zf, const int zt, std::vector<PatWp>& w, ViaCache& vc) const;
+    CostType patternCost(const std::vector<PatWp>& w) const;
+    bool patternRoute();
+    std::vector<ViaEscapeAttempt> diagnoseViaEscape(const Node* n, const bool up) const;
     void updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
         const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs,
         const std::set<int>& preflayers, const std::map<int, DRC::ViaArray>& ndrvias);
@@ -614,6 +642,21 @@ class Router {
     static const int RSMT_RELAX_AFTER_PASS = 3;
     void setRSMTCorridor(const bool b) { _rsmtcorridor = b; }
     bool rsmtCorridor() const { return _rsmtcorridor; }
+    static const int TRACE_SAMENET_FROM_ATTEMPT = 3;
+    static const int BOUNDARY_ESCAPE_FROM_ATTEMPT = 3;
+    void setAttemptNo(const int n) { _attemptno = n; }
+    int attemptNo() const { return _attemptno; }
+    static bool traceSameNetObstaclesAt(const int n) { return n >= TRACE_SAMENET_FROM_ATTEMPT; }
+    bool traceSameNetObstacles() const { return traceSameNetObstaclesAt(_attemptno); }
+    static bool boundaryEscapeAt(const int n) { return n >= BOUNDARY_ESCAPE_FROM_ATTEMPT; }
+    bool boundaryEscape() const { return boundaryEscapeAt(_attemptno); }
+    static int attemptMode(const int n)
+    { return (traceSameNetObstaclesAt(n) ? 1 : 0) | (boundaryEscapeAt(n) ? 2 : 0); }
+    static std::string attemptModeName(const int n)
+    {
+      return std::string(traceSameNetObstaclesAt(n) ? "same-net-tracing=on" : "same-net-tracing=off")
+           + (boundaryEscapeAt(n) ? " boundary-escapes=on" : " boundary-escapes=off");
+    }
     void setThreads(const int n) { _threads = n; }
     int threads() const { return _threads; }
     const DRC::LayerInfo& layerInfo() const { return _lf; }

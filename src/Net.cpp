@@ -281,6 +281,65 @@ Geom::Rects Net::rsmtCorridor(const int margin) const
   return out;
 }
 
+Geom::LayerRects Net::dropSameNetObstacles(const Geom::LayerRects& obs) const
+{
+  Geom::LayerRects kept;
+  // Seed from all of this net's metal -- its pins and anything already routed --
+  // so obstacle shapes continuous with either are recognised as ours.
+  Geom::LayerRects pinshapes;
+  for (auto virt : {true, false}) {
+    for (auto& p : (virt ? _vpins : _pins)) {
+      for (auto& port : p->ports()) {
+        for (auto& l : port->shapes()) {
+          for (auto& r : l.second) pinshapes[l.first].push_back(r);
+        }
+      }
+    }
+  }
+  for (const auto& l : _routeshapeswithpins) {
+    for (const auto& r : l.second) pinshapes[l.first].push_back(r);
+  }
+  for (const auto& lo : obs) {
+    const auto ip = pinshapes.find(lo.first);
+    if (ip == pinshapes.end() || lo.second.empty()) { kept[lo.first] = lo.second; continue; }
+    PolySet pins, obsps;
+    for (const auto& r : ip->second) pins.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+    for (const auto& r : lo.second)  obsps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+    PolySet all(pins);
+    all += obsps;
+    PPolys polys;
+    all.get(polys);                       // connected components of pin+obstacle metal
+    PolySet connected;
+    for (const auto& poly : polys) {
+      PolySet P;
+      P.insert(poly);
+      PolySet touch(P);
+      touch &= pins;
+      PRects probe;
+      get_rectangles(probe, touch);
+      if (!probe.empty()) connected += P;  // this polygon contains one of our pins
+    }
+    PolySet keep(obsps);
+    keep -= connected;
+    PRects krects;
+    get_rectangles(krects, keep);
+    auto& out = kept[lo.first];
+    out.reserve(krects.size());
+    for (const auto& k : krects) out.emplace_back(bp::xl(k), bp::yl(k), bp::xh(k), bp::yh(k));
+    const size_t dropped = lo.second.size() ? (lo.second.size() - std::min(lo.second.size(), out.size())) : 0;
+    if (!krects.empty() || !lo.second.empty()) {
+      if (out.size() != lo.second.size()) {
+        COUT << "same-net trace : net " << _name << " layer " << lo.first << " : "
+             << lo.second.size() << " obstacle(s) -> " << out.size()
+             << " after dropping metal continuous with our own pins";
+        if (dropped) COUT << " (" << dropped << " fewer)";
+        COUT << '\n';
+      }
+    }
+  }
+  return kept;
+}
+
 void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname)
 {
   //TIME_M();
@@ -294,6 +353,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   SaveRestoreStream src(_name + "_route.log");
 #endif
   _unroute = 0;
+  _openwires.clear();
   std::vector<const Pin*> sortedpins(_pins.begin(), _pins.end());
   std::sort(sortedpins.begin(), sortedpins.end(),
       [](const Pin* a, const Pin* b) { return a->name() < b->name(); });
@@ -320,6 +380,10 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
     }*/
+    const bool tracing = router.traceSameNetObstacles();
+    const Geom::LayerRects l3t = tracing ? dropSameNetObstacles(l3) : Geom::LayerRects();
+    const Geom::LayerRects obt = tracing ? dropSameNetObstacles(_obstacles) : Geom::LayerRects();
+
     PortPairs ppairs = (_driver.empty() ? reorderPorts() : clockRouteOrder());
 
     // Confine this net to the neighbourhood of its own Steiner tree: build the
@@ -436,8 +500,8 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       if (_detour) router.allowDetour();
       router.addObstacles(l1, true);
       router.addObstacles(l2, true);
-      router.addObstacles(l3, true);
-      router.addObstacles(_obstacles, true);
+      router.addObstacles(tracing ? l3t : l3, true);
+      router.addObstacles(tracing ? obt : _obstacles, true);
       router.addObstacles(samenetobst, true);
       router.addObstacles(keepout, true);
       auto sol = router.findSol();
@@ -498,6 +562,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
       } else {
         _unroute = 1;
+        addOpenWire(router.name());
       }
       if (!port1->isVirtualPort() || !_driver.empty()) {
         COUT << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;

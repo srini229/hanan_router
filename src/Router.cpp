@@ -144,24 +144,32 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
       return _layerPairCost[n1.z()][n2.z()];
     }
   }
+  const int dx = std::abs(n1.x() - n2.x());
+  const int dy = std::abs(n1.y() - n2.y());
   auto minz = std::min(n1.z(), n2.z());
   auto maxz = std::max(n1.z(), n2.z());
   CostType minHCost(COST_MAX), minVCost(COST_MAX);
-  //if (true)
+  auto window = [&]() {
+    minHCost = COST_MAX;
+    minVCost = COST_MAX;
+    for (int i = minz; i <= maxz; ++i) {
+      minHCost = std::min(minHCost, _layerHCost[i]);
+      minVCost = std::min(minVCost, _layerVCost[i]);
+    }
+  };
   if (_layerHCost[minz] != _layerVCost[minz]) {
     if (minz < _topRoutingLayer) maxz = minz + 1;
     else minz -= 1;
   }
-  for (int i = minz; i <= maxz; ++i) {
-    minHCost = std::min(minHCost, _layerHCost[i]);
-    minVCost = std::min(minVCost, _layerVCost[i]);
-  }
+  window();
+  if (dx > 0 && minHCost >= COST_MAX) minHCost = _minMetalCost;
+  if (dy > 0 && minVCost >= COST_MAX) minVCost = _minMetalCost;
   if (n1.z() == n2.z()) {
     minHCost = relaxed(minHCost, n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
     minVCost = relaxed(minVCost, n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
   }
-  dc += (minHCost * std::abs(n1.x() - n2.x())) + (minVCost * std::abs(n1.y() - n2.y()));
-  if (std::abs(n1.x() - n2.x()) && std::abs(n1.y() - n2.y())) {
+  dc += (minHCost * dx) + (minVCost * dy);
+  if (dx && dy) {
     for (int i = minz; i <= maxz; ++i) {
       if (_layerHCost[i] == minHCost && minHCost == minVCost && _layerVCost[i] == _layerHCost[i]) {
         dc += (i < _topRoutingLayer) ? _layerPairCost[i][i + 1] / 2 : _layerPairCost[i][i - 1] / 2;
@@ -330,6 +338,10 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
   }
   _aboveViaLayer.resize(_widthx.size(), -1);
   _belowViaLayer.resize(_widthx.size(), -1);
+  _ndrwidthx.resize(_widthx.size(), INT_MAX);
+  _ndrwidthy.resize(_widthy.size(), INT_MAX);
+  _ndrspacex.resize(_spacex.size(), INT_MAX);
+  _ndrspacey.resize(_spacey.size(), INT_MAX);
   for (unsigned i = 0; i < layers.size(); ++i) {
     if (layers[i]->isVia()) {
       auto vlayer = static_cast<DRC::ViaLayer*>(layers[i]);
@@ -612,6 +624,54 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
   return points;
 }
 
+Geom::PointWidthSet Router::findBoundaryPoints(const Geom::Rect& r, const int z,
+    const Direction dir, const Geom::PointWidthSet& centre) const
+{
+  Geom::PointWidthSet points;
+  if (!boundaryEscape()) return points;
+  const bool vert = _cf.isVert(z);
+  const bool hor  = _cf.isHor(z);
+  const int xc = roundup(r.xcenter()), yc = roundup(r.ycenter());
+  const int xlo = roundup(r.xmin()), xhi = roundup(r.xmax());
+  const int ylo = roundup(r.ymin()), yhi = roundup(r.ymax());
+  if (dir == EAST && hor) {
+    const int w = widthx(z);
+    points.insert(std::make_pair(Geom::Point(xlo, yc), w));
+    points.insert(std::make_pair(Geom::Point(xhi, yc), w));
+    if (vert) {
+      const bool fits = (r.height() >= w);
+      const int plo = fits ? roundup(r.ymin() + w/2) : ylo;
+      const int phi = fits ? roundup(r.ymax() - w/2) : yhi;
+      for (auto& pp : centre) {
+        if (pp.first.y() != yc) continue;
+        points.insert(std::make_pair(Geom::Point(pp.first.x(), plo), w));
+        points.insert(std::make_pair(Geom::Point(pp.first.x(), phi), w));
+      }
+    }
+  } else if (dir == NORTH && vert) {
+    const int w = widthy(z);
+    points.insert(std::make_pair(Geom::Point(xc, ylo), w));
+    points.insert(std::make_pair(Geom::Point(xc, yhi), w));
+    if (hor) {
+      const bool fits = (r.width() >= w);
+      const int plo = fits ? roundup(r.xmin() + w/2) : xlo;
+      const int phi = fits ? roundup(r.xmax() - w/2) : xhi;
+      for (auto& pp : centre) {
+        if (pp.first.x() != xc) continue;
+        points.insert(std::make_pair(Geom::Point(plo, pp.first.y()), w));
+        points.insert(std::make_pair(Geom::Point(phi, pp.first.y()), w));
+      }
+    }
+  }
+  for (auto& pp : points) {
+    COUT << "pointb : " << pp.first.x() << ',' << pp.first.y() << ',' << pp.second
+         << " dir " << ((dir == EAST) ? 'E' : 'N') << " layer " << z
+         << (hor ? " H" : "") << (vert ? " V" : "")
+         << " pin " << r.str() << '\n';
+  }
+  return points;
+}
+
 void Router::addSourceTargetShapes(const Geom::Rect& r, const int z, const bool src)
 {
   if (z >= _minLayer && z <= _maxLayer) {
@@ -667,13 +727,33 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
   if (!inserted) shapes[z].insert(r);
   pshapes[z] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
   //COUT << "shape : " << r.str() << " z : " << z << '\n';
+  const int minw = std::min(baseWidthX(z), baseWidthY(z));
+  const bool smallx = (minw <= 0) || (r.width()  < CostFn::SMALL_PIN_WIDTHS * minw);
+  const bool smally = (minw <= 0) || (r.height() < CostFn::SMALL_PIN_WIDTHS * minw);
+  std::set<std::pair<int, int>> boundaryAdded;
   for (auto dir : {UP, DOWN, EAST, NORTH}) {
+    const bool viaEscape = (dir == UP || dir == DOWN);
+    const bool smallPin = (dir == EAST) ? smallx : smally;
+    const bool biased = viaEscape || smallPin;
     auto points = findValidPoints(r, z, dir);
     //COUT << "num points : " << points.size() << ' ' << "dir : " << dir << '\n';
+    Geom::PointWidthSet bpoints;
+    if (!viaEscape) {
+      for (auto& bp : findBoundaryPoints(r, z, dir, points)) {
+        const auto coord = std::make_pair(bp.first.x(), bp.first.y());
+        if (points.find(bp) != points.end()) continue;
+        if (_nodes[z].count(coord) && !boundaryAdded.count(coord)) continue;
+        bpoints.insert(bp);
+        boundaryAdded.insert(coord);
+      }
+    }
     for (auto& pp : points) {
       auto& p = pp.first;
-      const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
-      const int pen = static_cast<int>(_cf.offCentreEscapeCost(offc));
+      int pen = 0;
+      if (biased) {
+        const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
+        pen = static_cast<int>(_cf.offCentreEscapeCost(offc));
+      }
       auto n = createNode(p.x(), p.y(), z, nullptr,
                           src ? fcost + pen : fcost,
                           src ? tcost : tcost + pen);
@@ -692,6 +772,26 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
 #if DEBUG
       n->print((src ? "src" : "tgt"));
 #endif
+      dest.insert(n);
+      _bbox.merge(n->x(), n->y(), n->x(), n->y());
+    }
+    for (auto& pp : bpoints) {
+      auto& p = pp.first;
+      const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
+      const int pen = static_cast<int>(_cf.offCentreEscapeCost(offc));
+      auto n = createNode(p.x(), p.y(), z, nullptr,
+                          src ? fcost + pen : fcost,
+                          src ? tcost : tcost + pen);
+      n->setNoVia();
+      n->expand(dir, true);
+      if (dir == EAST) {
+        n->sethwx(pp.second/2);
+        n->expand(WEST, true);
+      }
+      if (dir == NORTH) {
+        n->sethwy(pp.second/2);
+        n->expand(SOUTH, true);
+      }
       dest.insert(n);
       _bbox.merge(n->x(), n->y(), n->x(), n->y());
     }
@@ -769,6 +869,10 @@ void Router::setexpand(Node* newn, const Node* parent) const
         newn->expand(DOWN, true);
       }
     }
+  }
+  if (newn->noVia()) {
+    newn->expand(UP, false);
+    newn->expand(DOWN, false);
   }
   if (_cf.hcost(newn->z()) == _cf.vcost(newn->z()) && _cf.hcost(newn->z()) == COST_MAX) {
     newn->expand(NORTH, false);
@@ -1163,6 +1267,50 @@ Geom::Rects splitRects(const Geom::Rects& tobs)
   return false;
 }*/
 
+static inline int snapLow(const int v, const int prec)
+{
+  if (prec == 0) return v;
+  const int r = v % prec;
+  return (r != 0) ? (v - r) : v;
+}
+
+static inline int snapHigh(const int v, const int prec)
+{
+  if (prec == 0) return v;
+  const int r = v % prec;
+  return (r != 0) ? (v + (prec - r)) : v;
+}
+
+template <class Iter>
+static void addRingCoords(Iter first, Iter last, const Geom::Rect& bbox, const int prec,
+    std::set<int>& xcoords, std::set<int>& ycoords)
+{
+  std::vector<typename std::iterator_traits<Iter>::value_type> pts(first, last);
+  const size_t n = pts.size();
+  if (n < 3) return;
+  long long area2 = 0;
+  for (size_t i = 0; i < n; ++i) {
+    const auto& p = pts[i];
+    const auto& q = pts[(i + 1) % n];
+    area2 += static_cast<long long>(p.x()) * q.y() - static_cast<long long>(q.x()) * p.y();
+  }
+  const bool ccw = (area2 > 0);
+  for (size_t i = 0; i < n; ++i) {
+    const auto& p = pts[i];
+    const auto& q = pts[(i + 1) % n];
+    if (p.x() == q.x() && p.y() == q.y()) continue;
+    if (p.x() == q.x()) {
+      if (std::min(p.y(), q.y()) > bbox.ymax() || std::max(p.y(), q.y()) < bbox.ymin()) continue;
+      const int x = ((q.y() > p.y()) == ccw) ? snapHigh(p.x(), prec) : snapLow(p.x(), prec);
+      if (x >= bbox.xmin() && x <= bbox.xmax()) xcoords.insert(x);
+    } else if (p.y() == q.y()) {
+      if (std::min(p.x(), q.x()) > bbox.xmax() || std::max(p.x(), q.x()) < bbox.xmin()) continue;
+      const int y = ((q.x() > p.x()) == ccw) ? snapLow(p.y(), prec) : snapHigh(p.y(), prec);
+      if (y >= bbox.ymin() && y <= bbox.ymax()) ycoords.insert(y);
+    }
+  }
+}
+
 void coverHoles(PolySet& ps, const PolySet& src, const PolySet& tgt)
 {
   PPolyWHs pwhs;
@@ -1230,16 +1378,23 @@ void Router::generateHananGrid()
   for (auto& it: _tobstacles) {
     _ltree.emplace(it.first, Geom::RTree2D(it.second));
   }
-  for (auto& l : _tobstacles) {
+  for (auto& l : _ptobstacles) {
     if (l.first > _maxLayer) continue;
-    for (auto& o : l.second) {
-      if (!o.overlaps(_bbox)) continue;
-      auto osnapped{o};
-      osnapped.snap(_precision);
-      xcoords.insert(osnapped.xmin());
-      xcoords.insert(osnapped.xmax());
-      ycoords.insert(osnapped.ymin());
-      ycoords.insert(osnapped.ymax());
+    const auto layer = l.first;
+    int sx{0}, sy{0};
+    if (layer < static_cast<int>(_widthx.size())) {
+      sx = spacex(layer) + ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1));
+      sy = spacey(layer) + ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1));
+    }
+    PolySet bloated(l.second);
+    if (sx > 0 || sy > 0) bloated.bloat(sx, sx, sy, sy);
+    PPolyWHs pwhs;
+    bloated.get(pwhs);
+    for (auto& pwh : pwhs) {
+      addRingCoords(pwh.begin(), pwh.end(), _bbox, _precision, xcoords, ycoords);
+      for (auto ith = pwh.begin_holes(); ith != pwh.end_holes(); ++ith) {
+        addRingCoords(ith->begin(), ith->end(), _bbox, _precision, xcoords, ycoords);
+      }
     }
   }
   for (bool src : {true, false}) {
@@ -1387,6 +1542,179 @@ void Router::buildSol(Geom::LayerRects& sol)
   }
 }
 
+bool Router::patternRun(const int x, const int y, const int z, const bool vert, const int to) const
+{
+  const int from = vert ? y : x;
+  if (to == from) return true;
+  const Node probe(x, y, z);
+  const int reach = snap(&probe, vert, to > from);
+  return (to > from) ? (reach >= to) : (reach <= to);
+}
+
+bool Router::patternVias(const int x, const int y, int zf, const int zt, std::vector<PatWp>& w,
+    ViaCache& vc) const
+{
+  while (zf != zt) {
+    const bool up = (zt > zf);
+    if (up ? (zf >= _maxLayer) : (zf <= _minLayer)) return false;
+    // isViaValid builds a Via and hits the R-tree, which is far too expensive to
+    // repeat for every shape and layer pair that probes the same spot.
+    const auto key = std::make_tuple(x, y, zf, up);
+    auto it = vc.find(key);
+    if (it == vc.end()) {
+      const Node probe(x, y, zf);
+      const Via* v = isViaValid(&probe, up);
+      it = vc.emplace(key, v != nullptr).first;
+      delete v;   // only probing; the winner re-queries when it materialises
+    }
+    if (!it->second) return false;
+    zf += up ? 1 : -1;
+    w.push_back({x, y, zf, true});
+  }
+  return true;
+}
+
+CostType Router::patternCost(const std::vector<PatWp>& w) const
+{
+  if (w.size() < 2) return 0;
+  std::vector<Node*> tmp;         // Node's ctor/dtor are private to Router
+  tmp.reserve(w.size());
+  for (size_t i = 0; i < w.size(); ++i) {
+    tmp.push_back(new Node(w[i].x, w[i].y, w[i].z, 0, 0, i ? tmp[i - 1] : nullptr));
+  }
+  CostType c{0};
+  for (size_t i = 1; i < tmp.size(); ++i) c += _cf.deltaCost(*tmp[i], *tmp[i - 1]);
+  for (auto* n : tmp) delete n;
+  return c;
+}
+
+bool Router::patternRoute()
+{
+  if (_sources.empty() || _targets.empty()) return false;
+  std::vector<int> hl, vl;
+  for (int z = _minLayer; z <= _maxLayer; ++z) {
+    if (_cf.hcost(z) < COST_MAX) hl.push_back(z);
+    if (_cf.vcost(z) < COST_MAX) vl.push_back(z);
+  }
+  if (hl.empty() || vl.empty()) return false;
+
+  ViaCache vc;                    // shared across every shape tried this call
+  auto push = [](std::vector<PatWp>& w, const int x, const int y, const int z) {
+    if (w.empty() || w.back().x != x || w.back().y != y || w.back().z != z) w.push_back({x, y, z, false});
+  };
+
+  auto buildL = [&](const Node* s, const Node* t, const bool xfirst, const int za, const int zb,
+                    std::vector<PatWp>& w) -> bool {
+    w.clear();
+    w.push_back({s->x(), s->y(), s->z(), false});
+    int cx = s->x(), cy = s->y();
+    if (!patternVias(cx, cy, s->z(), za, w, vc)) return false;
+    if (!patternRun(cx, cy, za, !xfirst, xfirst ? t->x() : t->y())) return false;
+    if (xfirst) cx = t->x(); else cy = t->y();
+    push(w, cx, cy, za);
+    if (!patternVias(cx, cy, za, zb, w, vc)) return false;
+    if (!patternRun(cx, cy, zb, xfirst, xfirst ? t->y() : t->x())) return false;
+    if (xfirst) cy = t->y(); else cx = t->x();
+    push(w, cx, cy, zb);
+    if (!patternVias(cx, cy, zb, t->z(), w, vc)) return false;
+    return w.back().x == t->x() && w.back().y == t->y() && w.back().z == t->z();
+  };
+
+  auto buildZ = [&](const Node* s, const Node* t, const bool xfirst, const int za, const int zb,
+                    const int mid, std::vector<PatWp>& w) -> bool {
+    w.clear();
+    w.push_back({s->x(), s->y(), s->z(), false});
+    int cx = s->x(), cy = s->y();
+    if (!patternVias(cx, cy, s->z(), za, w, vc)) return false;
+    if (!patternRun(cx, cy, za, !xfirst, mid)) return false;
+    if (xfirst) cx = mid; else cy = mid;
+    push(w, cx, cy, za);
+    if (!patternVias(cx, cy, za, zb, w, vc)) return false;
+    if (!patternRun(cx, cy, zb, xfirst, xfirst ? t->y() : t->x())) return false;
+    if (xfirst) cy = t->y(); else cx = t->x();
+    push(w, cx, cy, zb);
+    if (!patternVias(cx, cy, zb, za, w, vc)) return false;
+    if (!patternRun(cx, cy, za, !xfirst, xfirst ? t->x() : t->y())) return false;
+    if (xfirst) cx = t->x(); else cy = t->y();
+    push(w, cx, cy, za);
+    if (!patternVias(cx, cy, za, t->z(), w, vc)) return false;
+    return w.back().x == t->x() && w.back().y == t->y() && w.back().z == t->z();
+  };
+
+  std::vector<PatWp> w, best;
+  CostType bestcost{CostTypeMax}, bestlb{CostTypeMax};
+  const Node* bests{nullptr};
+  const Node* bestt{nullptr};
+
+  std::vector<std::pair<CostType, std::pair<const Node*, const Node*>>> pairs;
+  pairs.reserve(_sources.size() * _targets.size());
+  for (auto* s : _sources) {
+    for (auto* t : _targets) pairs.emplace_back(_cf.deltaCost(*s, *t), std::make_pair(s, t));
+  }
+  std::sort(pairs.begin(), pairs.end(),
+      [](const auto& a, const auto& b) { return a.first < b.first; });
+  if (pairs.size() > PATTERN_PAIRS) pairs.resize(PATTERN_PAIRS);
+  {
+    for (auto& pr : pairs) {
+      const CostType lb = pr.first;
+      const Node* s = pr.second.first;
+      const Node* t = pr.second.second;
+      if (lb >= bestcost) break;              // sorted: nothing later can win
+      auto keep = [&]() {
+        const CostType c = patternCost(w);
+        if (c < bestcost) { bestcost = c; best = w; bests = s; bestt = t; bestlb = lb; }
+      };
+      for (const bool xfirst : {true, false}) {
+        const auto& first  = xfirst ? hl : vl;
+        const auto& second = xfirst ? vl : hl;
+        for (const int za : first) {
+          if (bestcost <= lb) break;              // already at the bound, nothing to gain
+          for (const int zb : second) {
+            if (buildL(s, t, xfirst, za, zb, w)) keep();
+            if (bestcost <= lb) break;
+          }
+        }
+      }
+      if (bestcost <= lb) continue;               // an L already hit the bound
+      for (const bool xfirst : {true, false}) {
+        const auto& first  = xfirst ? hl : vl;
+        const auto& second = xfirst ? vl : hl;
+        const int lo = std::min(xfirst ? s->x() : s->y(), xfirst ? t->x() : t->y());
+        const int hi = std::max(xfirst ? s->x() : s->y(), xfirst ? t->x() : t->y());
+        for (const int za : first) {
+          for (const int zb : second) {
+            const auto& g = xfirst ? _hanangridv[zb] : _hanangridh[zb];
+            int tried = 0;
+            for (auto it = g.upper_bound(lo); it != g.end() && it->first < hi && tried < PATTERN_MIDS; ++it, ++tried) {
+              if (buildZ(s, t, xfirst, za, zb, it->first, w)) keep();
+              if (bestcost <= lb) break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!bests || bestcost > bestlb) return false;   // not provably optimal: let A* run
+
+  const Node* prev = bests;
+  for (size_t i = 1; i < best.size(); ++i) {
+    Node* cur = createNode(best[i].x, best[i].y, best[i].z, prev);
+    if (!cur) return false;
+    cur->setParent(prev);
+    if (best[i].z != prev->z()) {
+      const Via* v = isViaValid(prev, best[i].z > prev->z());
+      if (!v) return false;
+      Node* p = const_cast<Node*>(prev);
+      if (best[i].z > prev->z()) p->upVia(v); else p->dnVia(v);
+    }
+    evalFCost(cur);
+    prev = cur;
+  }
+  _sol = const_cast<Node*>(prev);
+  return _sol == bestt;
+}
+
 Geom::LayerRects Router::findSol()
 {
   TIME_M();
@@ -1473,11 +1801,12 @@ Geom::LayerRects Router::findSol()
         evalTCost(s);
         if (!s->closed()) insertToPQ(s);
       }
+      _exploredEdges.clear();
 #if DEBUG
 #else
       if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
 #endif
-        writeLEF(attempt ? "ATTEMPT_1" : "ATTEMPT_0");
+        writeLEF("ATTEMPT_" + std::to_string(_attemptno) + (attempt ? "_1" : "_0"));
 
 #if DEBUG
       for (unsigned l = 0; l < _hanangridh.size(); ++l) {
@@ -1503,11 +1832,15 @@ Geom::LayerRects Router::findSol()
 #endif
 
       std::vector<unsigned> layerExpansions(_maxLayer + 1, 0);
-      while (!_pq.empty()) {
+      const bool patterned = patternRoute();
+      if (patterned) {
+        COUT << "sol found with pattern! cost " << _sol->fcost() << " for " << _name << std::endl;
+      }
+      while (!patterned && !_pq.empty()) {
         auto t = const_cast<Node*>(*_pq.begin());
         if (_targets.find(t) != _targets.end()) {
           _sol = t;
-          COUT << "sol found with " << _expansions << " expansions!" << std::endl;
+          COUT << "sol found with " << _expansions << " expansions! cost " << t->fcost() << " for " << _name << std::endl;
           for (unsigned i = 0; i < layerExpansions.size(); ++i) {
             COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
           }
@@ -1515,6 +1848,9 @@ Geom::LayerRects Router::findSol()
         }
         _pq.erase(_pq.begin());
         ++layerExpansions[t->z()];
+        if (auto parent = t->parent()) {
+          _exploredEdges.push_back({t->x(), t->y(), t->z(), parent->x(), parent->y(), parent->z()});
+        }
         expandNode(t);
         ++_expansions;
         if (_expansions >= _maxExpansions) break;
@@ -1524,6 +1860,11 @@ Geom::LayerRects Router::findSol()
         for (unsigned i = 0; i < layerExpansions.size(); ++i) {
           COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
         }
+#if DEBUG
+#else
+        if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
+#endif
+          writeLEF("ATTEMPT_" + std::to_string(_attemptno) + (attempt ? "_1" : "_0"));
       }
       minExpansions = std::min(minExpansions, _expansions);
       _pq.clear();
@@ -1539,7 +1880,7 @@ Geom::LayerRects Router::findSol()
 #else
       if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
 #endif
-        writeLEF("ATTEMPT_2");
+        writeLEF("ATTEMPT_" + std::to_string(_attemptno) + "_2");
       auto savedNdrWidthx = _ndrwidthx;
       auto savedNdrWidthy = _ndrwidthy;
       for (auto src : {true, false}) {
@@ -2181,6 +2522,100 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
   return via;
 }
 
+Geom::Rects intersectPObstacles(const LayerPolySet& pobs, const LayerPolySet& ptobs,
+                                 const int layer, const Geom::Rect& query)
+{
+  Geom::Rects hit;
+  PolySet q;
+  q += PRect(query.xmin(), query.ymin(), query.xmax(), query.ymax());
+  for (const LayerPolySet* lps : {&pobs, &ptobs}) {
+    auto it = lps->find(layer);
+    if (it == lps->end()) continue;
+    PolySet overlap = q & it->second;
+    PRects prects;
+    get_rectangles(prects, overlap);
+    for (auto& pr : prects) {
+      hit.emplace_back(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
+    }
+  }
+  return hit;
+}
+
+std::vector<ViaEscapeAttempt> Router::diagnoseViaEscape(const Node* n, const bool up) const
+{
+  std::vector<ViaEscapeAttempt> attempts;
+  const auto& vias = up ? _upVias[n->z()] : _dnVias[n->z()];
+  if ((up && n->z() >= _maxLayer) || (!up && n->z() <= _minLayer) || vias.empty()) return attempts;
+  const auto adjLayer = up ? _aboveViaLayer[n->z()] : _belowViaLayer[n->z()];
+  if (adjLayer < 0) return attempts;
+  for (auto& v : vias) {
+    Via via(*v, Geom::Point(n->x(), n->y()));
+    ViaEscapeAttempt att;
+    att.lowerLayer = via.l();
+    att.upperLayer = via.u();
+    att.viaLayer = via.c();
+    att.lpad = via.lpad();
+    att.upad = via.upad();
+    for (auto& c : via.cuts()) att.cuts.push_back(c);
+
+    bool ok = true;
+    // cut-to-obstacle spacing, on the via layer itself
+    auto it = _ltree.find(adjLayer);
+    if (it != _ltree.end()) {
+      Geom::Rects nbrs;
+      it->second.search(nbrs, via.bbox().bloatby(_lf.spacex(adjLayer), _lf.spacey(adjLayer)));
+      for (auto& c : via.cuts()) {
+        bool cutBlocked = false;
+        for (auto& o : nbrs) {
+          if (o.bloatby(_lf.spacex(adjLayer), _lf.spacey(adjLayer)).overlaps(c, false)) {
+            cutBlocked = true;
+            break;
+          }
+        }
+        if (cutBlocked) {
+          ok = false;
+          att.blockedLayer = adjLayer;
+          auto obs = intersectPObstacles(_pobstacles, _ptobstacles, adjLayer, c.bloatby(_lf.spacex(adjLayer), _lf.spacey(adjLayer)));
+          att.blockingObs.insert(att.blockingObs.end(), obs.begin(), obs.end());
+        }
+      }
+    }
+
+    const bool relaxThisVia =
+        (_relaxSrcViaEscape && (isSourceAt(n->x(), n->y(), via.l()) || isSourceAt(n->x(), n->y(), via.u()))) ||
+        (_relaxTgtViaEscape && (isTargetAt(n->x(), n->y(), via.l()) || isTargetAt(n->x(), n->y(), via.u())));
+    for (bool lower : {true, false}) {
+      auto l = (lower ? via.l() : via.u());
+      auto itp = _ltree.find(l);
+      if (itp == _ltree.end()) continue;
+      Geom::Rect p = (lower ? via.lpad() : via.upad());
+      Geom::Rects nbrs;
+      itp->second.search(nbrs, p.bloatby(spacex(l), spacey(l)));
+      bool padBlocked = false;
+      for (auto o : nbrs) {
+        o.expand(-widthy(l)/2, -widthx(l)/2);
+        if (relaxThisVia) {
+          o.expand(-std::max(0, spacex(l) - MIN_ESCAPE_SPACE),
+                   -std::max(0, spacey(l) - MIN_ESCAPE_SPACE));
+        }
+        if (o.overlaps(p, true)) {
+          padBlocked = true;
+          break;
+        }
+      }
+      if (padBlocked) {
+        ok = false;
+        att.blockedLayer = l;
+        auto obs = intersectPObstacles(_pobstacles, _ptobstacles, l, p.bloatby(spacex(l), spacey(l)));
+        att.blockingObs.insert(att.blockingObs.end(), obs.begin(), obs.end());
+      }
+    }
+    att.accessible = ok;
+    attempts.push_back(std::move(att));
+  }
+  return attempts;
+}
+
 void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
 {
   _upVias.clear();
@@ -2330,6 +2765,53 @@ void Router::writeLEF(const std::string& prefix, const Geom::LayerRects* sol) co
       ofs << "          RECT " << (1.*(s->x() - 10)/_uu) << ' ' << (1.*(s->y() - 10)/_uu) << ' ' << (1.*(s->x() + 10)/_uu) << ' ' << (1.*(s->y() + 10)/_uu) << " ;\n";
     }
     ofs << "      END\n    END TGTNODES\n";
+    auto emitViaAttempts = [&](const NodeSet& nodes, const char* srcOrTgt) {
+      int idx = 0;
+      for (auto& n : nodes) {
+        for (bool up : {true, false}) {
+          auto attempts = diagnoseViaEscape(n, up);
+          if (attempts.empty()) continue;
+          const bool allBlocked = std::all_of(attempts.begin(), attempts.end(),
+              [](const ViaEscapeAttempt& a) { return !a.accessible; });
+          if (!allBlocked) continue;
+          int viaNum = 1;
+          for (auto& att : attempts) {
+            std::string viaSuffix = "_" + std::to_string(viaNum);
+            std::string pinName = "BLOCKED_VIA_" + std::string(srcOrTgt) + "_" + std::to_string(idx)
+                                 + "_" + (up ? "UP" : "DN") + viaSuffix;
+            ofs << "    PIN " << pinName << "\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+            ofs << "        LAYER VIA_" << LAYER_NAMES[att.lowerLayer] << viaSuffix << " ;\n";
+            ofs << "          RECT " << (1.*att.lpad.xmin()/_uu) << ' ' << (1.*att.lpad.ymin()/_uu) << ' '
+                << (1.*att.lpad.xmax()/_uu) << ' ' << (1.*att.lpad.ymax()/_uu) << " ;\n";
+            ofs << "        LAYER VIA_" << LAYER_NAMES[att.upperLayer] << viaSuffix << " ;\n";
+            ofs << "          RECT " << (1.*att.upad.xmin()/_uu) << ' ' << (1.*att.upad.ymin()/_uu) << ' '
+                << (1.*att.upad.xmax()/_uu) << ' ' << (1.*att.upad.ymax()/_uu) << " ;\n";
+            if (!att.cuts.empty() && att.viaLayer >= 0 && static_cast<size_t>(att.viaLayer) < LAYER_NAMES.size()) {
+              ofs << "        LAYER VIA_" << LAYER_NAMES[att.viaLayer] << viaSuffix << " ;\n";
+              for (auto& c : att.cuts) {
+                ofs << "          RECT " << (1.*c.xmin()/_uu) << ' ' << (1.*c.ymin()/_uu) << ' '
+                    << (1.*c.xmax()/_uu) << ' ' << (1.*c.ymax()/_uu) << " ;\n";
+              }
+            }
+            ofs << "      END\n    END " << pinName << "\n";
+            if (!att.blockingObs.empty() && att.blockedLayer >= 0) {
+              std::string drcName = "DRC_" + pinName;
+              ofs << "    PIN " << drcName << "\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+              ofs << "        LAYER VIA_" << LAYER_NAMES[att.blockedLayer] << "_DRC" << viaSuffix << " ;\n";
+              for (auto& o : att.blockingObs) {
+                ofs << "          RECT " << (1.*o.xmin()/_uu) << ' ' << (1.*o.ymin()/_uu) << ' '
+                    << (1.*o.xmax()/_uu) << ' ' << (1.*o.ymax()/_uu) << " ;\n";
+              }
+              ofs << "      END\n    END " << drcName << "\n";
+            }
+            ++viaNum;
+          }
+        }
+        ++idx;
+      }
+    };
+    emitViaAttempts(_sources, "SRC");
+    emitViaAttempts(_targets, "TGT");
     if (sol) {
       ofs << "    PIN SOL\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
       for (auto& l : *sol) {
@@ -2356,6 +2838,31 @@ void Router::writeLEF(const std::string& prefix, const Geom::LayerRects* sol) co
       }
     }
     ofs << "      END\n    END GRID\n";
+    std::map<int, Geom::Rects> exploredByLayer;
+    for (auto& e : _exploredEdges) {
+      const int x = e[0], y = e[1], z = e[2], px = e[3], py = e[4], pz = e[5];
+      if (z == pz) {
+        const int xlo = std::min(x, px), xhi = std::max(x, px);
+        const int ylo = std::min(y, py), yhi = std::max(y, py);
+        if (xlo == xhi) {
+          exploredByLayer[z].emplace_back(xlo - 1, ylo, xhi + 1, yhi);
+        } else {
+          exploredByLayer[z].emplace_back(xlo, ylo - 1, xhi, yhi + 1);
+        }
+      } else {
+        exploredByLayer[z].emplace_back(x - 5, y - 5, x + 5, y + 5);
+      }
+    }
+    for (auto& l : exploredByLayer) {
+      if (l.first < 0 || static_cast<size_t>(l.first) >= LAYER_NAMES.size()) continue;
+      ofs << "    PIN EXPLORED_GRIDS_" << LAYER_NAMES[l.first] << "\n      DIRECTION INOUT ;\n      USE SIGNAL ;\n      PORT\n";
+      ofs << "        LAYER " << LAYER_NAMES[l.first] << "_EXPLORED ;\n";
+      for (auto& r : l.second) {
+        ofs << "          RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' '
+          << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
+      }
+      ofs << "      END\n    END EXPLORED_GRIDS_" << LAYER_NAMES[l.first] << "\n";
+    }
     ofs << "    OBS\n";
     if (!_tobstacles.empty() || !_obstacles.empty()) {
       for (auto temp : {true, false}) {

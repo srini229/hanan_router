@@ -16,6 +16,11 @@ using std::map;
 
 class Transform;
 
+static inline int wsub(const int a, const int b)
+{ return static_cast<int>(static_cast<unsigned>(a) - static_cast<unsigned>(b)); }
+static inline int wadd(const int a, const int b)
+{ return static_cast<int>(static_cast<unsigned>(a) + static_cast<unsigned>(b)); }
+
 class Point {
   private:
     int _x, _y;
@@ -134,9 +139,9 @@ class Rect {
       return Rect(xmin() - x1, ymin() - y1, xmax() + x2, ymax() + y2);
     }
     
-    int width()  const { return xmax()  - xmin(); }
-    int height() const { return ymax()  - ymin(); }
-    int halfpm() const { return width() + height(); }
+    int width()  const { return wsub(xmax(), xmin()); }
+    int height() const { return wsub(ymax(), ymin()); }
+    int halfpm() const { return wadd(width(), height()); }
 
     void translate(const int x, const int y) { _ll.translate(x, y); _ur.translate(x, y); }
 
@@ -215,7 +220,7 @@ class Transform {
     }
     Point transform(const Point& pt) const
     {
-      return Point(_o.x() + _sX * pt.x(), _o.y() + _sY * pt.y());
+      return Point(wadd(_o.x(), _sX * pt.x()), wadd(_o.y(), _sY * pt.y()));
     }
     Rect transform(const Rect& r) const
     {

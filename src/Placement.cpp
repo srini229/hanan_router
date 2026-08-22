@@ -9,6 +9,7 @@
 #include <functional>
 
 #include <algorithm>
+#include <random>
 #include <thread>
 #include <mutex>
 #include <queue>
@@ -650,6 +651,15 @@ void Module::route(Router::Router& router, const std::string& outdir)
 
     auto routeAllNets = [&](const bool addAdjObstacles) -> bool {
       if (!_sympairs.empty()) enforceSymOrder(nets);
+      COUT << "ROUTING_ORDER attempt=" << router.attemptNo()
+           << " phase=" << (addAdjObstacles ? "adj-retry" : "base")
+           << ' ' << Router::Router::attemptModeName(router.attemptNo()) << " : ";
+      for (size_t i = 0; i < nets.size(); ++i) {
+        if (i) COUT << ", ";
+        COUT << nets[i]->name();
+      }
+      if (nets.empty()) COUT << "(none)";
+      COUT << '\n';
       Geom::LayerRects netObstaclesRouted;
       bool anyUnrouted{false};
       std::vector<std::vector<size_t>> batches = buildBatches();
@@ -732,7 +742,9 @@ void Module::route(Router::Router& router, const std::string& outdir)
     // one full routing attempt on the current 'nets' ordering: route once, and
     // if anything is open retry with adjacent-layer pin obstacles. Always starts
     // from a clean (snapshot-restored) state so attempts are independent.
+    int attemptNo = 0;
     auto attempt = [&]() -> int {
+      router.setAttemptNo(++attemptNo);
       // Open-net dumping (when enabled) must fire only on the LAST routing of this
       // attempt -- the adjacent-obstacle retry if it runs, else the base route --
       // so an open net gets exactly one debug LEF reflecting its final context.
@@ -773,7 +785,35 @@ void Module::route(Router::Router& router, const std::string& outdir)
       std::unordered_map<const Net*, int> baseIdx;      // original tail position (tie-break)
       for (size_t i = pinned; i < nets.size(); ++i) baseIdx[nets[i]] = static_cast<int>(i);
 
-      for (int pass = 0; pass < passes && bestUnrouted > 0; ++pass) {
+      auto normalize = [&](NetsVec o) -> NetsVec {
+        if (!_sympairs.empty()) enforceSymOrder(o);
+        return o;
+      };
+      auto openTail = [&]() -> NetsVec {          // nets the live routes left open
+        NetsVec o;
+        for (size_t i = pinned; i < nets.size(); ++i) {
+          Net* v = nets[i];
+          if (!v->excluded() && v->routable() && v->unrouted()) o.push_back(v);
+        }
+        return o;
+      };
+
+      typedef std::pair<int, NetsVec> OrderKey;   // (attempt mode, ordering)
+      auto keyFor = [&](const NetsVec& o) -> OrderKey {
+        // the attempt this ordering would be routed as is the next one
+        return OrderKey(Router::Router::attemptMode(attemptNo + 1), o);
+      };
+      std::map<OrderKey, NetsVec> tried;          // (mode, ordering) -> nets it left open
+      NetsVec openNets = openTail();              // open nets of the latest ordering
+      NetsVec routedOrder = nets;                 // ordering the live routes came from
+      tried[OrderKey(Router::Router::attemptMode(attemptNo), nets)] = openNets;
+
+      std::mt19937 rng(0);
+      bool randomOrder = false;
+      const int maxIters = passes * 8;
+      const int maxShuffles = 64;
+      int pass = 0;
+      for (int iter = 0; pass < passes && iter < maxIters && bestUnrouted > 0; ++iter) {
         // Reordering has had a few goes at the open nets; if they are still open
         // the corridor is the more likely culprit, so stop enforcing it.
         if (pass == Router::Router::RSMT_RELAX_AFTER_PASS && router.rsmtCorridor()) {
@@ -781,38 +821,59 @@ void Module::route(Router::Router& router, const std::string& outdir)
                << pass << " reorder pass(es)\n";
           router.setRSMTCorridor(false);
         }
-        // raise the priority of every net the latest attempt left open: a net
-        // that stays blocked keeps climbing until it routes before the rest.
-        bool any = false;
-        for (size_t i = pinned; i < nets.size(); ++i) {
-          Net* v = nets[i];
-          if (!v->excluded() && v->routable() && v->unrouted()) { ++blockCount[v]; any = true; }
+        if (openNets.empty()) break;
+        for (Net* v : openNets) ++blockCount[v];
+
+        if (!randomOrder) {
+          NetsVec newOrder = nets;
+          std::stable_sort(newOrder.begin() + pinned, newOrder.end(),
+            [&](const Net* a, const Net* b) {
+              const int ba = blockCount[a], bb = blockCount[b];
+              if (ba != bb) return ba > bb;
+              return baseIdx[a] < baseIdx[b];
+            });
+          newOrder = normalize(std::move(newOrder));
+          if (newOrder == nets) {
+            randomOrder = true;
+            COUT << "module " << _name << " : promotion converged after " << pass
+                 << " pass(es); trying random net orderings (seed 0) for the rest\n";
+          } else {
+            nets = std::move(newOrder);
+            auto it = tried.find(keyFor(nets));
+            if (it != tried.end()) {
+              openNets = it->second;
+              continue;
+            }
+          }
         }
-        if (!any) break;
+        if (randomOrder) {
+          NetsVec cand;
+          bool found = false;
+          for (int t = 0; t < maxShuffles && !found; ++t) {
+            cand = nets;
+            std::shuffle(cand.begin() + pinned, cand.end(), rng);
+            cand = normalize(std::move(cand));
+            found = (tried.find(keyFor(cand)) == tried.end());
+          }
+          if (!found) break;      // nothing left that has not already been routed
+          nets = std::move(cand);
+        }
 
-        // re-sort descending block priority (original HPWL order breaks ties):
-        // nets that have been left open rise toward the front so they get first
-        // claim on the contested resources next time.
-        NetsVec newOrder = nets;
-        std::stable_sort(newOrder.begin() + pinned, newOrder.end(),
-          [&](const Net* a, const Net* b) {
-            const int ba = blockCount[a], bb = blockCount[b];
-            if (ba != bb) return ba > bb;
-            return baseIdx[a] < baseIdx[b];
-          });
-        if (newOrder == nets) break;              // order already converged; no progress
-
-        nets = std::move(newOrder);
+        const OrderKey key = keyFor(nets);
         const int u = attempt();
-        COUT << "  reorder pass " << (pass + 1) << "/" << passes << " : "
+        routedOrder = nets;
+        openNets = openTail();
+        tried[key] = openNets;
+        ++pass;
+        COUT << "  reorder pass " << pass << "/" << passes << " : "
              << u << " unrouted (best so far " << std::min(u, bestUnrouted) << ")\n";
         if (u < bestUnrouted) { bestUnrouted = u; bestOrder = nets; }
       }
-      // reproduce the best ordering found unless the last attempt already was it.
-      if (nets != bestOrder) {
+      const bool reroute = (routedOrder != bestOrder);
+      nets = bestOrder;
+      if (reroute) {
         COUT << "module " << _name << " : re-routing with best ordering ("
              << bestUnrouted << " unrouted)\n";
-        nets = bestOrder;
         attempt();
       }
     }
@@ -875,79 +936,65 @@ void Module::route(Router::Router& router, const std::string& outdir)
 void Module::checkShort() const
 {
   COUT << "Checking SHORTS for module : " << _name << '\n';
-  // Pre-compute each net's overall routed bounding box (in _nets order, so the
-  // reported pairs are unchanged) and skip net pairs whose boxes are disjoint --
-  // they cannot short, which avoids the O(shapes^2) inner comparison for the vast
-  // majority of pairs in a spread-out design.
-  std::vector<std::pair<const Net*, Geom::Rect>> nb;
-  nb.reserve(_nets.size());
+  using namespace boost::polygon::operators;
+  std::map<int, std::map<const Net*, PolySet>> byLayer;
   for (auto& n : _nets) {
-    Geom::Rect b;
-    for (auto& l : n.second.routeShapesWithPins())
-      for (auto& r : l.second) b.merge(r);
-    nb.emplace_back(&n.second, b);
+    if (n.second.excluded()) continue;
+    for (auto& l : n.second.routeShapesWithPins()) {
+      auto& ps = byLayer[l.first][&n.second];
+      for (auto& r : l.second) ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+    }
   }
-  for (size_t i = 0; i < nb.size(); ++i) {
-    for (size_t j = i + 1; j < nb.size(); ++j) {
-      if (!nb[i].second.valid() || !nb[j].second.valid()) continue;
-      if (!nb[i].second.overlaps(nb[j].second)) continue;  // disjoint -> cannot short
-      auto& s1 = nb[i].first->routeShapesWithPins();
-      auto& s2 = nb[j].first->routeShapesWithPins();
-      for (auto& l : s1) {
-        auto its2 = s2.find(l.first);
-        if (its2 == s2.end()) continue;
-        for (auto& o1 : l.second) {
-          for (auto& o2 : its2->second) {
-            if (o1.overlaps(o2) && o1 != o2) {
-              COUT << "SHORT (router or pin) between " << nb[i].first->name() << " & " << nb[j].first->name() << " @ layer : " << l.first << '\n';
-              COUT << o1.str() << ' ' << o2.str() << '\n';
-            }
-          }
+
+  int shorts = 0;
+  // net vs net
+  for (auto& lv : byLayer) {
+    const int z = lv.first;
+    std::vector<std::pair<const Net*, const PolySet*>> v;
+    v.reserve(lv.second.size());
+    for (auto& kv : lv.second) v.emplace_back(kv.first, &kv.second);
+    for (size_t i = 0; i < v.size(); ++i) {
+      for (size_t j = i + 1; j < v.size(); ++j) {
+        PolySet x(*v[i].second);
+        x &= *v[j].second;
+        PRects rs;
+        get_rectangles(rs, x);
+        for (const auto& r : rs) {
+          const Geom::Rect o(bp::xl(r), bp::yl(r), bp::xh(r), bp::yh(r));
+          COUT << "SHORT (router or pin) between " << v[i].first->name() << " & "
+               << v[j].first->name() << " @ layer : " << z << '\n';
+          COUT << o.str() << '\n';
+          ++shorts;
         }
       }
     }
   }
-  // Net-vs-obstacle shorts. Two redundancies are avoided: (1) whether an
-  // obstacle is covered by a pin (a legitimate route-to-pin overlap to ignore)
-  // depends only on the obstacle, so it is answered once via a pin R-tree instead
-  // of re-scanning every pin for every net; (2) a net only needs the obstacles
-  // near its routed bbox, found via an obstacle R-tree, rather than the whole set.
-  std::map<int, Geom::RTree2D> obsTree;
-  for (auto& l : _obstacles) obsTree.emplace(l.first, l.second);
-  std::map<int, Geom::Rects> pinShapes;
-  for (auto& pin : _pins)
-    for (auto& p : pin.second->ports())
-      for (auto& l : p->shapes())
-        for (auto& r : l.second) pinShapes[l.first].push_back(r);
-  std::map<int, Geom::RTree2D> pinTree;
-  for (auto& l : pinShapes) pinTree.emplace(l.first, l.second);
-  auto pinCovered = [&](int layer, const Geom::Rect& o2) -> bool {
-    auto it = pinTree.find(layer);
-    if (it == pinTree.end()) return false;
-    Geom::Rects hits;
-    it->second.search(hits, o2);
-    for (auto& h : hits) if (h.overlaps(o2)) return true;
-    return false;
-  };
-  for (auto& n : nb) {
-    if (!n.second.valid()) continue;
-    auto& s1 = n.first->routeShapesWithPins();
-    for (auto& l : s1) {
-      auto oit = obsTree.find(l.first);
-      if (oit == obsTree.end()) continue;
-      Geom::Rects obs;
-      oit->second.search(obs, n.second);   // only obstacles near this net's routes
-      for (auto& o2 : obs) {
-        if (pinCovered(l.first, o2)) continue;
-        for (auto& o1 : l.second) {
-          if (o1.overlaps(o2) && o1 != o2) {
-            COUT << "SHORT between " << n.first->name() << " & obstacle @ layer : " << l.first << '\n';
-            COUT << o1.str() << ' ' << o2.str() << '\n';
-          }
-        }
+
+  for (auto& n : _nets) {
+    if (n.second.excluded()) continue;
+    auto lit = n.second.routeShapesWithPins();
+    if (lit.empty()) continue;
+    const Geom::LayerRects obs = n.second.dropSameNetObstacles(_obstacles);
+    for (auto& lv : byLayer) {
+      const int z = lv.first;
+      auto nit = lv.second.find(&n.second);
+      if (nit == lv.second.end()) continue;
+      auto oit = obs.find(z);
+      if (oit == obs.end() || oit->second.empty()) continue;
+      PolySet ops;
+      for (const auto& r : oit->second) ops.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+      ops &= nit->second;
+      PRects rs;
+      get_rectangles(rs, ops);
+      for (const auto& r : rs) {
+        const Geom::Rect o(bp::xl(r), bp::yl(r), bp::xh(r), bp::yh(r));
+        COUT << "SHORT between " << n.second.name() << " & obstacle @ layer : " << z << '\n';
+        COUT << o.str() << '\n';
+        ++shorts;
       }
     }
   }
+  if (shorts) COUT << "SHORT_SUMMARY module " << _name << " : " << shorts << " short(s)\n";
 }
 
 int Module::checkDRC(const Router::Router& router) const

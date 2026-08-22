@@ -698,6 +698,80 @@ if [ -n "${MAZE_STRESS:-}" ]; then
     -l $IN/m1adj_escape.lef -ndr $IN/maze30_ndr.json
 fi
 
+# 36. MinSpacing: a metal layer whose "MinSpacing" is tighter than its pitch can
+#     deliver (M1 pitch 56 - width 32 = 24, MinSpacing 40). The router keeps
+#     routing at the pitch spacing but must warn that the final DRC check uses
+#     the larger of the two, naming both numbers and the pitch that would be
+#     needed. Covers DRC::MetalLayer::setMinSpace, which no other fixture sets.
+run_case minspacing "BLOCK_B_CONC_0.def" \
+  -d $IN/layers_minspace.json -p $IN/test1.placement_verilog.json -l $IN/test.lef
+MSLOG="$OUTROOT/minspacing/err.log"
+if grep -q "layer M1 pitch gives spacing 24 but MinSpacing is 40" "$MSLOG" 2>/dev/null; then
+  echo "PASS minspacing_warning"
+  PASS=$((PASS+1))
+else
+  echo "FAIL minspacing_warning :no-minspacing-warning;"
+  FAIL=$((FAIL+1))
+  ERRS="${ERRS}minspacing_warning:no-minspacing-warning;\n"
+fi
+
+# 37. deviation_cost: the symmetric-pair guide weight, read from the NDR module
+#     entry alongside symmetric_nets. Pins the JSON key -> Module::_devweight
+#     wiring (DRC/Placement::Module::setDeviationCost); this fixture's mirrored
+#     route is already the natural optimum, so the value itself does not change
+#     the result -- 0, 4 and 200 all give maxdev=0 -- and the assertion is that
+#     a non-default weight parses and still produces the exact mirror.
+LOGMUST="symmetric net : routing INM guided by INP|SYMMETRY module=SYM_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
+run_case deviation_cost "SYM_CONC_0.def" \
+  -d $IN/layers.json -p $IN/symmetric.placement_verilog.json -l $IN/symmetric.lef \
+  -ndr $IN/symmetric_devcost_ndr.json
+
+# 38. blocked-via diagnostics: the via_escape fixture (net A cannot route without
+#     -relaxvia) with per-wire debug dumping on. Every via escape is blocked, so
+#     writeLEF emits a BLOCKED_VIA_* pin per attempt, and for each one the
+#     obstacles that actually block it as a DRC_BLOCKED_VIA_* pin -- the latter
+#     only appears when Router::intersectPObstacles returns shapes, which no
+#     other case reaches.
+export HANAN_DEBUG_WIRE=1
+ALLOW_UNROUTED=1
+run_case via_escape_blocked_diag "" \
+  -d $IN/layers.json -p $IN/via_escape.placement_verilog.json \
+  -l $IN/via_escape.lef -ndr $IN/via_escape_ndr.json
+unset HANAN_DEBUG_WIRE
+if grep -lq "PIN DRC_BLOCKED_VIA" "$OUTROOT/via_escape_blocked_diag"/ATTEMPT_*.lef 2>/dev/null; then
+  echo "PASS via_escape_blocking_obstacles"
+  PASS=$((PASS+1))
+else
+  echo "FAIL via_escape_blocking_obstacles :no-drc-blocked-via-pin;"
+  FAIL=$((FAIL+1))
+  ERRS="${ERRS}via_escape_blocking_obstacles:no-drc-blocked-via-pin;\n"
+fi
+
+# 39. replay: -replay re-routes a single wire straight out of a HANAN_DEBUG_WIRE
+#     dump, with no placement or LEF, so a failing net can be debugged on its
+#     own in the context it failed in. Reuses the ATTEMPT_*.lef that case 38
+#     just wrote for the via_escape net, which cannot route without -relaxvia,
+#     and checks the replay reaches the same verdict from the file alone.
+RPDUMP=$(ls "$OUTROOT/via_escape_blocked_diag"/ATTEMPT_*_0_*.lef 2>/dev/null | head -1)
+if [ -n "$RPDUMP" ]; then
+  RPDIR="$OUTROOT/replay"; rm -rf "$RPDIR"; mkdir -p "$RPDIR"
+  ( cd "$RPDIR" && "$ROUTER" -d "$IN/layers.json" -replay "../../$RPDUMP" \
+      -ndr "$IN/via_escape_ndr.json" -o ./ >/dev/null 2>stderr.log )
+  rperrs=""
+  grep -q "REPLAY RESULT open" "$RPDIR/route.log" 2>/dev/null || rperrs="$rperrs no-open-verdict;"
+  grep -q "obstacles=[1-9]" "$RPDIR/route.log" 2>/dev/null || rperrs="$rperrs no-obstacles-loaded;"
+  grep -q "num src : [1-9]" "$RPDIR/route.log" 2>/dev/null || rperrs="$rperrs no-source-nodes;"
+  grep -q "ndr=" "$RPDIR/route.log" 2>/dev/null || rperrs="$rperrs ndr-not-applied;"
+  if [ -z "$rperrs" ]; then
+    echo "PASS replay"; PASS=$((PASS+1))
+  else
+    echo "FAIL replay :$rperrs"; FAIL=$((FAIL+1)); ERRS="${ERRS}replay:$rperrs\n"
+  fi
+else
+  echo "FAIL replay :no-attempt-dump-to-replay;"; FAIL=$((FAIL+1))
+  ERRS="${ERRS}replay:no-attempt-dump-to-replay;\n"
+fi
+
 # 33. parallel speedup (opt-in, timing-based, ~2-4s): a batch of many disjoint,
 #     individually-expensive nets routes substantially faster with N worker
 #     threads than sequentially -- and lays down exactly the same wires. Off by
