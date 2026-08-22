@@ -765,6 +765,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
     // intermediate reorder ordering that leaves a net open -- but a later ordering
     // routes -- does not write a stale debug LEF. Suppress it during the search.
     const bool dumpOpen = router.dumpOpenNets();
+    const bool rsmtOn = router.rsmtCorridor();
     router.setDumpOpenNets(false);
 
     int bestUnrouted = attempt();
@@ -887,7 +888,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
       attempt();
       router.setDumpOpenNets(false);
     }
-    router.setRSMTCorridor(true);       // restore for sibling hierarchies
+    router.setRSMTCorridor(rsmtOn);     // restore for sibling hierarchies
     router.setDumpOpenNets(dumpOpen);   // restore for sibling hierarchies
 
     router.clearObstacles();

@@ -200,18 +200,18 @@ static Flute::FluteState* fluteState()
 // Drawing the corridor as its boundary rather than as the slabs it decomposes
 // into keeps the picture readable -- the slabs tile the interior and bury the
 // routing underneath them.
-static Geom::Rects outlineBoxes(const Geom::Rects& region, const int w)
+static Geom::Rects outlineBoxes(const Geom::Rects& region, const int w, int* nholes = nullptr)
 {
   Geom::Rects edges;
   if (region.empty()) return edges;
   PolySet ps;
   for (const auto& r : region) ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
-  PPolys polys;
+  PPolyWHs polys;
   ps.get(polys);
   const int lo = w / 2, hi = w - lo;
-  for (const auto& poly : polys) {
+  auto wall = [&](auto first, auto last) {
     std::vector<Geom::Point> pts;
-    for (auto it = poly.begin(); it != poly.end(); ++it) {
+    for (auto it = first; it != last; ++it) {
       pts.emplace_back(static_cast<int>(bp::x(*it)), static_cast<int>(bp::y(*it)));
     }
     for (size_t i = 0; i < pts.size(); ++i) {
@@ -224,6 +224,13 @@ static Geom::Rects outlineBoxes(const Geom::Rects& region, const int w)
         edges.emplace_back(a.x() - lo, std::min(a.y(), b.y()) - lo,
                            a.x() + hi, std::max(a.y(), b.y()) + hi);
       }
+    }
+  };
+  for (const auto& poly : polys) {
+    wall(poly.begin(), poly.end());
+    for (auto ith = poly.begin_holes(); ith != poly.end_holes(); ++ith) {
+      wall(ith->begin(), ith->end());
+      if (nholes) ++*nholes;
     }
   }
   return edges;
@@ -244,28 +251,44 @@ Geom::Rects Net::rsmtCorridor(const int margin) const
   for (auto& b : boxes) corridor.push_back(b.bloatby(margin, margin));
   if (boxes.size() < 2) return corridor;
 
-  auto* st = fluteState();
-  if (!st) return corridor;                 // no tables: corridor stays the pins
-  std::vector<FLUTE_DTYPE> xs, ys;
-  xs.reserve(boxes.size()); ys.reserve(boxes.size());
-  for (auto& b : boxes) {                   // pin centres, as asked
-    xs.push_back(static_cast<FLUTE_DTYPE>(b.xcenter()));
-    ys.push_back(static_cast<FLUTE_DTYPE>(b.ycenter()));
-  }
-  Flute::Tree t = Flute::flute(st, static_cast<int>(xs.size()), xs.data(), ys.data(), FLUTE_ACCURACY);
-  const int nb = 2 * t.deg - 2;
-  for (int i = 0; i < nb; ++i) {
-    const int j = t.branch[i].n;
-    if (j < 0 || j >= nb) continue;
-    const int x1 = t.branch[i].x, y1 = t.branch[i].y;
-    const int x2 = t.branch[j].x, y2 = t.branch[j].y;
-    // Each branch is rectilinear: lay it as an L, both legs widened to a band.
+  auto band = [&](const int x1, const int y1, const int x2, const int y2) {
     corridor.emplace_back(std::min(x1, x2) - margin, y1 - margin,
                           std::max(x1, x2) + margin, y1 + margin);
     corridor.emplace_back(x2 - margin, std::min(y1, y2) - margin,
                           x2 + margin, std::max(y1, y2) + margin);
+  };
+
+  std::vector<int> cx, cy;
+  cx.reserve(boxes.size()); cy.reserve(boxes.size());
+  for (auto& b : boxes) { cx.push_back(b.xcenter()); cy.push_back(b.ycenter()); }
+
+  if (boxes.size() == 2) {
+    band(cx[0], cy[0], cx[1], cy[1]);       // the single branch FLUTE would lay
+    _rsmtlen = std::abs(cx[0] - cx[1]) + std::abs(cy[0] - cy[1]);
+  } else if (boxes.size() == 3) {
+    std::vector<int> sx(cx), sy(cy);
+    std::nth_element(sx.begin(), sx.begin() + 1, sx.end());
+    std::nth_element(sy.begin(), sy.begin() + 1, sy.end());
+    const int mx = sx[1], my = sy[1];       // median point : the Steiner point for 3
+    _rsmtlen = 0;
+    for (size_t i = 0; i < cx.size(); ++i) {
+      band(cx[i], cy[i], mx, my);
+      _rsmtlen += std::abs(cx[i] - mx) + std::abs(cy[i] - my);
+    }
+  } else {
+    auto* st = fluteState();
+    if (!st) return corridor;               // no tables: corridor stays the pins
+    std::vector<FLUTE_DTYPE> xs(cx.begin(), cx.end()), ys(cy.begin(), cy.end());
+    Flute::Tree t = Flute::flute(st, static_cast<int>(xs.size()), xs.data(), ys.data(), FLUTE_ACCURACY);
+    _rsmtlen = t.length;
+    const int nb = 2 * t.deg - 2;
+    for (int i = 0; i < nb; ++i) {
+      const int j = t.branch[i].n;
+      if (j < 0 || j >= nb) continue;
+      band(t.branch[i].x, t.branch[i].y, t.branch[j].x, t.branch[j].y);
+    }
+    Flute::free_tree(st, t);
   }
-  Flute::free_tree(st, t);
 
   // The bands overlap heavily where branches meet. Merge them with
   // boost::polygon so the corridor is one rectilinear polygon rather than a pile
@@ -353,6 +376,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   SaveRestoreStream src(_name + "_route.log");
 #endif
   _unroute = 0;
+  _wirelen = 0;
   _openwires.clear();
   std::vector<const Pin*> sortedpins(_pins.begin(), _pins.end());
   std::sort(sortedpins.begin(), sortedpins.end(),
@@ -414,7 +438,8 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         for (const auto& c : crects) corridor.emplace_back(bp::xl(c), bp::yl(c), bp::xh(c), bp::yh(c));
       }
       _corridor = corridor;
-      _corridorEdges = outlineBoxes(corridor, RSMT_EDGE_WIDTH);
+      int nholes = 0;
+      _corridorEdges = outlineBoxes(corridor, RSMT_EDGE_WIDTH, &nholes);
       // The obstacle is the corridor's boundary itself -- the same thin walls the
       // LEF draws -- on every routing layer. A wall plus its spacing halo is
       // enough to stop the search crossing it, and it is a handful of rectangles
@@ -424,7 +449,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           for (int z = router.minLayer(); z <= router.maxLayer(); ++z) keepout[z].push_back(r);
         }
         COUT << "RSMT corridor for net " << _name << " : " << corridor.size()
-             << " band(s), boundary " << _corridorEdges.size() << " wall(s) on layers "
+             << " band(s), " << nholes << " hole(s), boundary " << _corridorEdges.size() << " wall(s) on layers "
              << router.minLayer() << ".." << router.maxLayer() << '\n';
       }
     }
@@ -440,6 +465,8 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       const auto& p2 = port2->shapes();
       //bool preflayersrctgt{true};
       Geom::LayerRects samenetobst;
+      auto addSrcTgtShapes = [&]() {
+      samenetobst.clear();
       for (auto src : {true, false}) {
         bool preflayer{false};
         for (auto& l : _preflayers) {
@@ -470,6 +497,8 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
+      };
+      addSrcTgtShapes();
       router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers, _ndrvias);
 #if DEBUG
       COUT << "adding line of sight nodes if they exist\n";
@@ -513,16 +542,23 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         COUT << "RSMT corridor blocked " << port1->name() << " -> " << port2->name()
              << " ; retrying without it\n";
         router.clearObstacles(true);
+        router.clearSourceTargets();
+        router.setName(_name + "__" + port1->name() + "__" + port2->name());
+        router.setMBox(bbox);
+        addSrcTgtShapes();
+        router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers, _ndrvias);
+        if (_detour) router.allowDetour();
         router.addObstacles(l1, true);
         router.addObstacles(l2, true);
-        router.addObstacles(l3, true);
-        router.addObstacles(_obstacles, true);
+        router.addObstacles(tracing ? l3t : l3, true);
+        router.addObstacles(tracing ? obt : _obstacles, true);
         router.addObstacles(samenetobst, true);
         sol = router.findSol();
       }
       // Not sol.empty(): a source and target that already coincide need zero
       // additional shapes and legitimately return an empty sol on success.
       if (router.lastSolutionFound()) {
+        _wirelen += router.solLength();
 #if DEBUG
         for (auto& l : sol) {
           for (auto& s : l.second) {

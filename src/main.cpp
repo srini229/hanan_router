@@ -13,6 +13,7 @@ int main(int argc, char* argv[])
       << "\t-reorder <N> (alternate net-ordering passes when nets remain unrouted; default 10)\n"
       << "\t-replay <ATTEMPT_*.lef> (re-route one wire from a HANAN_DEBUG_WIRE dump; needs -d only)\n"
       << "\t-detour (with -replay: allow a large detour even without NDR saying so)\n"
+      << "\t-rsmt (confine each net to a FLUTE Steiner corridor over its pins)\n"
       << "\t-threads <N> (route non-overlapping nets in parallel using N worker threads; default 1)\n"
       << "\t-relaxvia (in the final pass, for a net that still fails to route, retry its escape via with spacing relaxed to as close as 5 to, but never on, a shape -- source pins first, then also target pins if that alone isn't enough)\n"
       << "\t-v (verbose: emit high-volume per-element debug logging)\n";
@@ -41,11 +42,25 @@ int main(int argc, char* argv[])
   try {
     uu = std::stoi(parseArgs(argc, argv, "-uu"));
   } catch (const std::exception& e) {}
-  COUT << "Using options : -d " << layerJSONFile << " -p " << plfile << " -l " << leffile;
-  COUT << (uuflayer  ? " -s " : "") << " -uu " << uu;
-  COUT << (!ndrfile.empty() ? (" -ndr " + ndrfile) : "");
-  COUT << (!interlefdir.empty() ? (" -uil " + interlefdir) : "");
-  COUT << (!outdir.empty() ? (" -o " + outdir) : "./") << std::endl;
+  COUT << "Using options :";
+  for (int i = 1; i < argc; ++i) COUT << ' ' << argv[i];
+  COUT << std::endl;
+
+  // FLUTE's Attribution Assurance License, clause 1: a prominent display of the
+  // author's attribution each time a program depending on it is launched. This
+  // binary links FLUTE unconditionally, so the notice is unconditional too.
+  const bool rsmtOpt = checkArg(argc, argv, "-rsmt");
+  COUT << "========================================================================\n"
+       << " This program links FLUTE\n"
+       << "   Dr. Chris C. N. Chu\n"
+       << "   Iowa State University\n"
+       << "   http://home.eng.iastate.edu/~cnchu/\n"
+       << "   FLUTE Copyright (c) 2004 by Dr. Chris C. N. Chu, all rights reserved\n"
+       << " FLUTE is only used to build RSMT corridors, which the -rsmt flag turns\n"
+       << " on; without -rsmt no FLUTE code runs. This run: "
+       << (rsmtOpt ? "-rsmt given, FLUTE in use." : "-rsmt not given, FLUTE unused.") << '\n'
+       << "========================================================================"
+       << std::endl;
 
   DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 1));
   if (!linfo.populated())  {
@@ -78,6 +93,25 @@ int main(int argc, char* argv[])
     }
   }
   const bool relaxViaOpt = checkArg(argc, argv, "-relaxvia");
+  COUT << "Effective settings :"
+       << " -d " << (layerJSONFile.empty() ? "<none>" : layerJSONFile)
+       << " -p " << (plfile.empty() ? "<none>" : plfile)
+       << " -l " << (leffile.empty() ? "<none>" : leffile)
+       << " -o " << outdir
+       << " -uu " << uu
+       << " -r " << Router::Router::_precision
+       << " -sep " << SEPARATOR
+       << " -reorder " << hrdb.reorderPasses()
+       << " -threads " << hrdb.threads();
+  if (!ndrfile.empty())     COUT << " -ndr " << ndrfile;
+  if (!interlefdir.empty()) COUT << " -uil " << interlefdir;
+  if (uuflayer)             COUT << " -s";
+  if (relaxViaOpt)          COUT << " -relaxvia";
+  if (rsmtOpt)              COUT << " -rsmt";
+  if (checkArg(argc, argv, "-cornerescape")) COUT << " -cornerescape";
+  if (verboseLog())         COUT << " -v";
+  COUT << std::endl;
+  hrdb.setRSMTCorridor(rsmtOpt);
   const std::string replayfile = parseArgs(argc, argv, "-replay");
   if (!replayfile.empty()) {
     hrdb.setCornerEscape(checkArg(argc, argv, "-cornerescape"));
@@ -103,10 +137,12 @@ int main(int argc, char* argv[])
       Placement::Netlist netlist2(plfile, leffile, linfo, uu, ndrfile, interlefdir);
       netlist2.route(hrdb, outdir);
       netlist2.printRouteSummaries();   // one authoritative summary, final state
+      netlist2.printWirelengths();
       netlist2.checkShort();
       netlist2.checkDRC(hrdb);
     } else {
       netlist.printRouteSummaries();
+      netlist.printWirelengths();
       netlist.checkShort();
       netlist.checkDRC(hrdb);
     }

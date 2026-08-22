@@ -323,6 +323,7 @@ class Router {
     std::vector<Vias> _upVias, _dnVias;
     std::string _name;
     size_t _expansions{0};
+    long _sollen{0};
     const size_t _maxExpansions{100000};
     std::vector<int> _aboveViaLayer, _belowViaLayer;
     const DRC::LayerInfo& _lf;
@@ -335,7 +336,7 @@ class Router {
     bool _usepinwidth{false}, _debugplot{false};
     int _reorderPasses{10};
     int _threads{1};
-    bool _rsmtcorridor{true};
+    bool _rsmtcorridor{false};
     int _attemptno{1};
     bool _cornerEscape{false};
     bool _relaxViaEscape{false};
@@ -582,6 +583,7 @@ class Router {
     // check this instead of the returned shape list's emptiness, which is
     // also empty on a legitimate zero-length (already-coincident) solution.
     bool lastSolutionFound() const { return _lastSolFound; }
+    long solLength() const { return _sollen; }
     void setMBox(const Geom::Rect& box) { _mbox = box; }
     void printSol() const;
     void plot() const;

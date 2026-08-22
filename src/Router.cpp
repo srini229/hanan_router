@@ -1436,6 +1436,7 @@ void Router::generateHananGrid()
 
 void Router::buildSol(Geom::LayerRects& sol)
 {
+  _sollen = 0;
   if (!_sol) return;
   const Node* n = _sol;
   while (n) {
@@ -1514,6 +1515,7 @@ void Router::buildSol(Geom::LayerRects& sol)
             if (it != _endextnxmin.end()) extnx1 = it->second;
           }
         }
+        _sollen += std::abs(n->x() - parent->x()) + std::abs(n->y() - parent->y());
         sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
 #if DEBUG
         COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';

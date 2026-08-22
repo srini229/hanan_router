@@ -97,6 +97,8 @@ class Net {
     std::map<int, DRC::ViaArray> _ndrvias;
     std::vector<std::pair<Port*, Geom::LayerRects>> _pinSnapshot;
     Geom::Rects _corridor, _corridorEdges;
+    mutable long _rsmtlen{-1};      // Steiner tree length over the pin centres
+    long _wirelen{0};               // routed metal centreline length
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0}, _detour{0}, _driver{} {}
     ~Net()
@@ -157,6 +159,7 @@ class Net {
     {
       _routeshapes.clear();
       _routeshapeswithpins.clear();
+      _wirelen = 0;
       _bbox = Geom::Rect();
       _unroute = 1;
       _openwires.clear();
@@ -179,6 +182,12 @@ class Net {
         }
       }
     }
+    // Routed metal centreline length, summed over the net's port pairs as each
+    // one is routed. Taken from the solution's node path, so it is exact; via
+    // (layer-change) steps contribute nothing.
+    long wirelength() const { return _wirelen; }
+    void addWirelength(const long l) { _wirelen += l; }
+    long rsmtLength() const { return _rsmtlen; }
     int halfpm() const { return _bbox.halfpm(); }
     const Geom::Rect& bbox() const { return _bbox; }
     void addNDRWidth(const int layer, const int width) { _ndrwidths[layer] = width; }
@@ -455,6 +464,24 @@ class Module {
       }
     }
 
+    void printWirelengths() const
+    {
+      if (_leaf) return;
+      long total = 0;
+      for (auto& n : _nets) {
+        if (n.second.excluded()) continue;
+        const long wl = n.second.wirelength();
+        const long rl = n.second.rsmtLength();
+        total += wl;
+        COUT << "WIRELENGTH NET " << _name << ' ' << n.first << " : " << wl;
+        if (rl > 0) {
+          COUT << " rsmt=" << rl << " ratio=" << (static_cast<double>(wl) / rl);
+        }
+        COUT << '\n';
+      }
+      COUT << "WIRELENGTH TOTAL " << _name << " : " << total << '\n';
+    }
+
     const Geom::Rect& bbox() const { return _bbox; }
     void checkShort() const;
     int checkDRC(const Router::Router& router) const;
@@ -511,6 +538,10 @@ class Netlist {
     {
       if (!_valid) return;
       for (auto& m : _modules) m.second->printRouteSummary();
+    }
+    void printWirelengths() const
+    {
+      for (auto& m : _modules) m.second->printWirelengths();
     }
 };
 
