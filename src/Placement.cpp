@@ -1003,6 +1003,7 @@ int Module::checkDRC(const Router::Router& router) const
   // can run more than once: start from a clean slate rather than accumulating.
   _drcmarkers.clear();
   _drccount = 0;
+  _drcplacement = 0;
   struct Shape {
     Geom::Rect r;
     const void* owner;   // net identity; shapes of one net never conflict
@@ -1055,7 +1056,7 @@ int Module::checkDRC(const Router::Router& router) const
   // on the layer, and subtract P itself -- what survives is exactly the intruding
   // metal, and it doubles as the marker geometry.
   using namespace boost::polygon::operators;
-  int count = 0;
+  int count = 0, placementCount = 0;
   std::set<std::tuple<int, int, int, int, int>> seen;
   for (auto& lv : byLayer) {
     const int z = lv.first;
@@ -1074,6 +1075,23 @@ int Module::checkDRC(const Router::Router& router) const
       if (s.routed) routedOwners.insert(s.owner);
     }
     for (const void* id : routedOwners) {
+      PolySet pinps;
+      for (const auto& sh : lv.second)
+        if (sh.owner == id && !sh.routed)
+          pinps.insert(PRect(sh.r.xmin(), sh.r.ymin(), sh.r.xmax(), sh.r.ymax()));
+      PRects pinr;
+      get_max_rectangles(pinr, pinps);
+      auto preExisting = [&](const Geom::Rect& bb) {
+        for (const auto& pr : pinr) {
+          const Geom::Rect q(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
+          if (q.overlaps(bb)) return false;
+          const int qdx = std::max(0, std::max(bb.xmin() - q.xmax(), q.xmin() - bb.xmax()));
+          const int qdy = std::max(0, std::max(bb.ymin() - q.ymax(), q.ymin() - bb.ymax()));
+          if (qdx == 0 && qdy == 0) continue;
+          if (qdx < sx && qdy < sy) return true;
+        }
+        return false;
+      };
       PRects selfr;
       get_max_rectangles(selfr, byOwner[id]);   // this net as merged polygons
       for (const auto& s : lv.second) {
@@ -1094,18 +1112,22 @@ int Module::checkDRC(const Router::Router& router) const
           Geom::Rect m(a);
           m.merge(b);
           if (!seen.emplace(z, m.xmin(), m.ymin(), m.xmax(), m.ymax()).second) continue;
-          COUT << "DRC spacing " << _name << " layer " << layerName(z) << " : "
+          const bool placement = !s.routed && preExisting(b);
+          COUT << "DRC spacing " << (placement ? "(placement) " : "(router) ")
+               << _name << " layer " << layerName(z) << " : "
                << a.str() << " vs " << b.str()
                << " dx=" << dx << " dy=" << dy << " need " << sx << 'x' << sy << '\n';
           _drcmarkers[z].push_back(m);
-          ++count;
+          if (placement) ++placementCount; else ++count;
         }
       }
     }
   }
-  if (count)
-    COUT << "DRC module " << _name << " : " << count << " router-caused spacing violation(s)\n";
+  if (count || placementCount)
+    COUT << "DRC module " << _name << " : " << count << " router-caused, "
+         << placementCount << " placement spacing violation(s)\n";
   _drccount = count;
+  _drcplacement = placementCount;
   return count;
 }
 

@@ -483,8 +483,10 @@ class Module {
     void checkShort() const;
     int checkDRC(const Router::Router& router) const;
     int drcCount() const { return _drccount; }
+    int drcPlacementCount() const { return _drcplacement; }
     mutable std::map<int, Geom::Rects> _drcmarkers;
     mutable int _drccount{0};
+    mutable int _drcplacement{0};
 
     void writeDEF(const std::string& outdir, const std::string& nstr = "", const std::string& netname = "") const;
     void writeLEF(const std::string& outdir) const;
@@ -518,9 +520,13 @@ class Netlist {
     void checkDRC(const Router::Router&) const
     {
       if (!_valid) return;
-      int total = 0;
-      for (auto& m : _modules) total += m.second->drcCount();
+      int total = 0, placement = 0;
+      for (auto& m : _modules) {
+        total     += m.second->drcCount();
+        placement += m.second->drcPlacementCount();
+      }
       COUT << "DRC_SUMMARY router-caused spacing violations = " << total << '\n';
+      COUT << "DRC_SUMMARY placement spacing violations = " << placement << '\n';
     }
     // Total nets left open across every hierarchy after a route() call.
     int totalUnrouted() const
