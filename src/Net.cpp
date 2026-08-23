@@ -1,7 +1,7 @@
 #include "Util.h"
 #include "Placement.h"
 #include "Router.h"
-#include "flute.h"
+#include "borah.h"
 #include <mutex>
 
 using namespace boost::polygon::operators;
@@ -173,23 +173,6 @@ PortPairs Net::clockRouteOrder() const
 }
 
 
-// FLUTE's lookup tables are loaded once and shared; construction is not thread
-// safe, so the first caller builds the state under a lock. The tables are
-// compiled into the binary, hence the null paths.
-static Flute::FluteState* fluteState()
-{
-  static std::mutex m;
-  static Flute::FluteState* st = nullptr;
-  static bool tried = false;
-  std::lock_guard<std::mutex> g(m);
-  if (!tried) {
-    tried = true;
-    st = Flute::flute_init(nullptr, nullptr);
-    if (!st) CERR << "WARNING: FLUTE tables failed to load; RSMT corridor disabled\n";
-  }
-  return st;
-}
-
 // A rectilinear Steiner tree over the net's pin centres, each branch turned into
 // a band `margin` wide. Confining the maze search to this corridor stops a net
 // wandering far outside the region its own pins occupy -- the detours that show
@@ -258,36 +241,17 @@ Geom::Rects Net::rsmtCorridor(const int margin) const
                           x2 + margin, std::max(y1, y2) + margin);
   };
 
-  std::vector<int> cx, cy;
-  cx.reserve(boxes.size()); cy.reserve(boxes.size());
-  for (auto& b : boxes) { cx.push_back(b.xcenter()); cy.push_back(b.ycenter()); }
-
-  if (boxes.size() == 2) {
-    band(cx[0], cy[0], cx[1], cy[1]);       // the single branch FLUTE would lay
-    _rsmtlen = std::abs(cx[0] - cx[1]) + std::abs(cy[0] - cy[1]);
-  } else if (boxes.size() == 3) {
-    std::vector<int> sx(cx), sy(cy);
-    std::nth_element(sx.begin(), sx.begin() + 1, sx.end());
-    std::nth_element(sy.begin(), sy.begin() + 1, sy.end());
-    const int mx = sx[1], my = sy[1];       // median point : the Steiner point for 3
-    _rsmtlen = 0;
-    for (size_t i = 0; i < cx.size(); ++i) {
-      band(cx[i], cy[i], mx, my);
-      _rsmtlen += std::abs(cx[i] - mx) + std::abs(cy[i] - my);
-    }
-  } else {
-    auto* st = fluteState();
-    if (!st) return corridor;               // no tables: corridor stays the pins
-    std::vector<FLUTE_DTYPE> xs(cx.begin(), cx.end()), ys(cy.begin(), cy.end());
-    Flute::Tree t = Flute::flute(st, static_cast<int>(xs.size()), xs.data(), ys.data(), FLUTE_ACCURACY);
-    _rsmtlen = t.length;
-    const int nb = 2 * t.deg - 2;
-    for (int i = 0; i < nb; ++i) {
-      const int j = t.branch[i].n;
-      if (j < 0 || j >= nb) continue;
-      band(t.branch[i].x, t.branch[i].y, t.branch[j].x, t.branch[j].y);
-    }
-    Flute::free_tree(st, t);
+  std::vector<rsmt::Point> pts;
+  pts.reserve(boxes.size());
+  for (auto& b : boxes) {
+    pts.push_back(rsmt::Point{static_cast<int64_t>(b.xcenter()),
+                              static_cast<int64_t>(b.ycenter())});
+  }
+  const rsmt::BorahTree t = rsmt::BorahOwens(pts);
+  _rsmtlen = static_cast<long>(t.length);
+  for (const auto& e : t.edges) {
+    band(static_cast<int>(t.nodes[e.first].x), static_cast<int>(t.nodes[e.first].y),
+         static_cast<int>(t.nodes[e.second].x), static_cast<int>(t.nodes[e.second].y));
   }
 
   // The bands overlap heavily where branches meet. Merge them with
@@ -411,7 +375,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     PortPairs ppairs = (_driver.empty() ? reorderPorts() : clockRouteOrder());
 
     // Confine this net to the neighbourhood of its own Steiner tree: build the
-    // FLUTE corridor over the pin centres, then hand the maze search everything
+    // Borah RSMT corridor over the pin centres, then hand the maze search everything
     // OUTSIDE it as an obstacle. The MST pair routing below is unchanged -- it
     // simply can no longer wander far from the tree that connects the pins.
     Geom::LayerRects keepout;

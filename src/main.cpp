@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
       << "\t-reorder <N> (alternate net-ordering passes when nets remain unrouted; default 10)\n"
       << "\t-replay <ATTEMPT_*.lef> (re-route one wire from a HANAN_DEBUG_WIRE dump; needs -d only)\n"
       << "\t-detour (with -replay: allow a large detour even without NDR saying so)\n"
-      << "\t-rsmt (confine each net to a FLUTE Steiner corridor over its pins)\n"
+      << "\t-rsmt (confine each net to a Borah Steiner corridor over its pins)\n"
       << "\t-threads <N> (route non-overlapping nets in parallel using N worker threads; default 1)\n"
       << "\t-relaxvia (in the final pass, for a net that still fails to route, retry its escape via with spacing relaxed to as close as 5 to, but never on, a shape -- source pins first, then also target pins if that alone isn't enough)\n"
       << "\t-v (verbose: emit high-volume per-element debug logging)\n";
@@ -46,21 +46,9 @@ int main(int argc, char* argv[])
   for (int i = 1; i < argc; ++i) COUT << ' ' << argv[i];
   COUT << std::endl;
 
-  // FLUTE's Attribution Assurance License, clause 1: a prominent display of the
-  // author's attribution each time a program depending on it is launched. This
-  // binary links FLUTE unconditionally, so the notice is unconditional too.
+  // RSMT corridors use the Borah-Owens-Irwin edge-substitution heuristic
+  // (IEEE TCAD 1994); see src/borah.h.
   const bool rsmtOpt = checkArg(argc, argv, "-rsmt");
-  COUT << "========================================================================\n"
-       << " This program links FLUTE\n"
-       << "   Dr. Chris C. N. Chu\n"
-       << "   Iowa State University\n"
-       << "   http://home.eng.iastate.edu/~cnchu/\n"
-       << "   FLUTE Copyright (c) 2004 by Dr. Chris C. N. Chu, all rights reserved\n"
-       << " FLUTE is only used to build RSMT corridors, which the -rsmt flag turns\n"
-       << " on; without -rsmt no FLUTE code runs. This run: "
-       << (rsmtOpt ? "-rsmt given, FLUTE in use." : "-rsmt not given, FLUTE unused.") << '\n'
-       << "========================================================================"
-       << std::endl;
 
   DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 1));
   if (!linfo.populated())  {

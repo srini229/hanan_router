@@ -122,7 +122,7 @@ class Net {
     void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname);
     const Geom::LayerRects& routeShapesWithPins() const { return _routeshapeswithpins; }
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
-    // Corridor from a FLUTE rectilinear Steiner tree over the pin centres, each
+    // Corridor from a Borah rectilinear Steiner tree over the pin centres, each
     // branch widened by `margin`. Routing is confined to it (see Net::route).
     Geom::Rects rsmtCorridor(const int margin) const;
     // The corridor actually used, kept so writeLEF can draw it.

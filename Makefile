@@ -7,13 +7,13 @@ endif
 #CCFLAGS = -Wall -g -std=c++14 -D_GLIBCXX_PARALLEL -march=native -funroll-loops -fopenmp
 CCFLAGS = -Wall -g -std=c++14 -funroll-loops -pthread $(MARCH)
 INCLUDES = ./include
-INCDIRS = -I$(INCLUDES) -I$(SRC)/flute
+INCDIRS = -I$(INCLUDES)
 LFLAGS = 
 DEBUG = 0
 LIBS = -lm
 BIN = bin
 SRC = src
-SRCS := $(wildcard $(SRC)/*.cpp) $(wildcard $(SRC)/flute/*.cpp)
+SRCS := $(wildcard $(SRC)/*.cpp)
 OBJS := $(patsubst ${SRC}%.cpp,${BIN}%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
 DEPFLAGS = -MMD -MP
