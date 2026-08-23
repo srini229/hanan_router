@@ -515,6 +515,23 @@ class Router {
       auto it = _nodes[z].find(std::make_pair(x, y));
       return it != _nodes[z].end() && isTarget(it->second);
     }
+    const Geom::Rect* pinShapeAt(const int x, const int y, const int z) const
+    {
+      for (const auto* m : {&_sourceshapes, &_targetshapes}) {
+        auto it = m->find(z);
+        if (it == m->end()) continue;
+        for (const auto& r : it->second) {
+          if (x >= r.xmin() && x <= r.xmax() && y >= r.ymin() && y <= r.ymax()) return &r;
+        }
+      }
+      return nullptr;
+    }
+    static long long padPinOverlap(const Geom::Rect& pad, const Geom::Rect& pin)
+    {
+      const long long w = std::min(pad.xmax(), pin.xmax()) - std::max(pad.xmin(), pin.xmin());
+      const long long h = std::min(pad.ymax(), pin.ymax()) - std::max(pad.ymin(), pin.ymin());
+      return (w <= 0 || h <= 0) ? 0 : w * h;
+    }
     void setexpand(Node* newn, const Node* parent) const;
 
     void constructVias(const std::map<int, DRC::ViaArray>* ndrvias = nullptr);

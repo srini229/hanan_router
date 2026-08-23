@@ -2387,6 +2387,27 @@ void Router::createSourceTargetNodes()
 const Via* Router::isViaValid(const Node* n, const bool up) const
 {
   Via* via{nullptr};
+  const Geom::Rect* pin = pinShapeAt(n->x(), n->y(), n->z());
+  Via* best{nullptr};
+  long long bestOverlap{-1};
+  int legal{0}, chosen{0};
+  auto consider = [&](Via*& cand) {
+    if (!pin) { best = cand; cand = nullptr; return true; }
+    ++legal;
+    const long long ov = padPinOverlap(up ? cand->lpad() : cand->upad(), *pin);
+    if (ov > bestOverlap) { delete best; bestOverlap = ov; best = cand; chosen = legal; }
+    else delete cand;
+    cand = nullptr;
+    return false;
+  };
+  auto report = [&]() {
+    if (legal > 1) {
+      COUT << "VIAPAD " << (chosen == 1 ? "kept" : "switched") << " : " << legal
+           << " legal vias at (" << n->x() << ',' << n->y() << ") z=" << n->z()
+           << (up ? " up" : " down") << " -> #" << chosen
+           << " overlap=" << bestOverlap << '\n';
+    }
+  };
   if (up) {
     if (n->z() < _maxLayer && !_upVias[n->z()].empty()) {
       auto aboveLayer = _aboveViaLayer[n->z()];
@@ -2452,8 +2473,10 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
               if (via == nullptr) break;
             }
           }
-          if (via != nullptr) break;
+          if (via != nullptr && consider(via)) break;
         }
+        report();
+        via = best;
       }
     }
   } else {
@@ -2516,8 +2539,10 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
               if (via == nullptr) break;
             }
           }
-          if (via != nullptr) break;
+          if (via != nullptr && consider(via)) break;
         }
+        report();
+        via = best;
       }
     }
   }
