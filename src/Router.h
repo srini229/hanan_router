@@ -637,10 +637,6 @@ class Router {
     bool relaxViaEscape() const { return _relaxViaEscape; }
     void setDumpOpenNets(const bool b) { _dumpOpenNets = b; }
     bool dumpOpenNets() const { return _dumpOpenNets; }
-    // Reorder passes after which the RSMT corridor stops being enforced. The
-    // corridor is a compactness heuristic; once reordering has failed to close the
-    // remaining nets a few times over, the corridor is more likely to be what is
-    // blocking them than a help, so it is dropped and the search runs unconfined.
     static const int RSMT_RELAX_AFTER_PASS = 3;
     void setRSMTCorridor(const bool b) { _rsmtcorridor = b; }
     bool rsmtCorridor() const { return _rsmtcorridor; }

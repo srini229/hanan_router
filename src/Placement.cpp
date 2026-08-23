@@ -815,8 +815,6 @@ void Module::route(Router::Router& router, const std::string& outdir)
       const int maxShuffles = 64;
       int pass = 0;
       for (int iter = 0; pass < passes && iter < maxIters && bestUnrouted > 0; ++iter) {
-        // Reordering has had a few goes at the open nets; if they are still open
-        // the corridor is the more likely culprit, so stop enforcing it.
         if (pass == Router::Router::RSMT_RELAX_AFTER_PASS && router.rsmtCorridor()) {
           COUT << "module " << _name << " : relaxing RSMT corridors after "
                << pass << " reorder pass(es)\n";
@@ -1245,9 +1243,6 @@ void Module::writeLEF(const std::string& outdir) const
           ofs << "        RECT " << (1.*r.xmin()/_uu) << ' ' << (1.*r.ymin()/_uu) << ' ' << (1.*r.xmax()/_uu) << ' ' << (1.*r.ymax()/_uu) << " ;\n";
         }
       }
-      // Each net's own routed shapes, on SOL_<layer>_<net> layers, so a solution
-      // can be looked at per net and per layer alongside the corridor that shaped
-      // it and the DRC markers it produced.
       for (auto& n : _nets) {
         if (n.second.excluded()) continue;
         for (auto& l : n.second.routeShapes()) {
@@ -1259,8 +1254,6 @@ void Module::writeLEF(const std::string& outdir) const
           }
         }
       }
-      // Routing corridors: the outline of the merged RSMT polygon each net was
-      // confined to, one layer per net so a viewer can toggle them individually.
       for (auto& n : _nets) {
         if (n.second.corridorEdges().empty()) continue;
         ofs << "      LAYER RSMT_" << n.first << " ;\n";

@@ -173,16 +173,6 @@ PortPairs Net::clockRouteOrder() const
 }
 
 
-// A rectilinear Steiner tree over the net's pin centres, each branch turned into
-// a band `margin` wide. Confining the maze search to this corridor stops a net
-// wandering far outside the region its own pins occupy -- the detours that show
-// up as long excursions on an expensive layer -- while still leaving the Steiner
-// topology's own freedom inside the band.
-
-// Trace the outline of a rectilinear region and return each edge as a thin box.
-// Drawing the corridor as its boundary rather than as the slabs it decomposes
-// into keeps the picture readable -- the slabs tile the interior and bury the
-// routing underneath them.
 static Geom::Rects outlineBoxes(const Geom::Rects& region, const int w, int* nholes = nullptr)
 {
   Geom::Rects edges;
@@ -254,10 +244,6 @@ Geom::Rects Net::rsmtCorridor(const int margin) const
          static_cast<int>(t.nodes[e.second].x), static_cast<int>(t.nodes[e.second].y));
   }
 
-  // The bands overlap heavily where branches meet. Merge them with
-  // boost::polygon so the corridor is one rectilinear polygon rather than a pile
-  // of boxes, and return its rectangle decomposition -- that is what gets
-  // subtracted from the net's bbox and what gets drawn in the LEF.
   PolySet ps;
   for (const auto& r : corridor) ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
   PRects merged;
@@ -374,10 +360,6 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
 
     PortPairs ppairs = (_driver.empty() ? reorderPorts() : clockRouteOrder());
 
-    // Confine this net to the neighbourhood of its own Steiner tree: build the
-    // Borah RSMT corridor over the pin centres, then hand the maze search everything
-    // OUTSIDE it as an obstacle. The MST pair routing below is unchanged -- it
-    // simply can no longer wander far from the tree that connects the pins.
     Geom::LayerRects keepout;
     if (router.rsmtCorridor()) {
       int pitch = 0;
@@ -387,10 +369,6 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       }
       auto corridor = rsmtCorridor(pitch * RSMT_CORRIDOR_PITCHES);
       if (!corridor.empty() && bbox.valid()) {
-        // Clip to the module before taking the outline. The bands are bloated well
-        // past the die on a small block, and an outline that sits outside the
-        // routable area is a wall nothing can reach -- which is exactly why the
-        // corridor appeared to be ignored.
         PolySet cs;
         for (const auto& r : corridor) cs.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
         PolySet box;
@@ -404,10 +382,6 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       _corridor = corridor;
       int nholes = 0;
       _corridorEdges = outlineBoxes(corridor, RSMT_EDGE_WIDTH, &nholes);
-      // The obstacle is the corridor's boundary itself -- the same thin walls the
-      // LEF draws -- on every routing layer. A wall plus its spacing halo is
-      // enough to stop the search crossing it, and it is a handful of rectangles
-      // instead of a filled complement.
       if (!_corridorEdges.empty()) {
         for (const auto& r : _corridorEdges) {
           for (int z = router.minLayer(); z <= router.maxLayer(); ++z) keepout[z].push_back(r);
@@ -498,10 +472,6 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.addObstacles(samenetobst, true);
       router.addObstacles(keepout, true);
       auto sol = router.findSol();
-      // The corridor is a heuristic bound, never a hard constraint: if a pair
-      // cannot be routed inside it, drop it and try again unconfined rather than
-      // leave the net open. Only the corridor is removed -- every real obstacle is
-      // put back exactly as it was.
       if (!router.lastSolutionFound() && !keepout.empty()) {
         COUT << "RSMT corridor blocked " << port1->name() << " -> " << port2->name()
              << " ; retrying without it\n";

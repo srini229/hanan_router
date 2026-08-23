@@ -122,12 +122,8 @@ class Net {
     void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname);
     const Geom::LayerRects& routeShapesWithPins() const { return _routeshapeswithpins; }
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
-    // Corridor from a Borah rectilinear Steiner tree over the pin centres, each
-    // branch widened by `margin`. Routing is confined to it (see Net::route).
     Geom::Rects rsmtCorridor(const int margin) const;
-    // The corridor actually used, kept so writeLEF can draw it.
     const Geom::Rects& corridor() const { return _corridor; }
-    // The corridor's outline, each polygon edge as a thin box, for drawing.
     const Geom::Rects& corridorEdges() const { return _corridorEdges; }
     Geom::LayerRects dropSameNetObstacles(const Geom::LayerRects& obs) const;
     bool unrouted() const { return _unroute ? true : false; }
@@ -182,9 +178,6 @@ class Net {
         }
       }
     }
-    // Routed metal centreline length, summed over the net's port pairs as each
-    // one is routed. Taken from the solution's node path, so it is exact; via
-    // (layer-change) steps contribute nothing.
     long wirelength() const { return _wirelen; }
     void addWirelength(const long l) { _wirelen += l; }
     long rsmtLength() const { return _rsmtlen; }
