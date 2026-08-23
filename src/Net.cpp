@@ -401,7 +401,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.setMBox(bbox);
       const auto& p1 = port1->shapes();
       const auto& p2 = port2->shapes();
-      //bool preflayersrctgt{true};
+      bool preflayersrctgt{true};
       Geom::LayerRects samenetobst;
       auto addSrcTgtShapes = [&]() {
       samenetobst.clear();
@@ -415,7 +415,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
             break;
           }
         }
-        //preflayersrctgt &= preflayer;
+        preflayersrctgt &= preflayer;
         if (!_preflayers.empty()) {
           COUT << "pref layer pin" << (preflayer ? "" : " not") << " found for " << (src ? port1->name() : port2->name()) << '\n';
         }
@@ -441,29 +441,37 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
 #if DEBUG
       COUT << "adding line of sight nodes if they exist\n";
 #endif
-      /*for (auto& l : p1) {
+      int losbands{0};
+      for (auto& l : p1) {
         auto it = p2.find(l.first);
-        if (preflayersrctgt && _preflayers.find(l.first) == _preflayers.end()) continue;
-        if (it != p2.end()) {
-          for (auto& s1 : l.second) {
-            for (auto& s2 : it->second) {
-              if (s1.xmin() < s2.xmax() && s1.xmax() > s2.xmin()) {
-                int xmin(std::max(s1.xmin(), s2.xmin())), xmax(std::min(s1.xmax(), s2.xmax()));
-                if (xmax - xmin >= router.widthy(l.first)) {
-                  router.addSource(Geom::Rect(xmin, s1.ymin(), xmax, s1.ymax()), l.first);
-                  router.addTarget(Geom::Rect(xmin, s2.ymin(), xmax, s2.ymax()), l.first);
-                }
-              } else if (s1.ymin() < s2.ymax() && s1.ymax() > s2.ymin()) {
-                int ymin(std::max(s1.ymin(), s2.ymin())), ymax(std::min(s1.ymax(), s2.ymax()));
-                if (ymax - ymin >= router.widthx(l.first)) {
-                  router.addSource(Geom::Rect(s1.xmin(), ymin, s1.xmax(), ymax), l.first);
-                  router.addTarget(Geom::Rect(s2.xmin(), ymin, s2.xmax(), ymax), l.first);
-                }
+        if (preflayersrctgt && !_preflayers.empty() &&
+            _preflayers.find(l.first) == _preflayers.end()) continue;
+        if (it == p2.end()) continue;
+        for (auto& s1 : l.second) {
+          for (auto& s2 : it->second) {
+            if (s1.xmin() < s2.xmax() && s1.xmax() > s2.xmin()) {
+              const int xmin(std::max(s1.xmin(), s2.xmin()));
+              const int xmax(std::min(s1.xmax(), s2.xmax()));
+              if (xmax - xmin >= router.widthy(l.first)) {
+                router.addSourceTarget(Geom::Rect(xmin, s1.ymin(), xmax, s1.ymax()), l.first, true);
+                router.addSourceTarget(Geom::Rect(xmin, s2.ymin(), xmax, s2.ymax()), l.first, false);
+                ++losbands;
+              }
+            } else if (s1.ymin() < s2.ymax() && s1.ymax() > s2.ymin()) {
+              const int ymin(std::max(s1.ymin(), s2.ymin()));
+              const int ymax(std::min(s1.ymax(), s2.ymax()));
+              if (ymax - ymin >= router.widthx(l.first)) {
+                router.addSourceTarget(Geom::Rect(s1.xmin(), ymin, s1.xmax(), ymax), l.first, true);
+                router.addSourceTarget(Geom::Rect(s2.xmin(), ymin, s2.xmax(), ymax), l.first, false);
+                ++losbands;
               }
             }
           }
         }
-      }*/
+      }
+      if (losbands) {
+        COUT << "line of sight bands added : " << losbands << " for " << router.name() << '\n';
+      }
       if (_detour) router.allowDetour();
       router.addObstacles(l1, true);
       router.addObstacles(l2, true);
