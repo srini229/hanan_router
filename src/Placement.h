@@ -98,6 +98,7 @@ class Net {
     std::vector<std::pair<Port*, Geom::LayerRects>> _pinSnapshot;
     Geom::Rects _corridor, _corridorEdges;
     mutable long _rsmtlen{-1};      // Steiner tree length over the pin centres
+    mutable long _mstlen{-1};       // the MST Borah started from, for comparison
     long _wirelen{0};               // routed metal centreline length
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0}, _detour{0}, _driver{} {}
@@ -181,6 +182,7 @@ class Net {
     long wirelength() const { return _wirelen; }
     void addWirelength(const long l) { _wirelen += l; }
     long rsmtLength() const { return _rsmtlen; }
+    long mstLength() const { return _mstlen; }
     int halfpm() const { return _bbox.halfpm(); }
     const Geom::Rect& bbox() const { return _bbox; }
     void addNDRWidth(const int layer, const int width) { _ndrwidths[layer] = width; }
@@ -465,8 +467,10 @@ class Module {
         if (n.second.excluded()) continue;
         const long wl = n.second.wirelength();
         const long rl = n.second.rsmtLength();
+        const long ml = n.second.mstLength();
         total += wl;
         COUT << "WIRELENGTH NET " << _name << ' ' << n.first << " : " << wl;
+        if (ml > 0) COUT << " mst=" << ml;
         if (rl > 0) {
           COUT << " rsmt=" << rl << " ratio=" << (static_cast<double>(wl) / rl);
         }

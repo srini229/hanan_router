@@ -231,17 +231,17 @@ Geom::Rects Net::rsmtCorridor(const int margin) const
                           x2 + margin, std::max(y1, y2) + margin);
   };
 
-  std::vector<rsmt::Point> pts;
-  pts.reserve(boxes.size());
+  std::vector<rsmt::Rect> terms;
+  terms.reserve(boxes.size());
   for (auto& b : boxes) {
-    pts.push_back(rsmt::Point{static_cast<int64_t>(b.xcenter()),
-                              static_cast<int64_t>(b.ycenter())});
+    terms.push_back(rsmt::Rect(b.xmin(), b.ymin(), b.xmax(), b.ymax()));
   }
-  const rsmt::BorahTree t = rsmt::BorahOwens(pts);
+  const rsmt::BorahTree t = rsmt::BorahOwens(terms);
   _rsmtlen = static_cast<long>(t.length);
-  for (const auto& e : t.edges) {
-    band(static_cast<int>(t.nodes[e.first].x), static_cast<int>(t.nodes[e.first].y),
-         static_cast<int>(t.nodes[e.second].x), static_cast<int>(t.nodes[e.second].y));
+  _mstlen = static_cast<long>(t.mst_length);
+  for (const auto& ep : t.edge_pts) {
+    band(static_cast<int>(ep.first.x), static_cast<int>(ep.first.y),
+         static_cast<int>(ep.second.x), static_cast<int>(ep.second.y));
   }
 
   PolySet ps;
