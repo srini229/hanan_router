@@ -261,6 +261,7 @@ class Router {
     std::vector<std::map<int, IntRangeSet>> _hanangridh, _hanangridv;
     Geom::Rect _bbox, _mbox;
     const Node *_sol;
+    std::vector<long long> _minarea;
     std::vector<int> _widthx, _ndrwidthx, _spacex, _ndrspacex;
     std::vector<int> _widthy, _ndrwidthy, _spacey, _ndrspacey;
     int _minLayer, _maxLayer, _maxRoutingLayer;
@@ -413,6 +414,28 @@ class Router {
     void setName(const std::string& n) { _name = n; }
     void setusepinwidth(const bool u) { _usepinwidth = u; }
 
+    // Grow a run that encloses less than the layer's minArea out to minLength,
+    // along its own axis, symmetric where both ends are clear. Returns false and
+    // leaves r untouched when no legal extension reaches the target.
+    bool applyMinArea(Geom::Rect& r, const int z, const bool vert) const;
+    bool extendToLength(Geom::Rect& r, const int z, const bool vert, const int need) const;
+    // Standalone metal that is not part of any run -- a via pad landing on a pin,
+    // typically -- is its own polygon and never reaches minArea on its own.
+    void enforceMinAreaShapes(Geom::LayerRects& sol) const;
+    bool centrelineClear(const int z, const Geom::Rect& seg) const;
+
+    long long minArea(const int z) const
+    { return (static_cast<unsigned>(z) < _minarea.size()) ? _minarea[z] : 0; }
+    // A run of length L on layer z encloses L * w, where w is the run's cross
+    // section: a horizontal run is widthx(z) tall, a vertical run widthy(z) wide.
+    int minLength(const int z, const bool vert) const
+    {
+      const long long a = minArea(z);
+      if (a <= 0) return 0;
+      const int w = vert ? widthy(z) : widthx(z);
+      if (w <= 0) return 0;
+      return static_cast<int>((a + w - 1) / w);
+    }
     int widthx(const int z) const { return (_ndrwidthx[z] != INT_MAX ? _ndrwidthx[z] : _widthx[z]); }
     int widthy(const int z) const { return (_ndrwidthy[z] != INT_MAX ? _ndrwidthy[z] : _widthy[z]); }
     int spacex(const int z) const { return (_ndrspacex[z] != INT_MAX ? _ndrspacex[z] : _spacex[z]); }

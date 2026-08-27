@@ -51,6 +51,7 @@ class gdsDatatype {
 class MetalLayer : public Layer {
   private:
     int _pitch, _width, _minL, _maxL;
+    long long _minArea{0};
     int _e2e, _offset;
     float _c[3], _cc[3];
     Direction _dir;
@@ -66,6 +67,8 @@ class MetalLayer : public Layer {
     }
     void setPitch(const int p) {_pitch = p;}
     void setWidth(const int w) {_width = w;}
+    long long minArea() const { return _minArea; }
+    void setMinArea(const long long a) {_minArea = a;}
     void setMinL(const int l) {_minL = l;}
     void setMaxL(const int l) {_maxL = l;}
     void setE2E(const int e) {_e2e = e;}
@@ -188,6 +191,12 @@ class LayerInfo {
         }
       }
       return s;
+    }
+    long long minArea(const int l) const
+    {
+      auto layer = (static_cast<unsigned>(l) < _layers.size()) ? _layers[l] : nullptr;
+      if (layer && layer->isMetal()) return static_cast<MetalLayer*>(layer)->minArea();
+      return 0;
     }
     int spacex(const int l) const { return space(l, true); }
     int spacey(const int l) const { return space(l, false); }

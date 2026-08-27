@@ -309,6 +309,7 @@ void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::s
 Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT_MAX}, _maxLayer{0}, _maxRoutingLayer{0}, _name{}, _lf{lf}
 {
   auto& layers = lf.layers();
+  _minarea.reserve(layers.size());
   _widthx.reserve(layers.size());
   _widthy.reserve(layers.size());
   _spacex.reserve(layers.size());
@@ -324,7 +325,10 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
       _widthy.push_back(mlayer->width());
       _spacex.push_back(mlayer->space());
       _spacey.push_back(mlayer->space());
-      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << " v : " << _cf.isVert(i) << " h : " << _cf.isHor(i) << '\n';
+      _minarea.push_back(mlayer->minArea());
+      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << " v : " << _cf.isVert(i) << " h : " << _cf.isHor(i);
+      if (_minarea.back() > 0) COUT << " minArea : " << _minarea.back();
+      COUT << '\n';
     }
   }
   _aboveViaLayer.resize(_widthx.size(), -1);
@@ -337,6 +341,7 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
       if (l.second >= 0) _belowViaLayer[l.second] = i;
       _widthx.push_back(vlayer->widthx());
       _widthy.push_back(vlayer->widthy());
+      _minarea.push_back(0);
       _spacex.push_back(vlayer->spacex());
       _spacey.push_back(vlayer->spacey());
     }
@@ -1249,6 +1254,109 @@ void Router::generateHananGrid()
   }
 }
 
+bool Router::centrelineClear(const int z, const Geom::Rect& seg) const
+{
+  auto it = _ltree.find(z);
+  if (it == _ltree.end()) return true;
+  Geom::Rects nbrs;
+  it->second.search(nbrs, seg);
+  for (auto& o : nbrs) {
+    if (o.overlaps(seg, true)) return false;
+  }
+  return true;
+}
+
+bool Router::applyMinArea(Geom::Rect& r, const int z, const bool vert) const
+{
+  return extendToLength(r, z, vert, minLength(z, vert));
+}
+
+bool Router::extendToLength(Geom::Rect& r, const int z, const bool vert, const int need) const
+{
+  if (need <= 0) return true;
+  const int len = vert ? r.height() : r.width();
+  if (len >= need) return true;
+  const int deficit = need - len;
+
+  // Obstacles in _ltree are pre-bloated by spacing plus half a standard wire, so
+  // a clear centreline is a legal wire of that width. A shape wider than the
+  // standard wire needs the excess added back as margin, and the whole candidate
+  // is probed -- not just the added ends -- because widening moves metal sideways
+  // along its entire length.
+  const int cross  = vert ? r.width() : r.height();
+  const int stdw   = vert ? widthy(z) : widthx(z);
+  const int margin = std::max(0, (cross - stdw + 1) / 2);
+  const int rlo = vert ? r.ymin() : r.xmin();
+  const int rhi = vert ? r.ymax() : r.xmax();
+  auto legal = [&](const int lo, const int hi) {
+    const Geom::Rect seg = vert
+      ? Geom::Rect(r.xcenter() - margin, lo, r.xcenter() + margin, hi)
+      : Geom::Rect(lo, r.ycenter() - margin, hi, r.ycenter() + margin);
+    return centrelineClear(z, seg);
+  };
+
+  const int half = deficit / 2;
+  const int splits[3][2] = {{half, deficit - half}, {0, deficit}, {deficit, 0}};
+  for (const auto& sp : splits) {
+    if (!legal(rlo - sp[0], rhi + sp[1])) continue;
+    if (vert) r = Geom::Rect(r.xmin(), rlo - sp[0], r.xmax(), rhi + sp[1]);
+    else      r = Geom::Rect(rlo - sp[0], r.ymin(), rhi + sp[1], r.ymax());
+    return true;
+  }
+  return false;
+}
+
+void Router::enforceMinAreaShapes(Geom::LayerRects& sol) const
+{
+  for (auto& l : sol) {
+    const int z = l.first;
+    const long long need = minArea(z);
+    if (need <= 0 || l.second.empty()) continue;
+    PolySet ps;
+    for (const auto& r : l.second) ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+    PPolys polys;
+    ps.get(polys);
+    Geom::Rects grown;
+    for (const auto& poly : polys) {
+      const long long a = static_cast<long long>(bp::area(poly));
+      if (a >= need) continue;
+      PolySet one;
+      one.insert(poly);
+      PRects prects;
+      get_max_rectangles(prects, one);
+      if (prects.size() != 1) {
+        COUT << "MINAREA " << _name << " layer " << LAYER_NAMES[z]
+             << " : shape area=" << a << " need=" << need
+             << " : not a single rectangle, left alone\n";
+        continue;
+      }
+      const Geom::Rect pad(bp::xl(prects[0]), bp::yl(prects[0]),
+                           bp::xh(prects[0]), bp::yh(prects[0]));
+      bool done = false;
+      for (const bool vert : {_cf.isVert(z), !_cf.isVert(z)}) {
+        const int cross = vert ? pad.width() : pad.height();
+        if (cross <= 0) continue;
+        Geom::Rect g(pad);
+        if (extendToLength(g, z, vert, static_cast<int>((need + cross - 1) / cross))) {
+          COUT << "MINAREA " << _name << " layer " << LAYER_NAMES[z]
+               << " : pad " << pad.str() << " area=" << a
+               << " grown to " << g.str() << " area="
+               << (1LL * g.width() * g.height()) << '\n';
+          grown.push_back(g);
+          done = true;
+          break;
+        }
+      }
+      if (!done) {
+        COUT << "MINAREA " << _name << " layer " << LAYER_NAMES[z]
+             << " : pad " << pad.str() << " area=" << a << " need=" << need
+             << " : no legal extension\n";
+      }
+    }
+    for (auto& g : grown) l.second.push_back(g);
+  }
+}
+
 Geom::LayerRects Router::findSol()
 {
   TIME_M();
@@ -1467,7 +1575,22 @@ Geom::LayerRects Router::findSol()
                   }
                 }
               }
-              sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
+              Geom::Rect run = Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2);
+              if (minArea(n->z()) > 0) {
+                const int before = vert ? run.height() : run.width();
+                if (!applyMinArea(run, n->z(), vert)) {
+                  COUT << "MINAREA " << _name << " layer " << LAYER_NAMES[n->z()]
+                       << " : " << run.str() << " len=" << before
+                       << " need=" << minLength(n->z(), vert)
+                       << " area=" << (1LL * run.width() * run.height())
+                       << " need=" << minArea(n->z()) << " : no legal extension\n";
+                } else if ((vert ? run.height() : run.width()) != before) {
+                  COUT << "MINAREA " << _name << " layer " << LAYER_NAMES[n->z()]
+                       << " : extended " << before << " -> "
+                       << (vert ? run.height() : run.width()) << '\n';
+                }
+              }
+              sol[n->z()].push_back(run);
 #if DEBUG
               //COUT << extnx1 << ' ' << extny1 << ' ' << extnx2 << ' ' << extny2 << ' ' << hwx << ' ' << hwy << '\n';
               COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
@@ -1500,6 +1623,7 @@ Geom::LayerRects Router::findSol()
   } else {
     COUT << "source or target empty! " << _sources.empty() << ' ' << _targets.empty() << '\n';
   }
+  enforceMinAreaShapes(sol);
 #if DEBUG
 #else
   if (!debugplot.empty() && (debugplot == "1" || debugplot == _name))
