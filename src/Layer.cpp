@@ -58,6 +58,10 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
             if (it != l.end() && it->is_number()) {
               mlayer->setMinArea(static_cast<long long>(static_cast<double>(*it) * uu * uu));
             }
+            it = l.find("min_area");
+            if (it != l.end() && it->is_number()) {
+              mlayer->setMinArea(static_cast<long long>(static_cast<double>(*it) * uu * uu));
+            }
             it = l.find("MinL");
             if (it != l.end() && it->is_number_integer()) mlayer->setMinL(static_cast<int>(*it) * uu);
             it = l.find("MaxL");

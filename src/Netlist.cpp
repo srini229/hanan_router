@@ -95,7 +95,7 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
     for (auto& kv : it->items()) {
       auto mname = kv.key();
       auto& m = kv.value();
-      int oX, oY, W, H;
+      int oX{0}, oY{0}, W{0}, H{0};
       auto itx = m.find("x");
       auto ity = m.find("y");
       auto itw = m.find("w");
