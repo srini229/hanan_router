@@ -37,8 +37,38 @@ for entry in ldata.get("Abstraction", []):
 lib = gdstk.read_gds(args.gds)
 scale = args.scale
 
+FRAC_PREC = min(1e-7, lib.precision / lib.unit) if lib.unit else 1e-7
+
 def s(v):
     return v * scale
+
+def poly_to_rects(poly):
+    pts = poly.points
+    if len(pts) == 4:
+        xs = sorted({round(float(p[0]), 9) for p in pts})
+        ys = sorted({round(float(p[1]), 9) for p in pts})
+        if len(xs) == 2 and len(ys) == 2:
+            return [(xs[0], ys[0], xs[1], ys[1])]
+
+    out = []
+    for piece in poly.fracture(max_points=5, precision=FRAC_PREC):
+        bb = piece.bounding_box()
+        if bb is None:
+            continue
+        (x0, y0), (x1, y1) = bb
+        if x1 - x0 <= 0 or y1 - y0 <= 0:      # drop slivers / zero-area pieces
+            continue
+        out.append((x0, y0, x1, y1))
+    return out
+
+def iter_shapes(cell):
+    for poly in cell.polygons:
+        for rect in poly_to_rects(poly):
+            yield poly.layer, poly.datatype, rect
+    for path in cell.paths:
+        for poly in path.to_polygons():
+            for rect in poly_to_rects(poly):
+                yield poly.layer, poly.datatype, rect
 
 lef_macros = []
 
@@ -49,14 +79,11 @@ for cell in lib.cells:
     blockage_rects = defaultdict(list)
     labels = []
 
-    for poly in cell.polygons:
-        key = (poly.layer, poly.datatype)
-        bb  = poly.bounding_box()
-        x0, y0 = bb[0]
-        x1, y1 = bb[1]
+    for layer, datatype, rect in iter_shapes(cell):
+        key = (layer, datatype)
 
         if key == boundary_key:
-            boundary_rects.append((x0, y0, x1, y1))
+            boundary_rects.append(rect)
             continue
 
         if key not in rev_map:
@@ -64,31 +91,24 @@ for cell in lib.cells:
         lname, purpose = rev_map[key]
 
         if purpose == "draw":
-            draw_rects[lname].append((x0, y0, x1, y1))
+            draw_rects[lname].append(rect)
         elif purpose == "pin":
-            pin_rects[lname].append((x0, y0, x1, y1))
+            pin_rects[lname].append(rect)
         elif purpose in ("blockage", "obs"):
-            blockage_rects[lname].append((x0, y0, x1, y1))
+            blockage_rects[lname].append(rect)
+
+    # De-duplicate coincident shapes so the (layer, rect) assignment keys below
+    # act on a single copy of each rectangle.
+    for bucket in (draw_rects, pin_rects, blockage_rects):
+        for k in list(bucket):
+            bucket[k] = list(dict.fromkeys(bucket[k]))
 
     for lbl in cell.labels:
         key = (lbl.layer, lbl.texttype)
         if key in rev_map:
-            lname, purpose = rev_map[key]
-            if purpose == "label":
-                lx, ly = lbl.origin
-                labels.append((lbl.text, lx, ly, lname))
-
-    if boundary_rects:
-        bx0, by0, bx1, by1 = boundary_rects[0]
-        width  = s(bx1 - bx0)
-        height = s(by1 - by0)
-    else:
-        all_v = [(x, y)
-                 for rects in list(pin_rects.values()) + list(draw_rects.values())
-                 for (x0, y0, x1, y1) in rects
-                 for x, y in ((x0, y0), (x1, y1))]
-        width  = s(max((x for x, _ in all_v), default=0))
-        height = s(max((y for _, y in all_v), default=0))
+            lname, _purpose = rev_map[key]
+            lx, ly = lbl.origin
+            labels.append((lbl.text, lx, ly, lname))
 
     pin_shapes  = defaultdict(lambda: defaultdict(list))
     assigned    = set()
@@ -110,6 +130,33 @@ for cell in lib.cells:
                 anon += 1
                 pin_shapes[f"PIN{anon}"][lname].append(rect)
                 assigned.add((lname, rect))
+
+    for lname, rects in draw_rects.items():
+        for rect in rects:
+            if (lname, rect) not in assigned:
+                blockage_rects[lname].append(rect)
+                assigned.add((lname, rect))
+    for k in list(blockage_rects):
+        blockage_rects[k] = list(dict.fromkeys(blockage_rects[k]))
+
+    emitted = [r for ld in pin_shapes.values() for rs in ld.values() for r in rs]
+    emitted += [r for rs in blockage_rects.values() for r in rs]
+    if boundary_rects:
+        bx0, by0, bx1, by1 = boundary_rects[0]
+        width  = s(bx1 - bx0)
+        height = s(by1 - by0)
+    elif emitted:
+        min_x = min(r[0] for r in emitted)
+        min_y = min(r[1] for r in emitted)
+        max_x = max(r[2] for r in emitted)
+        max_y = max(r[3] for r in emitted)
+        width  = s(max_x - min_x)
+        height = s(max_y - min_y)
+        if min_x < 0 or min_y < 0:
+            print(f"  warning: {cell.name} geometry starts at "
+                  f"({fmt(min_x)}, {fmt(min_y)}) but ORIGIN is 0 0")
+    else:
+        width = height = 0
 
     lef_macros.append({
         "name":     cell.name,
