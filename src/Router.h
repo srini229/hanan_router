@@ -294,6 +294,9 @@ typedef std::set<IntPair, IntPairComp> IntRangeSet;
 typedef std::set<Node*, NodeComp> NodeSet;
 typedef std::multiset<const Node*, NodeCostComp> PriorityQueue;
 typedef std::vector<std::map<IntPair, Node*, IntPairComp>> NodeMap;
+bool replay(class Router& r, const std::string& leffile, const int uu, const bool detour,
+    const std::string& ndrfile, const DRC::LayerInfo& lf);
+
 class Router {
   private:
     PriorityQueue _pq;
@@ -320,6 +323,7 @@ class Router {
     std::vector<Vias> _upVias, _dnVias;
     std::string _name;
     size_t _expansions{0};
+    long _sollen{0};
     const size_t _maxExpansions{100000};
     std::vector<int> _aboveViaLayer, _belowViaLayer;
     const DRC::LayerInfo& _lf;
@@ -332,6 +336,7 @@ class Router {
     bool _usepinwidth{false}, _debugplot{false};
     int _reorderPasses{10};
     int _threads{1};
+    bool _rsmtcorridor{false};
     int _attemptno{1};
     bool _cornerEscape{false};
     bool _relaxViaEscape{false};
@@ -510,6 +515,23 @@ class Router {
       auto it = _nodes[z].find(std::make_pair(x, y));
       return it != _nodes[z].end() && isTarget(it->second);
     }
+    const Geom::Rect* pinShapeAt(const int x, const int y, const int z) const
+    {
+      for (const auto* m : {&_sourceshapes, &_targetshapes}) {
+        auto it = m->find(z);
+        if (it == m->end()) continue;
+        for (const auto& r : it->second) {
+          if (x >= r.xmin() && x <= r.xmax() && y >= r.ymin() && y <= r.ymax()) return &r;
+        }
+      }
+      return nullptr;
+    }
+    static long long padPinOverlap(const Geom::Rect& pad, const Geom::Rect& pin)
+    {
+      const long long w = std::min(pad.xmax(), pin.xmax()) - std::max(pad.xmin(), pin.xmin());
+      const long long h = std::min(pad.ymax(), pin.ymax()) - std::max(pad.ymin(), pin.ymin());
+      return (w <= 0 || h <= 0) ? 0 : w * h;
+    }
     void setexpand(Node* newn, const Node* parent) const;
 
     void constructVias(const std::map<int, DRC::ViaArray>* ndrvias = nullptr);
@@ -578,6 +600,7 @@ class Router {
     // check this instead of the returned shape list's emptiness, which is
     // also empty on a legitimate zero-length (already-coincident) solution.
     bool lastSolutionFound() const { return _lastSolFound; }
+    long solLength() const { return _sollen; }
     void setMBox(const Geom::Rect& box) { _mbox = box; }
     void printSol() const;
     void plot() const;
@@ -631,6 +654,9 @@ class Router {
     bool relaxViaEscape() const { return _relaxViaEscape; }
     void setDumpOpenNets(const bool b) { _dumpOpenNets = b; }
     bool dumpOpenNets() const { return _dumpOpenNets; }
+    static const int RSMT_RELAX_AFTER_PASS = 3;
+    void setRSMTCorridor(const bool b) { _rsmtcorridor = b; }
+    bool rsmtCorridor() const { return _rsmtcorridor; }
     static const int TRACE_SAMENET_FROM_ATTEMPT = 3;
     static const int BOUNDARY_ESCAPE_FROM_ATTEMPT = 3;
     void setAttemptNo(const int n) { _attemptno = n; }

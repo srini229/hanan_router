@@ -7,6 +7,7 @@ endif
 #CCFLAGS = -Wall -g -std=c++14 -D_GLIBCXX_PARALLEL -march=native -funroll-loops -fopenmp
 CCFLAGS = -Wall -g -std=c++14 -funroll-loops -pthread $(MARCH)
 INCLUDES = ./include
+INCDIRS = -I$(INCLUDES)
 LFLAGS = 
 DEBUG = 0
 LIBS = -lm
@@ -45,21 +46,21 @@ endif
 .PHONY: depend clean test coverage
 
 $(MAIN): $(OBJS) 
-	$(CPP) $(CCFLAGS) $(OPTFLAGS) -I$(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
+	$(CPP) $(CCFLAGS) $(OPTFLAGS) $(INCDIRS) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
 
 $(BIN)/%.o: $(SRC)/%.cpp 
-	@mkdir -p $(BIN)
-	$(CPP) $(CCFLAGS) $(OPTFLAGS) -I$(INCLUDES) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
+	@mkdir -p $(dir $@)
+	$(CPP) $(CCFLAGS) $(OPTFLAGS) $(INCDIRS) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
 
 test: $(MAIN)
 	cd test && ./run_smoke.sh ../$(MAIN)
 
 $(COVMAIN): $(COVOBJS)
-	$(CPP) $(CCFLAGS) $(COVFLAGS) -I$(INCLUDES) -o $(COVMAIN) $(COVOBJS) $(LFLAGS) $(LIBS)
+	$(CPP) $(CCFLAGS) $(COVFLAGS) $(INCDIRS) -o $(COVMAIN) $(COVOBJS) $(LFLAGS) $(LIBS)
 
 $(COVBIN)/%.o: $(SRC)/%.cpp
-	@mkdir -p $(COVBIN)
-	$(CPP) $(CCFLAGS) $(COVFLAGS) -I$(INCLUDES) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
+	@mkdir -p $(dir $@)
+	$(CPP) $(CCFLAGS) $(COVFLAGS) $(INCDIRS) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
 
 coverage: $(COVMAIN)
 	rm -rf $(COVDIR)

@@ -1,6 +1,12 @@
 #include "Util.h"
 #include "Placement.h"
 #include "Router.h"
+#include "borah.h"
+#include <mutex>
+
+using namespace boost::polygon::operators;
+static const int RSMT_CORRIDOR_PITCHES = 4;
+static const int RSMT_EDGE_WIDTH = 5;   // drawn width of the corridor outline
 
 #include <algorithm>
 #include <mutex>
@@ -167,7 +173,86 @@ PortPairs Net::clockRouteOrder() const
 }
 
 
-using namespace boost::polygon::operators;
+static Geom::Rects outlineBoxes(const Geom::Rects& region, const int w, int* nholes = nullptr)
+{
+  Geom::Rects edges;
+  if (region.empty()) return edges;
+  PolySet ps;
+  for (const auto& r : region) ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+  PPolyWHs polys;
+  ps.get(polys);
+  const int lo = w / 2, hi = w - lo;
+  auto wall = [&](auto first, auto last) {
+    std::vector<Geom::Point> pts;
+    for (auto it = first; it != last; ++it) {
+      pts.emplace_back(static_cast<int>(bp::x(*it)), static_cast<int>(bp::y(*it)));
+    }
+    for (size_t i = 0; i < pts.size(); ++i) {
+      const auto& a = pts[i];
+      const auto& b = pts[(i + 1) % pts.size()];
+      if (a.y() == b.y()) {
+        edges.emplace_back(std::min(a.x(), b.x()) - lo, a.y() - lo,
+                           std::max(a.x(), b.x()) + hi, a.y() + hi);
+      } else if (a.x() == b.x()) {
+        edges.emplace_back(a.x() - lo, std::min(a.y(), b.y()) - lo,
+                           a.x() + hi, std::max(a.y(), b.y()) + hi);
+      }
+    }
+  };
+  for (const auto& poly : polys) {
+    wall(poly.begin(), poly.end());
+    for (auto ith = poly.begin_holes(); ith != poly.end_holes(); ++ith) {
+      wall(ith->begin(), ith->end());
+      if (nholes) ++*nholes;
+    }
+  }
+  return edges;
+}
+
+Geom::Rects Net::rsmtCorridor(const int margin) const
+{
+  Geom::Rects corridor;
+  std::vector<Geom::Rect> boxes;
+  for (auto virt : {true, false}) {
+    for (auto& p : (virt ? _vpins : _pins)) {
+      Geom::Rect b;
+      for (auto& port : p->ports()) if (port->bbox().valid()) b.merge(port->bbox());
+      if (b.valid()) boxes.push_back(b);
+    }
+  }
+  if (boxes.empty()) return corridor;
+  for (auto& b : boxes) corridor.push_back(b.bloatby(margin, margin));
+  if (boxes.size() < 2) return corridor;
+
+  auto band = [&](const int x1, const int y1, const int x2, const int y2) {
+    corridor.emplace_back(std::min(x1, x2) - margin, y1 - margin,
+                          std::max(x1, x2) + margin, y1 + margin);
+    corridor.emplace_back(x2 - margin, std::min(y1, y2) - margin,
+                          x2 + margin, std::max(y1, y2) + margin);
+  };
+
+  std::vector<rsmt::Rect> terms;
+  terms.reserve(boxes.size());
+  for (auto& b : boxes) {
+    terms.push_back(rsmt::Rect(b.xmin(), b.ymin(), b.xmax(), b.ymax()));
+  }
+  const rsmt::BorahTree t = rsmt::BorahOwens(terms);
+  _rsmtlen = static_cast<long>(t.length);
+  _mstlen = static_cast<long>(t.mst_length);
+  for (const auto& ep : t.edge_pts) {
+    band(static_cast<int>(ep.first.x), static_cast<int>(ep.first.y),
+         static_cast<int>(ep.second.x), static_cast<int>(ep.second.y));
+  }
+
+  PolySet ps;
+  for (const auto& r : corridor) ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+  PRects merged;
+  get_rectangles(merged, ps);
+  Geom::Rects out;
+  out.reserve(merged.size());
+  for (const auto& m : merged) out.emplace_back(bp::xl(m), bp::yl(m), bp::xh(m), bp::yh(m));
+  return out;
+}
 
 Geom::LayerRects Net::dropSameNetObstacles(const Geom::LayerRects& obs) const
 {
@@ -241,6 +326,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
   SaveRestoreStream src(_name + "_route.log");
 #endif
   _unroute = 0;
+  _wirelen = 0;
   _openwires.clear();
   std::vector<const Pin*> sortedpins(_pins.begin(), _pins.end());
   std::sort(sortedpins.begin(), sortedpins.end(),
@@ -273,6 +359,39 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     const Geom::LayerRects obt = tracing ? dropSameNetObstacles(_obstacles) : Geom::LayerRects();
 
     PortPairs ppairs = (_driver.empty() ? reorderPorts() : clockRouteOrder());
+
+    Geom::LayerRects keepout;
+    if (router.rsmtCorridor()) {
+      int pitch = 0;
+      for (int z = router.minLayer(); z <= router.maxLayer(); ++z) {
+        pitch = std::max(pitch, std::max(router.baseWidthX(z), router.baseWidthY(z))
+                              + std::max(router.baseSpaceX(z), router.baseSpaceY(z)));
+      }
+      auto corridor = rsmtCorridor(pitch * RSMT_CORRIDOR_PITCHES);
+      if (!corridor.empty() && bbox.valid()) {
+        PolySet cs;
+        for (const auto& r : corridor) cs.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+        PolySet box;
+        box.insert(PRect(bbox.xmin(), bbox.ymin(), bbox.xmax(), bbox.ymax()));
+        cs &= box;
+        PRects crects;
+        get_rectangles(crects, cs);
+        corridor.clear();
+        for (const auto& c : crects) corridor.emplace_back(bp::xl(c), bp::yl(c), bp::xh(c), bp::yh(c));
+      }
+      _corridor = corridor;
+      int nholes = 0;
+      _corridorEdges = outlineBoxes(corridor, RSMT_EDGE_WIDTH, &nholes);
+      if (!_corridorEdges.empty()) {
+        for (const auto& r : _corridorEdges) {
+          for (int z = router.minLayer(); z <= router.maxLayer(); ++z) keepout[z].push_back(r);
+        }
+        COUT << "RSMT corridor for net " << _name << " : " << corridor.size()
+             << " band(s), " << nholes << " hole(s), boundary " << _corridorEdges.size() << " wall(s) on layers "
+             << router.minLayer() << ".." << router.maxLayer() << '\n';
+      }
+    }
+
     for (auto& pp : ppairs) {
       const auto& port1 = pp.first;
       const auto& port2 = pp.second;
@@ -282,8 +401,10 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.setMBox(bbox);
       const auto& p1 = port1->shapes();
       const auto& p2 = port2->shapes();
-      //bool preflayersrctgt{true};
+      bool preflayersrctgt{true};
       Geom::LayerRects samenetobst;
+      auto addSrcTgtShapes = [&]() {
+      samenetobst.clear();
       for (auto src : {true, false}) {
         bool preflayer{false};
         for (auto& l : _preflayers) {
@@ -294,7 +415,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
             break;
           }
         }
-        //preflayersrctgt &= preflayer;
+        preflayersrctgt &= preflayer;
         if (!_preflayers.empty()) {
           COUT << "pref layer pin" << (preflayer ? "" : " not") << " found for " << (src ? port1->name() : port2->name()) << '\n';
         }
@@ -314,43 +435,72 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           }
         }
       }
+      };
+      addSrcTgtShapes();
       router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers, _ndrvias);
 #if DEBUG
       COUT << "adding line of sight nodes if they exist\n";
 #endif
-      /*for (auto& l : p1) {
+      int losbands{0};
+      for (auto& l : p1) {
         auto it = p2.find(l.first);
-        if (preflayersrctgt && _preflayers.find(l.first) == _preflayers.end()) continue;
-        if (it != p2.end()) {
-          for (auto& s1 : l.second) {
-            for (auto& s2 : it->second) {
-              if (s1.xmin() < s2.xmax() && s1.xmax() > s2.xmin()) {
-                int xmin(std::max(s1.xmin(), s2.xmin())), xmax(std::min(s1.xmax(), s2.xmax()));
-                if (xmax - xmin >= router.widthy(l.first)) {
-                  router.addSource(Geom::Rect(xmin, s1.ymin(), xmax, s1.ymax()), l.first);
-                  router.addTarget(Geom::Rect(xmin, s2.ymin(), xmax, s2.ymax()), l.first);
-                }
-              } else if (s1.ymin() < s2.ymax() && s1.ymax() > s2.ymin()) {
-                int ymin(std::max(s1.ymin(), s2.ymin())), ymax(std::min(s1.ymax(), s2.ymax()));
-                if (ymax - ymin >= router.widthx(l.first)) {
-                  router.addSource(Geom::Rect(s1.xmin(), ymin, s1.xmax(), ymax), l.first);
-                  router.addTarget(Geom::Rect(s2.xmin(), ymin, s2.xmax(), ymax), l.first);
-                }
+        if (preflayersrctgt && !_preflayers.empty() &&
+            _preflayers.find(l.first) == _preflayers.end()) continue;
+        if (it == p2.end()) continue;
+        for (auto& s1 : l.second) {
+          for (auto& s2 : it->second) {
+            if (s1.xmin() < s2.xmax() && s1.xmax() > s2.xmin()) {
+              const int xmin(std::max(s1.xmin(), s2.xmin()));
+              const int xmax(std::min(s1.xmax(), s2.xmax()));
+              if (xmax - xmin >= router.widthy(l.first)) {
+                router.addSourceTarget(Geom::Rect(xmin, s1.ymin(), xmax, s1.ymax()), l.first, true);
+                router.addSourceTarget(Geom::Rect(xmin, s2.ymin(), xmax, s2.ymax()), l.first, false);
+                ++losbands;
+              }
+            } else if (s1.ymin() < s2.ymax() && s1.ymax() > s2.ymin()) {
+              const int ymin(std::max(s1.ymin(), s2.ymin()));
+              const int ymax(std::min(s1.ymax(), s2.ymax()));
+              if (ymax - ymin >= router.widthx(l.first)) {
+                router.addSourceTarget(Geom::Rect(s1.xmin(), ymin, s1.xmax(), ymax), l.first, true);
+                router.addSourceTarget(Geom::Rect(s2.xmin(), ymin, s2.xmax(), ymax), l.first, false);
+                ++losbands;
               }
             }
           }
         }
-      }*/
+      }
+      if (losbands) {
+        COUT << "line of sight bands added : " << losbands << " for " << router.name() << '\n';
+      }
       if (_detour) router.allowDetour();
       router.addObstacles(l1, true);
       router.addObstacles(l2, true);
       router.addObstacles(tracing ? l3t : l3, true);
       router.addObstacles(tracing ? obt : _obstacles, true);
       router.addObstacles(samenetobst, true);
+      router.addObstacles(keepout, true);
       auto sol = router.findSol();
+      if (!router.lastSolutionFound() && !keepout.empty()) {
+        COUT << "RSMT corridor blocked " << port1->name() << " -> " << port2->name()
+             << " ; retrying without it\n";
+        router.clearObstacles(true);
+        router.clearSourceTargets();
+        router.setName(_name + "__" + port1->name() + "__" + port2->name());
+        router.setMBox(bbox);
+        addSrcTgtShapes();
+        router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers, _ndrvias);
+        if (_detour) router.allowDetour();
+        router.addObstacles(l1, true);
+        router.addObstacles(l2, true);
+        router.addObstacles(tracing ? l3t : l3, true);
+        router.addObstacles(tracing ? obt : _obstacles, true);
+        router.addObstacles(samenetobst, true);
+        sol = router.findSol();
+      }
       // Not sol.empty(): a source and target that already coincide need zero
       // additional shapes and legitimately return an empty sol on success.
       if (router.lastSolutionFound()) {
+        _wirelen += router.solLength();
 #if DEBUG
         for (auto& l : sol) {
           for (auto& s : l.second) {

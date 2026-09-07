@@ -96,6 +96,10 @@ class Net {
     std::string _driver;
     std::map<int, DRC::ViaArray> _ndrvias;
     std::vector<std::pair<Port*, Geom::LayerRects>> _pinSnapshot;
+    Geom::Rects _corridor, _corridorEdges;
+    mutable long _rsmtlen{-1};      // Steiner tree length over the pin centres
+    mutable long _mstlen{-1};       // the MST Borah started from, for comparison
+    long _wirelen{0};               // routed metal centreline length
   public:
     Net(const std::string& name) : _name{name}, _bbox{}, _unroute{1}, _exclude{0}, _detour{0}, _driver{} {}
     ~Net()
@@ -119,6 +123,9 @@ class Net {
     void route(Router::Router& r, const Geom::LayerRects& l1, const Geom::LayerRects& l2, const Geom::LayerRects& l3, const bool update, const int uu, const Geom::Rect& bbox, const std::string& modname);
     const Geom::LayerRects& routeShapesWithPins() const { return _routeshapeswithpins; }
     const Geom::LayerRects& routeShapes() const { return _routeshapes; }
+    Geom::Rects rsmtCorridor(const int margin) const;
+    const Geom::Rects& corridor() const { return _corridor; }
+    const Geom::Rects& corridorEdges() const { return _corridorEdges; }
     Geom::LayerRects dropSameNetObstacles(const Geom::LayerRects& obs) const;
     bool unrouted() const { return _unroute ? true : false; }
     const std::vector<std::string>& openWires() const { return _openwires; }
@@ -149,6 +156,7 @@ class Net {
     {
       _routeshapes.clear();
       _routeshapeswithpins.clear();
+      _wirelen = 0;
       _bbox = Geom::Rect();
       _unroute = 1;
       _openwires.clear();
@@ -171,6 +179,10 @@ class Net {
         }
       }
     }
+    long wirelength() const { return _wirelen; }
+    void addWirelength(const long l) { _wirelen += l; }
+    long rsmtLength() const { return _rsmtlen; }
+    long mstLength() const { return _mstlen; }
     int halfpm() const { return _bbox.halfpm(); }
     const Geom::Rect& bbox() const { return _bbox; }
     void addNDRWidth(const int layer, const int width) { _ndrwidths[layer] = width; }
@@ -447,12 +459,34 @@ class Module {
       }
     }
 
+    void printWirelengths() const
+    {
+      if (_leaf) return;
+      long total = 0;
+      for (auto& n : _nets) {
+        if (n.second.excluded()) continue;
+        const long wl = n.second.wirelength();
+        const long rl = n.second.rsmtLength();
+        const long ml = n.second.mstLength();
+        total += wl;
+        COUT << "WIRELENGTH NET " << _name << ' ' << n.first << " : " << wl;
+        if (ml > 0) COUT << " mst=" << ml;
+        if (rl > 0) {
+          COUT << " rsmt=" << rl << " ratio=" << (static_cast<double>(wl) / rl);
+        }
+        COUT << '\n';
+      }
+      COUT << "WIRELENGTH TOTAL " << _name << " : " << total << '\n';
+    }
+
     const Geom::Rect& bbox() const { return _bbox; }
     void checkShort() const;
     int checkDRC(const Router::Router& router) const;
     int drcCount() const { return _drccount; }
+    int drcPlacementCount() const { return _drcplacement; }
     mutable std::map<int, Geom::Rects> _drcmarkers;
     mutable int _drccount{0};
+    mutable int _drcplacement{0};
 
     void writeDEF(const std::string& outdir, const std::string& nstr = "", const std::string& netname = "") const;
     void writeLEF(const std::string& outdir) const;
@@ -486,9 +520,13 @@ class Netlist {
     void checkDRC(const Router::Router&) const
     {
       if (!_valid) return;
-      int total = 0;
-      for (auto& m : _modules) total += m.second->drcCount();
+      int total = 0, placement = 0;
+      for (auto& m : _modules) {
+        total     += m.second->drcCount();
+        placement += m.second->drcPlacementCount();
+      }
       COUT << "DRC_SUMMARY router-caused spacing violations = " << total << '\n';
+      COUT << "DRC_SUMMARY placement spacing violations = " << placement << '\n';
     }
     // Total nets left open across every hierarchy after a route() call.
     int totalUnrouted() const
@@ -503,6 +541,10 @@ class Netlist {
     {
       if (!_valid) return;
       for (auto& m : _modules) m.second->printRouteSummary();
+    }
+    void printWirelengths() const
+    {
+      for (auto& m : _modules) m.second->printWirelengths();
     }
 };
 
