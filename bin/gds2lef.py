@@ -9,12 +9,11 @@ ap = argparse.ArgumentParser(description="Convert GDS cells to LEF macros")
 ap.add_argument("-g", "--gds",    required=True, help="Input GDS file")
 ap.add_argument("-l", "--layers", required=True, help="layers.json with GDS layer mapping")
 ap.add_argument("-o", "--out",    default="out.lef", help="Output LEF file")
-ap.add_argument("-s", "--scale",  type=float, default=1.0,
+ap.add_argument("-s", "--scale",  type=float, default=0,
                 help="LEF database units per micron (default 1.0)")
 args = ap.parse_args()
 
 def fmt(v):
-    """Format a coordinate: up to 6 significant figures, strip trailing zeros."""
     return f"{v:.6g}"
 
 rev_map = {}
@@ -35,12 +34,12 @@ for entry in ldata.get("Abstraction", []):
         boundary_key = (gno, dtmap.get("Draw", 0))
 
 lib = gdstk.read_gds(args.gds)
-scale = args.scale
+scale = args.scale if args.scale != 0 else (lib.unit/lib.precision)
 
 FRAC_PREC = min(1e-7, lib.precision / lib.unit) if lib.unit else 1e-7
 
 def s(v):
-    return v * scale
+    return round(v * scale)
 
 def poly_to_rects(poly):
     pts = poly.points
@@ -56,7 +55,7 @@ def poly_to_rects(poly):
         if bb is None:
             continue
         (x0, y0), (x1, y1) = bb
-        if x1 - x0 <= 0 or y1 - y0 <= 0:      # drop slivers / zero-area pieces
+        if x1 - x0 <= 0 or y1 - y0 <= 0:
             continue
         out.append((x0, y0, x1, y1))
     return out
@@ -72,15 +71,21 @@ def iter_shapes(cell):
 
 lef_macros = []
 
-for cell in lib.cells:
+top_cells = lib.top_level()
+for t in top_cells:
+    t.flatten(apply_repetitions=True)
+
+for cell in top_cells:
     boundary_rects = []
     draw_rects     = defaultdict(list)
     pin_rects      = defaultdict(list)
     blockage_rects = defaultdict(list)
     labels = []
-
+    oX = cell.bounding_box()[0][0]
+    oY = cell.bounding_box()[0][1]
     for layer, datatype, rect in iter_shapes(cell):
         key = (layer, datatype)
+        rect = (rect[0] - oX, rect[1] - oY, rect[2] - oX, rect[3] - oY)
 
         if key == boundary_key:
             boundary_rects.append(rect)
@@ -97,8 +102,6 @@ for cell in lib.cells:
         elif purpose in ("blockage", "obs"):
             blockage_rects[lname].append(rect)
 
-    # De-duplicate coincident shapes so the (layer, rect) assignment keys below
-    # act on a single copy of each rectangle.
     for bucket in (draw_rects, pin_rects, blockage_rects):
         for k in list(bucket):
             bucket[k] = list(dict.fromkeys(bucket[k]))
@@ -108,6 +111,8 @@ for cell in lib.cells:
         if key in rev_map:
             lname, _purpose = rev_map[key]
             lx, ly = lbl.origin
+            lx -= oX
+            ly -= oY
             labels.append((lbl.text, lx, ly, lname))
 
     pin_shapes  = defaultdict(lambda: defaultdict(list))
@@ -139,24 +144,18 @@ for cell in lib.cells:
     for k in list(blockage_rects):
         blockage_rects[k] = list(dict.fromkeys(blockage_rects[k]))
 
-    emitted = [r for ld in pin_shapes.values() for rs in ld.values() for r in rs]
-    emitted += [r for rs in blockage_rects.values() for r in rs]
     if boundary_rects:
         bx0, by0, bx1, by1 = boundary_rects[0]
         width  = s(bx1 - bx0)
         height = s(by1 - by0)
-    elif emitted:
-        min_x = min(r[0] for r in emitted)
-        min_y = min(r[1] for r in emitted)
-        max_x = max(r[2] for r in emitted)
-        max_y = max(r[3] for r in emitted)
-        width  = s(max_x - min_x)
-        height = s(max_y - min_y)
-        if min_x < 0 or min_y < 0:
-            print(f"  warning: {cell.name} geometry starts at "
-                  f"({fmt(min_x)}, {fmt(min_y)}) but ORIGIN is 0 0")
     else:
-        width = height = 0
+        max_x = cell.bounding_box()[1][0]
+        max_y = cell.bounding_box()[1][1]
+        width  = s(max_x - oX)
+        height = s(max_y - oY)
+        if oX < 0 or oY < 0:
+            print(f"  warning: {cell.name} geometry starts at "
+                  f"({fmt(oX)}, {fmt(oY)}) but ORIGIN is 0 0")
 
     lef_macros.append({
         "name":     cell.name,
@@ -167,12 +166,6 @@ for cell in lib.cells:
     })
 
 out = []
-out.append("VERSION 5.8 ;")
-out.append("")
-out.append("UNITS")
-out.append(f"    DATABASE MICRONS {int(scale)} ;")
-out.append("END UNITS")
-out.append("")
 
 for m in lef_macros:
     name = m["name"]
@@ -206,8 +199,6 @@ for m in lef_macros:
 
     out.append(f"END {name}")
     out.append("")
-
-out.append("END LIBRARY")
 
 with open(args.out, "w") as fp:
     fp.write("\n".join(out) + "\n")
