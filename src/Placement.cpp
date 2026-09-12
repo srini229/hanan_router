@@ -171,6 +171,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
 {
   TIME_M();
   if (!_routed) {
+    snapshotPreRoute();
     router.setuu(_uu);
     //writeDEF("_before");
     router.clearObstacles();
@@ -609,6 +610,9 @@ void Module::route(Router::Router& router, const std::string& outdir)
                 myrouter.setuu(_uu);
                 myrouter.setModName(_name);
                 myrouter.setusepinwidth((_usepinwidth == 1) ? true : false);
+                myrouter.setMaxExpansions(router.maxExpansions());
+                myrouter.setEscapePitchMul(router.escapePitchMul());
+                myrouter.setPruneEscapes(router.pruneEscapes());
                 myrouter.setCornerEscape(router.cornerEscape());
                 myrouter.setRelaxViaEscape(router.relaxViaEscape());
                 myrouter.setDumpOpenNets(router.dumpOpenNets());
@@ -625,6 +629,12 @@ void Module::route(Router::Router& router, const std::string& outdir)
                   applyDebug(myrouter, i);
                   nets[i]->route(myrouter, routedSnapshot, unroutedSets[bi], obsSets[bi], true, _uu, _bbox, _name);
                   flush();
+                }
+                {
+                  // the clone did the searching; fold its work back so the
+                  // reorder budget sees the whole block
+                  std::lock_guard<std::mutex> lk(logmtx);
+                  router.addModuleExpansions(myrouter.moduleExpansions());
                 }
               }
               flush();
@@ -768,14 +778,21 @@ void Module::route(Router::Router& router, const std::string& outdir)
     const bool rsmtOn = router.rsmtCorridor();
     router.setDumpOpenNets(false);
 
+    router.resetModuleExpansions();
     int bestUnrouted = attempt();
+    const size_t baseExpansions = router.moduleExpansions();
 
     // If nets remain open, the net ordering is usually to blame: a net routed
     // early lays wire across a resource a later net needs, leaving it blocked.
     // Iterate (rip-up and reorder), each pass giving the nets that were left open
     // a higher priority so they route earlier, and keep the order that leaves the
     // fewest nets open.
-    const int passes = router.reorderPasses();
+    const int passes = router.effectiveReorderPasses(baseExpansions);
+    if (passes < router.reorderPasses()) {
+      COUT << "module " << _name << " : base route took " << baseExpansions
+           << " expansions; capping reorder at " << passes << " pass(es) instead of "
+           << router.reorderPasses() << '\n';
+    }
     const size_t pinned = _routeorder.size();
     if (bestUnrouted > 0 && passes > 0 && nets.size() > pinned + 1) {
       COUT << "module " << _name << " has " << bestUnrouted

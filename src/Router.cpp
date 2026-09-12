@@ -703,6 +703,29 @@ void Router::addSourceTargetShapes(const Geom::Rect& r, const int z, const bool 
   }
 }
 
+// Escape points are generated per pin rectangle, each lattice anchored on its own
+// rectangle's centre, so a net with hundreds of pin shapes contributes hundreds of
+// unrelated Hanan lines. Order the candidates by distance from the rectangle's
+// centre -- the cheapest ones under offCentreEscapeCost -- so the point that
+// survives thinning is the one the cost function already prefers.
+static std::vector<std::pair<Geom::Point, int>>
+byCentreDistance(const Geom::PointWidthSet& points, const Geom::Rect& r)
+{
+  std::vector<std::pair<Geom::Point, int>> v(points.begin(), points.end());
+  std::sort(v.begin(), v.end(),
+    [&r](const std::pair<Geom::Point, int>& a, const std::pair<Geom::Point, int>& b) {
+      const long da = std::abs(a.first.x() - r.xcenter()) + std::abs(a.first.y() - r.ycenter());
+      const long db = std::abs(b.first.x() - r.xcenter()) + std::abs(b.first.y() - r.ycenter());
+      return (da != db) ? (da < db) : (a < b);
+    });
+  return v;
+}
+
+static inline int cellOf(const int v, const int cell)
+{
+  return (v >= 0) ? (v / cell) : -(((-v) + cell - 1) / cell);
+}
+
 void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
 {
   if (z < _minLayer || z > _maxLayer) return;
@@ -747,8 +770,19 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
         boundaryAdded.insert(coord);
       }
     }
-    for (auto& pp : points) {
+    const int cell = escapeCellSize(z);
+    auto& cells = _escapecells[std::make_pair(z, static_cast<int>(dir))];
+    bool nearest = true;
+    for (auto& pp : byCentreDistance(points, r)) {
       auto& p = pp.first;
+      _bbox.merge(p.x(), p.y(), p.x(), p.y());
+      if (cell > 0) {
+        const bool fresh = cells.insert(std::make_pair(cellOf(p.x(), cell), cellOf(p.y(), cell))).second;
+        // the nearest-centre point always survives, so every pin rectangle keeps
+        // at least one escape in every direction it had one before
+        if (!fresh && !nearest) continue;
+      }
+      nearest = false;
       int pen = 0;
       if (biased) {
         const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
@@ -775,8 +809,15 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
       dest.insert(n);
       _bbox.merge(n->x(), n->y(), n->x(), n->y());
     }
-    for (auto& pp : bpoints) {
+    bool nearestb = true;
+    for (auto& pp : byCentreDistance(bpoints, r)) {
       auto& p = pp.first;
+      _bbox.merge(p.x(), p.y(), p.x(), p.y());
+      if (cell > 0) {
+        const bool fresh = cells.insert(std::make_pair(cellOf(p.x(), cell), cellOf(p.y(), cell))).second;
+        if (!fresh && !nearestb) continue;
+      }
+      nearestb = false;
       const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
       const int pen = static_cast<int>(_cf.offCentreEscapeCost(offc));
       auto n = createNode(p.x(), p.y(), z, nullptr,
@@ -1798,7 +1839,14 @@ Geom::LayerRects Router::findSol()
         COUT << "o : " << o.str() << '\n';
         }
         }*/
+      const Geom::Rect pregridbbox = _bbox;
       generateHananGrid();
+      if (pruneDeadEscapes()) {
+        // those points contributed a Hanan line each in x and in y, and the grid
+        // is their product; rebuilding from the same bbox drops them
+        _bbox = pregridbbox;
+        generateHananGrid();
+      }
       for (auto& s : _sources) {
         evalTCost(s);
         if (!s->closed()) insertToPQ(s);
@@ -1855,6 +1903,7 @@ Geom::LayerRects Router::findSol()
         }
         expandNode(t);
         ++_expansions;
+        ++_moduleExpansions;
         if (_expansions >= _maxExpansions) break;
       }
       if (!_sol) {
@@ -1929,6 +1978,7 @@ Geom::LayerRects Router::findSol()
         ++escLayerExpansions[t->z()];
         expandNode(t);
         ++_expansions;
+        ++_moduleExpansions;
         if (_expansions >= _maxExpansions) break;
       }
       if (!_sol) {
@@ -1983,6 +2033,7 @@ Geom::LayerRects Router::findSol()
           ++relaxLayerExpansions[t->z()];
           expandNode(t);
           ++_expansions;
+          ++_moduleExpansions;
           if (_expansions >= _maxExpansions) break;
         }
         if (!_sol) {
@@ -2358,6 +2409,57 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
   }*/
   constructVias(&ndrvias);
   createSourceTargetNodes();
+}
+
+// The Hanan grid already has every obstacle cut out of it, so "the point lies in
+// a free interval" is the same predicate snap() and expandNode move by: an escape
+// point that fails it cannot be left, and as a target cannot be entered. A pure
+// via escape needs no in-plane room, only a legal via, so it is asked separately.
+bool Router::escapeUsable(const Node* n) const
+{
+  const int z = n->z();
+  if (z < 0) return true;
+  for (const bool vert : {true, false}) {
+    const auto& grids = vert ? _hanangridv : _hanangridh;
+    if (z >= static_cast<int>(grids.size())) continue;
+    const auto& grid = grids[z];
+    const int pos = vert ? n->x() : n->y();
+    const int lkp = vert ? n->y() : n->x();
+    auto itp = grid.find(pos);
+    if (itp == grid.end()) continue;
+    for (const auto& r : itp->second) {
+      if (lkp >= r.first && lkp <= r.second) return true;
+    }
+  }
+  for (const bool up : {true, false}) {
+    if (!(up ? n->viaup() : n->viadown())) continue;
+    const Via* v = isViaValid(n, up);
+    const bool ok = (v != nullptr);
+    delete v;
+    if (ok) return true;
+  }
+  return false;
+}
+
+bool Router::pruneDeadEscapes()
+{
+  if (!_pruneEscapes) return false;
+  size_t removed = 0;
+  for (auto* set : {&_sources, &_targets}) {
+    NodeSet keep;
+    for (auto* n : *set) {
+      if (escapeUsable(n)) keep.insert(n);
+    }
+    // If every entry point is unusable the net has no escape at all; leave the
+    // set alone so the failure is reported exactly as it was before.
+    if (keep.empty() || keep.size() == set->size()) continue;
+    removed += set->size() - keep.size();
+    *set = std::move(keep);
+  }
+  if (removed) {
+    COUT << "pruned " << removed << " blocked escape point(s) for " << _name << '\n';
+  }
+  return removed > 0;
 }
 
 void Router::createSourceTargetNodes()

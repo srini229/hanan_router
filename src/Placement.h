@@ -67,6 +67,24 @@ class Pin {
     void clearPorts() { for (auto& p : _ports) delete p; _ports.clear(); }
     ~Pin() { clearPorts(); }
     const Ports& ports() const { return _ports; }
+    // Routing only ever appends to a pin (a new port, or more rects on the last
+    // one), so a snapshot of the port shapes is enough to undo a whole route.
+    std::vector<Geom::LayerRects> snapshotPorts() const
+    {
+      std::vector<Geom::LayerRects> s;
+      s.reserve(_ports.size());
+      for (auto& p : _ports) s.push_back(p->shapes());
+      return s;
+    }
+    void restorePorts(const std::vector<Geom::LayerRects>& s)
+    {
+      while (_ports.size() > s.size()) { delete _ports.back(); _ports.pop_back(); }
+      _bbox = Geom::Rect();
+      for (size_t i = 0; i < _ports.size(); ++i) {
+        _ports[i]->setShapes(s[i]);
+        _bbox.merge(_ports[i]->bbox());
+      }
+    }
     void copyRects(const Geom::LayerRects& lr, bool newport = false)
     {
       if (_ports.empty() || newport) {
@@ -252,6 +270,14 @@ class Module {
     const int _uu;
     NetsVec _routeorder;
 
+    // Pre-route state, captured on the first route(). _obstacles holds only the
+    // LEF OBS / NDR shapes at that point; child routes and pin promotions are
+    // laid on top of it, so keeping a copy is enough to route the hierarchy again
+    // from the same slate.
+    Geom::LayerRects _preobstacles;
+    std::map<Pin*, std::vector<Geom::LayerRects>> _pinsnapshot;
+    unsigned int _presaved : 1;
+
     // Symmetric-net constraint: route 'first' then mirror its result as a guide
     // for 'second'. orient: 0 = auto-detect from pin geometry, 1 = vertical axis
     // at x=pos, 2 = horizontal axis at y=pos (pos already in DB units).
@@ -262,7 +288,7 @@ class Module {
 
     void build();
   public:
-    Module(const std::string& name, const std::string& absname, const unsigned leaf, const int uu) : _name(name), _absname{absname}, _leaf(leaf), _routed{leaf}, _usepinwidth{0}, _bbox{}, _uu{uu} {_instances.reserve(64);}
+    Module(const std::string& name, const std::string& absname, const unsigned leaf, const int uu) : _name(name), _absname{absname}, _leaf(leaf), _routed{leaf}, _usepinwidth{0}, _bbox{}, _uu{uu}, _presaved{0} {_instances.reserve(64);}
     ~Module();
     Instance* addInstance(const std::string& name, const std::string& mname, const Geom::Transform& tr)
     {
@@ -270,6 +296,29 @@ class Module {
       return _instances.back();
     }
     bool routed() const { return (_routed ? true : false); }
+    void snapshotPreRoute()
+    {
+      if (_presaved) return;
+      _presaved = 1;
+      _preobstacles = _obstacles;
+      for (auto& p : _pins) _pinsnapshot[p.second] = p.second->snapshotPorts();
+    }
+    // Drop everything route() produced so this hierarchy can be routed again.
+    void resetRoutes()
+    {
+      if (!_presaved || _leaf) return;
+      _obstacles = _preobstacles;
+      _internalroutes.clear();
+      for (auto& p : _pins) {
+        auto it = _pinsnapshot.find(p.second);
+        if (it != _pinsnapshot.end()) p.second->restorePorts(it->second);
+      }
+      for (auto& n : _nets) n.second.clearRoutes();
+      _drcmarkers.clear();
+      _drccount = 0;
+      _drcplacement = 0;
+      _routed = 0;
+    }
     const std::string& name() const { return _name; }
     Instances& instances() { return _instances; }
     const Geom::LayerRects& obstacles() const { return _obstacles; }
@@ -511,6 +560,41 @@ class Netlist {
     {
       if (!_valid) return;
       for (auto& m : _modules) m.second->route(r, outdir);
+    }
+    // Route again after a settings change (corner escapes, relaxed vias), touching
+    // only the hierarchies that still have open nets plus the ones that instantiate
+    // them, transitively: a parent sees its children's routes as obstacles, so it
+    // has to be redone when a child's routes move. Every other hierarchy keeps the
+    // routes -- and the DEF/LEF -- it already produced. Returns how many were
+    // re-routed.
+    int reroute(Router::Router& r, const std::string& outdir)
+    {
+      if (!_valid) return 0;
+      std::map<const Module*, std::vector<Module*>> parents;
+      for (auto& m : _modules) {
+        for (auto& i : m.second->instances()) {
+          if (i->module()) parents[i->module()].push_back(m.second);
+        }
+      }
+      std::vector<Module*> work;
+      std::set<Module*> dirty;
+      for (auto& m : _modules) {
+        if (m.second->numUnrouted() > 0 && dirty.insert(m.second).second) work.push_back(m.second);
+      }
+      const size_t open = work.size();
+      for (size_t i = 0; i < work.size(); ++i) {     // walk up to the parents
+        auto it = parents.find(work[i]);
+        if (it == parents.end()) continue;
+        for (auto p : it->second) if (dirty.insert(p).second) work.push_back(p);
+      }
+      COUT << "re-routing " << work.size() << " of " << _modules.size()
+           << " hierarchies : " << open << " with open nets, "
+           << (work.size() - open) << " parent(s) of those; "
+           << (_modules.size() - work.size()) << " skipped\n";
+      for (auto m : work) COUT << "  re-route : " << m->name() << '\n';
+      for (auto m : work) m->resetRoutes();
+      route(r, outdir);
+      return static_cast<int>(work.size());
     }
     void checkShort() const
     {

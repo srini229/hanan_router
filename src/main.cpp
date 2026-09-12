@@ -11,6 +11,10 @@ int main(int argc, char* argv[])
     std::cerr << "usage : " << argv[0] << "\n\t-d <layers.json>\n\t-p <placement file>\n\t-l <lef file>\n"
       << "\t-s <lef scaling>\n\t-uu <user units scaling>\n\t-ndr <ndr constraints.json> -o <output dir> -r <precision>\n"
       << "\t-reorder <N> (alternate net-ordering passes when nets remain unrouted; default 10)\n"
+      << "\t-maxexp <N> (A* node-expansion budget per search stage; default 100000)\n"
+      << "\t-escapepitch <N> (thin pin-escape points to one per N wire pitches; 0 keeps them all; default 1)\n"
+      << "\t-reorderbudget <N> (cap a block's reorder passes so base-route expansions x passes stays under N; 0 uncapped; default 15000000)\n"
+      << "\t-keepblockedescapes (seed every pin-escape point, including ones no wire can start from; default is to drop them)\n"
       << "\t-replay <ATTEMPT_*.lef> (re-route one wire from a HANAN_DEBUG_WIRE dump; needs -d only)\n"
       << "\t-detour (with -replay: allow a large detour even without NDR saying so)\n"
       << "\t-rsmt (confine each net to a Borah Steiner corridor over its pins)\n"
@@ -71,6 +75,35 @@ int main(int argc, char* argv[])
       CERR << "invalid -reorder value '" << rp << "', using default 10" << std::endl;
     }
   }
+  const std::string me = parseArgs(argc, argv, "-maxexp");
+  if (!me.empty()) {
+    try {
+      const long long n = std::stoll(me);
+      if (n > 0) hrdb.setMaxExpansions(static_cast<size_t>(n));
+      else CERR << "invalid -maxexp value '" << me << "', using default" << std::endl;
+    } catch (const std::exception& e) {
+      CERR << "invalid -maxexp value '" << me << "', using default" << std::endl;
+    }
+  }
+  const std::string rb = parseArgs(argc, argv, "-reorderbudget");
+  if (!rb.empty()) {
+    try {
+      const long long n = std::stoll(rb);
+      hrdb.setReorderBudget(n < 0 ? 0 : n);
+    } catch (const std::exception& e) {
+      CERR << "invalid -reorderbudget value '" << rb << "', using default" << std::endl;
+    }
+  }
+  if (checkArg(argc, argv, "-keepblockedescapes")) hrdb.setPruneEscapes(false);
+  const std::string ep = parseArgs(argc, argv, "-escapepitch");
+  if (!ep.empty()) {
+    try {
+      const int n = std::stoi(ep);
+      hrdb.setEscapePitchMul(n < 0 ? 0 : n);
+    } catch (const std::exception& e) {
+      CERR << "invalid -escapepitch value '" << ep << "', using default" << std::endl;
+    }
+  }
   const std::string tp = parseArgs(argc, argv, "-threads");
   if (!tp.empty()) {
     try {
@@ -90,6 +123,10 @@ int main(int argc, char* argv[])
        << " -r " << Router::Router::_precision
        << " -sep " << SEPARATOR
        << " -reorder " << hrdb.reorderPasses()
+       << " -maxexp " << hrdb.maxExpansions()
+       << " -escapepitch " << hrdb.escapePitchMul()
+       << " -reorderbudget " << hrdb.reorderBudget()
+       << (hrdb.pruneEscapes() ? "" : " -keepblockedescapes")
        << " -threads " << hrdb.threads();
   if (!ndrfile.empty())     COUT << " -ndr " << ndrfile;
   if (!interlefdir.empty()) COUT << " -uil " << interlefdir;
@@ -112,7 +149,7 @@ int main(int argc, char* argv[])
     const int open = netlist.totalUnrouted();
     if (open > 0) {
       COUT << "centre-track pin escape left " << open
-           << " net(s) open; re-routing the design with corner pin-escape points\n";
+           << " net(s) open; re-routing with corner pin-escape points\n";
       hrdb.setCornerEscape(true);
       hrdb.setDumpOpenNets(true);       // last pass: write a debug LEF for any net
                                         // still left open (pins/srcs/tgts/obstacles)
@@ -122,18 +159,12 @@ int main(int argc, char* argv[])
                                         // to as close as 5 to (never on) a shape --
                                         // source pins first, then target pins too
       }
-      Placement::Netlist netlist2(plfile, leffile, linfo, uu, ndrfile, interlefdir);
-      netlist2.route(hrdb, outdir);
-      netlist2.printRouteSummaries();   // one authoritative summary, final state
-      netlist2.printWirelengths();
-      netlist2.checkShort();
-      netlist2.checkDRC(hrdb);
-    } else {
-      netlist.printRouteSummaries();
-      netlist.printWirelengths();
-      netlist.checkShort();
-      netlist.checkDRC(hrdb);
+      netlist.reroute(hrdb, outdir);    // only the hierarchies that are still open
     }
+    netlist.printRouteSummaries();      // one authoritative summary, final state
+    netlist.printWirelengths();
+    netlist.checkShort();
+    netlist.checkDRC(hrdb);
   }
 
   return 0;

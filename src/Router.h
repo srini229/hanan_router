@@ -323,23 +323,32 @@ class Router {
     std::vector<Vias> _upVias, _dnVias;
     std::string _name;
     size_t _expansions{0};
+    // Cumulative expansions since the last reset, across every search this
+    // Router ran. Placement uses it to size a block's reorder effort.
+    size_t _moduleExpansions{0};
     long _sollen{0};
-    const size_t _maxExpansions{100000};
+    size_t _maxExpansions{100000};
     std::vector<int> _aboveViaLayer, _belowViaLayer;
     const DRC::LayerInfo& _lf;
     std::map<const Node*, int> _endextnxmin, _endextnymin, _endextnxmax, _endextnymax;
     std::map<int, std::set<Geom::Rect>> _sourceshapes, _targetshapes;
+    // Cells already covered by an accepted escape point, keyed by (layer, dir).
+    // Per net; cleared with the sources and targets.
+    std::map<IntPair, std::set<IntPair>> _escapecells;
     std::string _modname, _netname;
     int _uu;
     Geom::LayerTree _ltree;
     std::set<int> _preflayers;
     bool _usepinwidth{false}, _debugplot{false};
     int _reorderPasses{10};
+    long long _reorderBudget{15000000};
     int _threads{1};
     bool _rsmtcorridor{false};
     int _attemptno{1};
     bool _cornerEscape{false};
     bool _relaxViaEscape{false};
+    int _escapePitchMul{1};
+    bool _pruneEscapes{true};
     // Transient per-net state: only true while findSol() is retrying a still-
     // unrouted net's own pin escape via with relaxed spacing (see isViaValid).
     // Reset to false at the top of every findSol() call.
@@ -536,6 +545,10 @@ class Router {
 
     void constructVias(const std::map<int, DRC::ViaArray>* ndrvias = nullptr);
     void createSourceTargetNodes();
+    // An escape point the search can neither leave nor be reached at. Needs the
+    // Hanan grid, so it can only be asked after generateHananGrid().
+    bool escapeUsable(const Node* n) const;
+    bool pruneDeadEscapes();
     void buildSol(Geom::LayerRects& sol);
     int roundup(const int x) const
     {
@@ -581,6 +594,7 @@ class Router {
       _cf.resetdirs();
       _sources.clear();
       _targets.clear();
+      _escapecells.clear();
       _sourceshapes.clear();
       _cf.clearRelaxZones();
       _psources.clear();
@@ -648,6 +662,45 @@ class Router {
     bool debug() const { return _debugplot; }
     void setReorderPasses(const int n) { _reorderPasses = n; }
     int reorderPasses() const { return _reorderPasses; }
+    // A* node-expansion budget per search stage. Searches that fail burn the whole
+    // budget, so the cap trades runtime against nets the search would have closed
+    // had it been allowed to keep going.
+    void setMaxExpansions(const size_t n) { _maxExpansions = n; }
+    size_t maxExpansions() const { return _maxExpansions; }
+    void resetModuleExpansions() { _moduleExpansions = 0; }
+    void addModuleExpansions(const size_t n) { _moduleExpansions += n; }
+    size_t moduleExpansions() const { return _moduleExpansions; }
+    // A reorder pass costs about what the block's first routing attempt cost, so
+    // a block that is already expensive cannot afford ten of them. Scale the
+    // pass count by measured search work rather than wall time, so the result
+    // stays reproducible. 0 disables the cap.
+    void setReorderBudget(const long long n) { _reorderBudget = n; }
+    long long reorderBudget() const { return _reorderBudget; }
+    static const int MIN_REORDER_PASSES = 2;
+    int effectiveReorderPasses(const size_t baseExpansions) const
+    {
+      if (_reorderBudget <= 0 || baseExpansions == 0) return _reorderPasses;
+      const long long n = _reorderBudget / static_cast<long long>(baseExpansions);
+      if (n >= _reorderPasses) return _reorderPasses;
+      return static_cast<int>(std::max<long long>(MIN_REORDER_PASSES, n));
+    }
+    // Escape-point thinning radius, as a multiple of the layer's wire pitch.
+    // 0 disables it and every candidate point becomes a search entry.
+    void setEscapePitchMul(const int n) { _escapePitchMul = n; }
+    int escapePitchMul() const { return _escapePitchMul; }
+    void setPruneEscapes(const bool b) { _pruneEscapes = b; }
+    bool pruneEscapes() const { return _pruneEscapes; }
+    // Two escape points closer together than one wire pitch are interchangeable:
+    // no wire can use them as distinct tracks, yet each contributes its own pair
+    // of Hanan lines. This is the cell size within which the second one is
+    // redundant. 0 means keep everything.
+    int escapeCellSize(const int z) const
+    {
+      if (_escapePitchMul <= 0) return 0;
+      const int w = std::max(baseWidthX(z), baseWidthY(z));
+      const int sp = std::max(baseSpaceX(z), baseSpaceY(z));
+      return (w + sp > 0) ? (_escapePitchMul * (w + sp)) : 0;
+    }
     void setCornerEscape(const bool b) { _cornerEscape = b; }
     bool cornerEscape() const { return _cornerEscape; }
     void setRelaxViaEscape(const bool b) { _relaxViaEscape = b; }
