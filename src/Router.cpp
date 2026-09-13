@@ -432,12 +432,12 @@ Node* Router::createNode(const int x, const int y, const int z,
   Node* n = nullptr;
   if (z < _minLayer || z > _maxLayer) COUT << "ERROR in layer no : " << z << '\n';
   if (it == _nodes[z].end()) {
-    n = new Node(x, y, z, fcost, tcost, parent);
+    n = allocNode(x, y, z, fcost, tcost, parent);
     auto itr = _nodes[z].emplace(coord, n);
     it = itr.first;
     if (!itr.second) {
       COUT << "ERROR adding node to nz "; n->print("n : ");
-      delete n;
+      n->~Node();       // never entered the map, so flushNodes will not see it
       n = itr.first->second;
 #if DEBUG
     } else {
@@ -1281,21 +1281,29 @@ void Router::expandNode(const Node* n1)
 void Router::insertRange(IntRangeSet& s, const IntPair& r)
 {
   IntPair rc = r;
-  std::vector<IntRangeSet::iterator> overlapit;
 #if DEBUG
   COUT << "insert range : " << rc.first << ' ' << rc.second << '\n';
 #endif
-  for (auto it = s.begin(); it != s.end(); ++it) {
-    if (it->first > rc.second) {
-      break;
-    } else if (it->first <= rc.second && it->second >= rc.first) {
-      rc.first = std::min(it->first, rc.first);
-      rc.second = std::max(it->second, rc.second);
-      overlapit.push_back(it);
+  // Entries are sorted and disjoint, and rc only grows as it absorbs them, so
+  // everything it overlaps is one contiguous run.
+  size_t lo = 0, hi = 0;
+  bool absorbed = false;
+  for (size_t i = 0; i < s.size(); ++i) {
+    if (s[i].first > rc.second) break;
+    if (s[i].second >= rc.first) {
+      rc.first = std::min(s[i].first, rc.first);
+      rc.second = std::max(s[i].second, rc.second);
+      if (!absorbed) { lo = i; absorbed = true; }
+      hi = i + 1;
     }
   }
-  for (auto& i : overlapit) s.erase(i);
-  s.insert(rc);
+  if (absorbed) {
+    s.erase(s.begin() + lo, s.begin() + hi);
+  } else {
+    lo = 0;
+    while (lo < s.size() && IntPairComp()(s[lo], rc)) ++lo;
+  }
+  s.insert(s.begin() + lo, rc);
 }
 
 void Router::invertRange(IntRangeSet& s, const bool vert)
@@ -1306,17 +1314,18 @@ void Router::invertRange(IntRangeSet& s, const bool vert)
     start = _bbox.ymin();
     end = _bbox.ymax();
   }
+  sout.reserve(s.size() + 1);
   for (auto &r : s) {
 #if DEBUG
     COUT << "r : " << r.first << ' ' << r.second << '\n';
 #endif
     if (r.first >= start) {
-      sout.insert(std::make_pair(start, r.first));
+      sout.emplace_back(start, r.first);
     }
     start = r.second;
   }
-  sout.insert(std::make_pair(start, end));
-  s = sout;
+  sout.emplace_back(start, end);
+  s.swap(sout);
 }
 
 void splitRects(Geom::Rects& rects, const PolySet& ps, const Geom::Rect& bbox, const int sx, const int sy)
@@ -1886,7 +1895,7 @@ Geom::LayerRects Router::findSol()
           for (auto &l : _pobstacles) {
               _ptobstacles[l.first] |= l.second;
           }
-      }
+              }
 //#if DEBUG
 //#else
 //      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name)) 

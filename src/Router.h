@@ -3,6 +3,7 @@
 #include <set>
 #include <unordered_map>
 #include <cstdint>
+#include <new>
 #include <map>
 #include <queue>
 #include <bitset>
@@ -371,7 +372,11 @@ struct IntPairComp {
     return p1.first < p2.first;
   }
 };
-typedef std::set<IntPair, IntPairComp> IntRangeSet;
+// Free intervals along one grid line, sorted by start and kept disjoint. Every
+// consumer scans it linearly, and a grid build allocates one of these per line
+// per layer -- twice per search -- so a contiguous buffer beats a tree here on
+// both counts.
+typedef std::vector<IntPair> IntRangeSet;
 typedef std::set<Node*, NodeComp> NodeSet;
 // Binary min-heap whose elements know where they are (Node::_pqidx). A node
 // whose cost improves sifts up from its own slot, so the queue is never searched
@@ -403,6 +408,34 @@ class Router {
     std::vector<int> _gridposbuf;
     NodeSet _sources, _targets;
     NodeMap _nodes;
+    // Nodes are created and released in bulk -- thousands per search, all torn
+    // down together by flushNodes -- so they come out of chunked storage rather
+    // than one malloc each. The chunks themselves are kept and reused across
+    // searches; only the objects in them are destroyed.
+    static const size_t NODE_CHUNK = 4096;
+    std::vector<char*> _nodechunks;
+    size_t _nodechunk{0};      // chunk the next node comes from
+    size_t _nodeinchunk{NODE_CHUNK};
+    Node* allocNode(const int x, const int y, const int z, const CostType fcost,
+                    const CostType tcost, const Node* parent)
+    {
+      if (_nodeinchunk == NODE_CHUNK) {       // current chunk full, or none yet
+        if (_nodechunk == _nodechunks.size()) {
+          _nodechunks.push_back(static_cast<char*>(::operator new(sizeof(Node) * NODE_CHUNK)));
+        }
+        _nodeinchunk = 0;
+      }
+      void* slot = _nodechunks[_nodechunk] + sizeof(Node) * _nodeinchunk;
+      if (++_nodeinchunk == NODE_CHUNK) ++_nodechunk;   // next call takes a fresh chunk
+      return new (slot) Node(x, y, z, fcost, tcost, parent);
+    }
+    void resetNodePool() { _nodechunk = 0; _nodeinchunk = NODE_CHUNK; }
+    void freeNodePool()
+    {
+      for (auto* c : _nodechunks) ::operator delete(c);
+      _nodechunks.clear();
+      resetNodePool();
+    }
 #if DEBUG
     std::set<Node*> _nodeset;
 #endif
@@ -598,7 +631,7 @@ class Router {
       clearPQ();
       for (auto& l : _nodes) {
         for (auto& n : l) {
-          delete n.second;
+          n.second->~Node();
 #if DEBUG
           _nodeset.erase(n.second);
 #endif
@@ -606,6 +639,7 @@ class Router {
         }
         l.clear();
       }
+      resetNodePool();   // storage stays, the objects in it are gone
       _nodes.clear();
       _nodes.resize(_maxLayer + 1);
       // these maps are keyed by Node*, which are gone now
@@ -696,6 +730,7 @@ class Router {
     ~Router()
     {
       flushNodes();
+      freeNodePool();
       _sources.clear();
       _targets.clear();
       _vias.clear();
