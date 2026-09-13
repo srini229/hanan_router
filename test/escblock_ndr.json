@@ -1,0 +1,8 @@
+[
+  {
+    "module": "ESCB_CONC_0",
+    "obstacles": [
+      { "shapes": { "M1": [ [100, 140, 160, 200] ] } }
+    ]
+  }
+]

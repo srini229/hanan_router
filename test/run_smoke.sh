@@ -86,6 +86,15 @@ run_case() {
       grep -q "$pat" "$log" || errs="$errs log-missing:'$pat';"
     done
   fi
+  # LOGNOT is the mirror: patterns that must NOT appear. Used to prove a switch
+  # actually switched something off, rather than only that it was accepted.
+  if [ -n "${LOGNOT:-}" ] && [ -f "$log" ]; then
+    local npat
+    IFS='|' read -ra npats <<< "$LOGNOT"
+    for npat in "${npats[@]}"; do
+      grep -q "$npat" "$log" && errs="$errs log-present:'$npat';"
+    done
+  fi
   # NETROUTED is a '|'-separated list of net names whose DEF block in the first
   # expected DEF must contain actual routing (a via). A net that only fell back
   # to its pin shapes has no "+ RECT V*", so this catches a specific net that
@@ -112,8 +121,44 @@ run_case() {
     ERRS="$ERRS$name:$errs\n"
   fi
   LOGMUST=""
+  LOGNOT=""
   NETROUTED=""
   ALLOW_UNROUTED=""
+}
+
+# same_defs <name> <case-a> <case-b> <defs (comma separated)>
+# Asserts two already-run cases produced byte-identical DEFs. This is how a
+# performance change is tested: it has to leave the routing exactly as it was.
+same_defs() {
+  local name=$1 a=$2 b=$3 defs=$4 errs="" def
+  for def in ${defs//,/ }; do
+    if [ ! -s "$OUTROOT/$a/$def" ] || [ ! -s "$OUTROOT/$b/$def" ]; then
+      errs="$errs missing-def:$def;"
+    elif ! cmp -s "$OUTROOT/$a/$def" "$OUTROOT/$b/$def"; then
+      errs="$errs def-differs:$def;"
+    fi
+  done
+  if [ -z "$errs" ]; then
+    echo "PASS $name"; PASS=$((PASS+1))
+  else
+    echo "FAIL $name :$errs"; FAIL=$((FAIL+1)); ERRS="$ERRS$name:$errs\n"
+  fi
+}
+
+# log_count_lt <name> <case-fewer> <case-more> <pattern> <field>
+# Asserts a numeric field summed over matching log lines is strictly smaller in
+# the first case than in the second -- e.g. fewer escape points seeded.
+log_count_lt() {
+  local name=$1 a=$2 b=$3 pat=$4 fld=$5
+  local va vb
+  va=$(awk -v p="$pat" -v f="$fld" '$0 ~ p { t += $f } END { print t + 0 }' "$OUTROOT/$a/route.log" 2>/dev/null)
+  vb=$(awk -v p="$pat" -v f="$fld" '$0 ~ p { t += $f } END { print t + 0 }' "$OUTROOT/$b/route.log" 2>/dev/null)
+  if [ "${va:-0}" -gt 0 ] && [ "${vb:-0}" -gt 0 ] && [ "$va" -lt "$vb" ]; then
+    echo "PASS $name"; PASS=$((PASS+1))
+  else
+    echo "FAIL $name :expected $a($va) < $b($vb) for '$pat';"
+    FAIL=$((FAIL+1)); ERRS="$ERRS$name:count $va vs $vb;\n"
+  fi
 }
 
 # cli_check <name> <pattern> [router args...]
@@ -773,6 +818,141 @@ else
   echo "FAIL replay :no-attempt-dump-to-replay;"; FAIL=$((FAIL+1))
   ERRS="${ERRS}replay:no-attempt-dump-to-replay;\n"
 fi
+
+# ---------------------------------------------------------------------------
+# Runtime work: escape thinning, blocked-escape pruning, the seed-polygon limit,
+# the expansion budget, the reorder budget and its convergence stop, failure
+# memoisation, the reachability pre-check, and the log verbosity levels.
+#
+# Two kinds of assertion. A feature that changes what the router does is checked
+# by the log marker it emits, and by LOGNOT on the flag that turns it off -- so
+# the case proves the switch switched something, not merely that it parsed. A
+# change meant to leave routing alone is checked with same_defs: byte identity
+# against the run it has to match.
+# ---------------------------------------------------------------------------
+
+# 34. maxexp: the A* node budget per search stage. A budget of 1 is a legal but
+#     hopeless setting, so the pair proves the cap binds rather than being
+#     ignored -- same fixture, routed at the default budget and open at 1.
+cli_check bad_maxexp_arg "invalid -maxexp value" \
+  -maxexp zzz -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
+LOGMUST=" -maxexp 1 "
+ALLOW_UNROUTED=1
+run_case maxexp_budget "" -maxexp 1 \
+  -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
+
+# 35. escapepitch: escape points closer together than a wire pitch cannot serve
+#     as distinct tracks, so only the one nearest each pin rectangle's centre is
+#     seeded. -escapepitch 0 turns that off; the thinned run must seed strictly
+#     fewer entry points, and both must still route all 30 nets.
+run_case escapepitch_on "ESCB_CONC_0.def" \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
+run_case escapepitch_off "ESCB_CONC_0.def" -escapepitch 0 \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
+log_count_lt escapepitch_thins escapepitch_on escapepitch_off "^num src :" 4
+
+# 36. blocked_escape_prune: escblock is a wide M1 pin with an obstacle whose
+#     spacing bloat covers one end of it. Those escape points can neither be left
+#     nor entered, so they are dropped before the search -- and the net still
+#     routes through the clear end. -keepblockedescapes restores the old
+#     behaviour and the "pruned" line must then be absent.
+LOGMUST="pruned 1 blocked escape point"
+run_case blocked_escape_prune "ESCB_CONC_0.def" \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
+LOGNOT="blocked escape point"
+run_case blocked_escape_keep "ESCB_CONC_0.def" -keepblockedescapes \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
+
+# 37. seedpolys: splitpin's pin is four disjoint M1 stripes, so each end of the
+#     net presents four polygons. -seedpolys 2 keeps only the two nearest the
+#     other end and the net still routes; the default (0) seeds all of them, so
+#     the marker must be absent.
+LOGMUST="seeding 2 of 4 source pin polygon|seeding 2 of 4 target pin polygon"
+run_case seedpolys_limit "SPLIT_CONC_0.def" -seedpolys 2 -seedpolysalways \
+  -d $IN/layers.json -p $IN/splitpin.placement_verilog.json -l $IN/splitpin.lef
+LOGNOT="pin polygon(s) nearest the other end"
+run_case seedpolys_default "SPLIT_CONC_0.def" \
+  -d $IN/layers.json -p $IN/splitpin.placement_verilog.json -l $IN/splitpin.lef
+
+# 38. reorder budget: a block whose base route is already expensive cannot afford
+#     ten reorder passes, so the count is scaled by measured search work. Needs a
+#     block that actually reorders, which the over-subscribed reorder_reroute
+#     fixture provides. -reorderbudget 0 restores the uncapped behaviour.
+LOGMUST="capping reorder at"
+ALLOW_UNROUTED=1
+run_case reorder_budget "REORDER_CONC_0.def" -reorderbudget 1 \
+  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
+LOGNOT="capping reorder at"
+ALLOW_UNROUTED=1
+run_case reorder_uncapped "REORDER_CONC_0.def" -reorderbudget 0 \
+  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
+
+# 39. reorder_converged: passes that stop improving on the best end the loop
+#     early rather than running out the allowance.
+LOGMUST="no improvement in"
+ALLOW_UNROUTED=1
+run_case reorder_converged "REORDER_CONC_0.def" \
+  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
+
+# 40. search_skips: a wire that keeps failing is not searched again from
+#     scratch. Both shortcuts fire on this fixture -- the memo when the whole
+#     problem repeats unchanged, the reachability sweep when no target is
+#     reachable at all -- and neither may invent a route (no shorts, and the
+#     open count still matches the baseline the fixture is expected to leave).
+LOGMUST="identical problem already failed|no target is reachable from any source"
+ALLOW_UNROUTED=1
+run_case search_skips "REORDER_CONC_0.def" \
+  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
+
+# 41. reachability_proof: a source pin boxed in on every side has no reachable
+#     target, which the segment sweep proves without letting A* exhaust the grid.
+LOGMUST="no target is reachable from any source"
+ALLOW_UNROUTED=1
+run_case reachability_proof "" \
+  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
+
+# 42. verbosity levels: -v is a level, not a switch. escblock emits exactly one
+#     marker per level -- the via table at 1, the escape-point dump at 2, the
+#     per-layer expansion breakdown at 3 -- so each case asserts its own level
+#     arrived and that nothing above it leaked down.
+LOGNOT="via : l:| points : |expanded :"
+run_case verbose_default "ESCB_CONC_0.def" \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
+LOGMUST=" -v 1|via : l:"
+LOGNOT=" points : |expanded :"
+run_case verbose_net "ESCB_CONC_0.def" -v \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
+LOGMUST=" -v 2| points : |via : l:"
+LOGNOT="expanded :"
+run_case verbose_element "ESCB_CONC_0.def" -v 2 \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
+LOGMUST=" -v 3|expanded :| points : |via : l:"
+run_case verbose_trace "ESCB_CONC_0.def" -v 3 \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
+same_defs verbose_defs_stable verbose_default verbose_trace "ESCB_CONC_0.def"
+
+# 43. determinism: the node map is hashed rather than ordered now, and the
+#     priority queue is an indexed heap rather than a tree, so neither sorted
+#     iteration nor tree order is available to lean on. Two identical runs must
+#     still produce identical DEFs.
+run_case determinism_a "NET30_CONC_0.def" \
+  -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
+run_case determinism_b "NET30_CONC_0.def" \
+  -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
+same_defs determinism_stable determinism_a determinism_b "NET30_CONC_0.def"
 
 # 33. parallel speedup (opt-in, timing-based, ~2-4s): a batch of many disjoint,
 #     individually-expensive nets routes substantially faster with N worker

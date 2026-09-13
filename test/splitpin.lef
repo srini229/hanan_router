@@ -1,0 +1,22 @@
+# A pin split into four disjoint M1 rectangles, so the pin presents four
+# polygons on one layer -- what -seedpolys limits. M1 is vertical with pitch 56
+# and width 32, so the stripes sit on adjacent tracks and stay disjoint.
+MACRO SPLITPIN
+  UNITS
+    DATABASE MICRONS UNITS 1;
+  END UNITS
+  ORIGIN 0 0 ;
+  FOREIGN SPLITPIN 0 0 ;
+  SIZE 200 BY 32 ;
+  PIN P
+    DIRECTION INOUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER M1 ;
+        RECT 0 0 32 32 ;
+        RECT 56 0 88 32 ;
+        RECT 112 0 144 32 ;
+        RECT 168 0 200 32 ;
+    END
+  END P
+END SPLITPIN

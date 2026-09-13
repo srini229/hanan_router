@@ -1,0 +1,19 @@
+{
+ "global_signals": [],
+ "leaves": [
+  { "abstract_name": "ESCBLK", "bbox": [0,0,200,32], "concrete_name": "ESCBLK",
+    "terminals": [ { "name": "P", "rect": [0,0,200,32] } ] }
+ ],
+ "modules": [
+  { "abstract_name": "ESCB", "bbox": [0,0,600,600], "concrete_name": "ESCB_CONC_0",
+    "instances": [
+      { "abstract_template_name": "ESCBLK", "concrete_template_name": "ESCBLK",
+        "fa_map": [ {"actual":"A","formal":"P"} ], "instance_name": "I_A0",
+        "transformation": {"oX":100,"oY":100,"sX":1,"sY":1} },
+      { "abstract_template_name": "ESCBLK", "concrete_template_name": "ESCBLK",
+        "fa_map": [ {"actual":"A","formal":"P"} ], "instance_name": "I_A1",
+        "transformation": {"oX":100,"oY":450,"sX":1,"sY":1} }
+    ],
+    "parameters": ["A"] }
+ ]
+}

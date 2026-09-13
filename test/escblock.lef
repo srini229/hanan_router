@@ -1,0 +1,19 @@
+# A wide M1 pin, so findValidPoints spreads escape points along it. Paired with
+# escblock_ndr.json, whose obstacle bloats over one end of the pin: those escape
+# points can neither be left nor entered and are dropped before the search.
+MACRO ESCBLK
+  UNITS
+    DATABASE MICRONS UNITS 1;
+  END UNITS
+  ORIGIN 0 0 ;
+  FOREIGN ESCBLK 0 0 ;
+  SIZE 200 BY 32 ;
+  PIN P
+    DIRECTION INOUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER M1 ;
+        RECT 0 0 200 32 ;
+    END
+  END P
+END ESCBLK
