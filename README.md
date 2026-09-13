@@ -17,7 +17,7 @@ The following back-end-of-line design rules are honored:
 
 Beyond the core router it also provides:
 * a **pre-routing pin-escape feasibility check** that proves (via a small SAT solver) that every pin can leave its cell before any net is routed;
-* an **automatic net-ordering search** that, when nets are left open, promotes the blocked nets up the routing order and retries (reorder);
+* an **automatic net-ordering search** that, when nets are left open, promotes the blocked nets up the routing order and retries (reorder), bounded by a search-work budget and stopped once passes stop improving;
 * an **adjacent-obstacle retry** that frees a blocked pin's escape layer;
 * optional **multi-threaded routing** that routes non-overlapping nets in parallel (`-threads N`);
 
@@ -60,13 +60,23 @@ hanan_router -d <layers.json> -p <placement file> -l <lef file> [options]
 | `-o <output dir>` | no | Output directory for the generated LEF/DEF (default `./`). |
 | `-r <precision>` | no | Coordinate precision / rounding (default `1`). |
 | `-reorder <N>` | no | Max alternate net-ordering passes to try when nets remain unrouted (default `10`; `0` disables the search). |
+| `-reorderbudget <N>` | no | Cap a block's reorder passes so `base-route expansions x passes` stays under `N` (default `15000000`; `0` = uncapped). A block whose first route is already expensive cannot afford ten more of them. See [Search effort](#search-effort). |
+| `-maxexp <N>` | no | A\* node-expansion budget per search stage (default `100000`). Lower is faster and leaves more nets open. |
+| `-escapepitch <N>` | no | Thin pin-escape points to one per `N` wire pitches, keeping the one nearest each pin rectangle's centre (default `1`; `0` seeds every candidate). See [Pin escape points](#pin-escape-points). |
+| `-keepblockedescapes` | no | Seed every pin-escape point, including ones sitting inside a bloated obstacle that no wire can start from. Default is to drop them. |
+| `-seedpolys <N>` | no | For a pin split into more than `N` polygons, seed only the `N` nearest the other terminal (default `0` = seed all). |
+| `-seedpolysalways` | no | Keep that limit on every attempt; by default the rest are restored for a net still open by attempt 3. |
+| `-rsmt` | no | Confine each net to a Borah-Owens-Irwin Steiner corridor over its pins. |
+| `-relaxvia` | no | In the final pass, retry a still-unrouted net's escape via with spacing relaxed to as close as 5 to (never on) a shape -- source pins first, then target pins too. |
 | `-threads <N>` | no | Route non-overlapping nets in parallel using `N` worker threads (default `1` = sequential). See [Parallel routing](#parallel-routing). |
 | `-uu <scale>` | no | User-units scaling for the placement file (e.g. nm/um). |
 | `-s` | no | Treat the LEF as scaled by `-uu`. |
 | `-uil <dir>` | no | Reuse previously-generated interim LEFs from `<dir>` for hierarchical blocks. |
 | `-sep <str>` | no | Hierarchy name separator. |
 | `-log <file>` | no | Log file name (default `route.log`). |
-| `-v` | no | Verbose: emit high-volume per-element debug logging (off by default; also enabled by `HANAN_VERBOSE`). |
+| `-v [N]` | no | Log verbosity (default `0`). See [Log verbosity](#log-verbosity). |
+| `-replay <ATTEMPT_*.lef>` | no | Re-route one wire from a `HANAN_DEBUG_WIRE` dump; needs `-d` only. |
+| `-detour` | no | With `-replay`: allow a large detour even without NDR saying so. |
 
 
 ## Output
@@ -91,6 +101,41 @@ The LEF/DEF can be visualized with [`klayout`](https://klayout.de/).
 * **Unconnected-pin protection.** Instance pins not wired to any net are added as obstacles so no route lands on them.
 * **Symmetric-net guiding.** Net pairs marked `symmetric_nets` are routed so they appear mirror-symmetric: the first net is routed, its solution mirrored across the pair's axis, and that mirror used as a soft *deviation-cost* guide for the second net's A\* search (see [Symmetric nets](#symmetric-nets)).
 * **Obstacle locality.** A net's search never leaves its pin bounding box expanded by a bounded margin, so the module's obstacles are indexed in an R-tree and each net is given only the obstacles near it. This keeps per-net routing cost proportional to the *local* obstacle count rather than the whole design's, without changing the routed result.
+
+* **Failure shortcuts.** A search that already failed is not run again. The exact problem -- obstacles, entry points and the flags that steer expansion -- is fingerprinted, and a repeat is skipped (`identical problem already failed`). A wire that has failed once in the block is also checked for reachability first: the free intervals of the Hanan grid are walked from the sources, and if no target segment can be reached the search is skipped outright (`no target is reachable from any source`). Both are exact -- A\* is deterministic, and the reachability walk over-approximates what the search can do, so only a negative answer is acted on.
+
+## Search effort
+
+The reorder search and the A\* budget are both bounded, because a block that is
+expensive to route once is expensive to route ten times:
+
+* `-reorderbudget <N>` scales a block's reorder passes by the search work its *first* attempt cost, so small blocks keep all ten and a large one gets fewer (`capping reorder at K pass(es) instead of 10`). It keys off expansions rather than wall time, so a run stays reproducible.
+* Passes that stop improving on the best end the loop early (`no improvement in N pass(es); stopping at K/N`).
+* `-maxexp <N>` caps the node expansions one search stage may spend. A search that fails spends the whole budget, so this is the main lever on runtime -- and on how many nets are left open. Lowering it is a direct trade.
+
+## Pin escape points
+
+Each pin gets a set of candidate escape points, and the number of them drives
+both the size of the Hanan grid and the cost of seeding the search:
+
+* `-escapepitch <N>` drops escape points closer together than `N` wire pitches, keeping the one nearest each pin rectangle's centre (the cheapest under the off-centre escape cost). Every pin rectangle keeps at least one escape in every direction it had one. `-escapepitch 0` restores every candidate.
+* Escape points sitting inside an already-bloated obstacle -- which no wire can start from and no route can enter -- are dropped before the search, and the grid is rebuilt without the lines they contributed (`pruned N blocked escape point(s)`). `-keepblockedescapes` turns that off.
+* `-seedpolys <N>` limits how many polygons of a multi-polygon pin are seeded, keeping those nearest the other terminal.
+
+## Log verbosity
+
+`-v` takes a level rather than being a switch. `-v` alone means level 1; `-v <N>`
+or `HANAN_VERBOSE=<N>` selects it.
+
+| Level | Contents |
+|-------|----------|
+| `0` (default) | Results only: what routed, what is open, DRC, shorts, wirelengths, summaries. |
+| `1` | Per-net detail: the pin pairs chosen, the via table, same-net obstacle filtering, where routes were attached. |
+| `2` | Per-element dumps: every escape point, every via-pad decision, the per-layer cost and width tables. |
+| `3` | Everything, including the per-layer expansion breakdown of each search. |
+
+The level changes only what is written; the routed result is identical at every
+level.
 
 ## Parallel routing
 
@@ -193,7 +238,11 @@ shortest path *near* the mirror) where obstacles make an exact mirror impossible
 
 # Tests
 
-A smoke-test suite under `test/` exercises the example configurations: basic routing, NDR widths/spaces/directions/preferred-layers, virtual pins, clock nets, do-not-route, routing order, pin-width matching, large detours, NDR and LEF-OBS obstacles, custom via arrays, precision rounding, mirrored placements, debug dumps, interim-LEF reuse, the pin-escape SAT check, the net-ordering reorder search, coincident-pin merging, symmetric-net mirror routing (including an S-shaped serpentine pair), CLI/error-handling paths and a 30-net throughput case.
+A smoke-test suite under `test/` exercises the example configurations: basic routing, NDR widths/spaces/directions/preferred-layers, virtual pins, clock nets, do-not-route, routing order, pin-width matching, large detours, NDR and LEF-OBS obstacles, custom via arrays, precision rounding, mirrored placements, debug dumps, interim-LEF reuse, the pin-escape SAT check, the net-ordering reorder search, coincident-pin merging, symmetric-net mirror routing (including an S-shaped serpentine pair), CLI/error-handling paths and a 30-net throughput case, plus the search-effort and
+escape-point switches (`-maxexp`, `-escapepitch`, `-keepblockedescapes`,
+`-seedpolys`, `-reorderbudget`), the reorder convergence stop, the failure
+shortcuts, the verbosity levels, and two determinism guards -- run-to-run DEF
+identity, and DEF identity across verbosity levels.
 
 Run it with:
 ```
