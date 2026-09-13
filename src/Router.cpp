@@ -1881,6 +1881,22 @@ Geom::LayerRects Router::findSol()
       }
 #endif
 
+      // A* is deterministic: an identical problem that already failed will fail
+      // again, so there is nothing to learn from running it. The guide makes the
+      // cost function depend on state the key does not cover, so skip memoising
+      // a guided search rather than risk it.
+      const bool memoise = !hasGuide();
+      const unsigned long long key = memoise ? searchKey(attempt) : 0;
+      if (memoise && _failedSearches.count(key)) {
+        ++_memoHits;
+        COUT << "search skipped for " << _name << " in pass " << attempt
+             << " : identical problem already failed\n";
+        _pq.clear();
+        _hanangridv.clear();
+        _hanangridh.clear();
+        _expansions = 0;
+        continue;
+      }
       std::vector<unsigned> layerExpansions(_maxLayer + 1, 0);
       const bool patterned = patternRoute();
       if (patterned) {
@@ -1907,6 +1923,7 @@ Geom::LayerRects Router::findSol()
         if (_expansions >= _maxExpansions) break;
       }
       if (!_sol) {
+        if (memoise) _failedSearches.insert(key);
         COUT << "search failed in pass " << attempt << " for " << _name << " after " << _expansions << " expansions!\n";
         for (unsigned i = 0; i < layerExpansions.size(); ++i) {
           COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
@@ -2441,6 +2458,49 @@ bool Router::escapeUsable(const Node* n) const
   return false;
 }
 
+// FNV-1a over everything findSol's search loop depends on. _tobstacles is the
+// fully resolved, bbox-clipped, bloated obstacle set that both the Hanan grid and
+// _ltree are built from, so hashing it covers obstacles, bbox and spacing at once.
+unsigned long long Router::searchKey(const int pass) const
+{
+  unsigned long long h = 1469598103934665603ULL;
+  auto mix = [&h](const long long v) {
+    unsigned long long x = static_cast<unsigned long long>(v);
+    for (int i = 0; i < 8; ++i) { h ^= (x & 0xff); h *= 1099511628211ULL; x >>= 8; }
+  };
+  for (const char c : _name) mix(c);
+  mix(pass);
+  // deliberately NOT the attempt number: everything it changes -- same-net
+  // obstacle tracing, boundary escapes, seed-all-polys -- already shows up in
+  // _tobstacles or in the entry-point set below. Keying on it would make every
+  // attempt look like a fresh problem and the memo would never hit.
+  mix(static_cast<long long>(_maxExpansions));
+  mix((_usepinwidth ? 1 : 0) | (_cornerEscape ? 2 : 0) | (_relaxViaEscape ? 4 : 0)
+      | (_relaxSrcViaEscape ? 8 : 0) | (_relaxTgtViaEscape ? 16 : 0)
+      | (_rsmtcorridor ? 32 : 0));
+  for (const auto& v : {_ndrwidthx, _ndrwidthy, _ndrspacex, _ndrspacey}) {
+    for (const int n : v) mix(n);
+  }
+  for (const auto& l : _tobstacles) {
+    mix(l.first);
+    mix(static_cast<long long>(l.second.size()));
+    for (const auto& r : l.second) {
+      mix(r.xmin()); mix(r.ymin()); mix(r.xmax()); mix(r.ymax());
+    }
+  }
+  for (const bool src : {true, false}) {
+    const auto& set = src ? _sources : _targets;
+    mix(static_cast<long long>(set.size()));
+    for (const auto* n : set) {
+      mix(n->x()); mix(n->y()); mix(n->z()); mix(n->hwx()); mix(n->hwy());
+      mix((n->viaup() ? 1 : 0) | (n->viadown() ? 2 : 0) | (n->expandeast() ? 4 : 0)
+          | (n->expandwest() ? 8 : 0) | (n->expandnorth() ? 16 : 0)
+          | (n->expandsouth() ? 32 : 0) | (n->noVia() ? 64 : 0));
+    }
+  }
+  return h;
+}
+
 bool Router::pruneDeadEscapes()
 {
   if (!_pruneEscapes) return false;
@@ -2462,6 +2522,14 @@ bool Router::pruneDeadEscapes()
   return removed > 0;
 }
 
+// Manhattan gap between a candidate pin polygon and the far terminal's extent.
+static long long rectGap(const Geom::Rect& r, const Geom::Rect& b)
+{
+  const long long dx = std::max(0, std::max(b.xmin() - r.xmax(), r.xmin() - b.xmax()));
+  const long long dy = std::max(0, std::max(b.ymin() - r.ymax(), r.ymin() - b.ymax()));
+  return dx + dy;
+}
+
 void Router::createSourceTargetNodes()
 {
   for (const bool src : {true, false}) {
@@ -2474,15 +2542,40 @@ void Router::createSourceTargetNodes()
         }
       }
     }
+    std::vector<std::pair<int, Geom::Rect>> cands;
     for (const auto& l : (src ? _psources : _ptargets)) {
       if (prefLayerShape && _preflayers.find(l.first) == _preflayers.end()) continue;
       PRects prects;
       get_rectangles(prects, l.second);
       for (auto& pr : prects) {
-        Geom::Rect r(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr));
-        addSourceTarget(r, l.first, src);
+        cands.emplace_back(l.first, Geom::Rect(bp::xl(pr), bp::yl(pr), bp::xh(pr), bp::yh(pr)));
       }
     }
+    if (limitSeedPolys() && static_cast<int>(cands.size()) > _maxSeedPolys) {
+      Geom::Rect far;
+      for (const auto& l : (src ? _targetshapes : _sourceshapes)) {
+        for (const auto& r : l.second) far.merge(r);
+      }
+      if (far.valid()) {
+        // nearest first, then a coordinate tie-break so the kept set does not
+        // depend on polygon iteration order
+        std::sort(cands.begin(), cands.end(),
+          [&far](const std::pair<int, Geom::Rect>& a, const std::pair<int, Geom::Rect>& b) {
+            const long long da = rectGap(a.second, far), db = rectGap(b.second, far);
+            if (da != db) return da < db;
+            if (a.first != b.first) return a.first < b.first;
+            if (a.second.xmin() != b.second.xmin()) return a.second.xmin() < b.second.xmin();
+            if (a.second.ymin() != b.second.ymin()) return a.second.ymin() < b.second.ymin();
+            if (a.second.xmax() != b.second.xmax()) return a.second.xmax() < b.second.xmax();
+            return a.second.ymax() < b.second.ymax();
+          });
+        COUT << "seeding " << _maxSeedPolys << " of " << cands.size() << ' '
+             << (src ? "source" : "target") << " pin polygon(s) nearest the other end for "
+             << _name << '\n';
+        cands.resize(_maxSeedPolys);
+      }
+    }
+    for (auto& c : cands) addSourceTarget(c.second, c.first, src);
   }
 }
 

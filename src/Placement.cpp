@@ -613,6 +613,8 @@ void Module::route(Router::Router& router, const std::string& outdir)
                 myrouter.setMaxExpansions(router.maxExpansions());
                 myrouter.setEscapePitchMul(router.escapePitchMul());
                 myrouter.setPruneEscapes(router.pruneEscapes());
+                myrouter.setMaxSeedPolys(router.maxSeedPolys());
+                myrouter.setSeedPolysAlways(router.seedPolysAlways());
                 myrouter.setCornerEscape(router.cornerEscape());
                 myrouter.setRelaxViaEscape(router.relaxViaEscape());
                 myrouter.setDumpOpenNets(router.dumpOpenNets());

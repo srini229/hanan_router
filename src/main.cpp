@@ -15,6 +15,8 @@ int main(int argc, char* argv[])
       << "\t-escapepitch <N> (thin pin-escape points to one per N wire pitches; 0 keeps them all; default 1)\n"
       << "\t-reorderbudget <N> (cap a block's reorder passes so base-route expansions x passes stays under N; 0 uncapped; default 15000000)\n"
       << "\t-keepblockedescapes (seed every pin-escape point, including ones no wire can start from; default is to drop them)\n"
+      << "\t-seedpolys <N> (for a pin split into more than N polygons, seed only the N nearest the other end; 0 seeds all; default 0)\n"
+      << "\t-seedpolysalways (keep that limit on every attempt; default restores the rest for a net still open by attempt 3)\n"
       << "\t-replay <ATTEMPT_*.lef> (re-route one wire from a HANAN_DEBUG_WIRE dump; needs -d only)\n"
       << "\t-detour (with -replay: allow a large detour even without NDR saying so)\n"
       << "\t-rsmt (confine each net to a Borah Steiner corridor over its pins)\n"
@@ -95,6 +97,16 @@ int main(int argc, char* argv[])
     }
   }
   if (checkArg(argc, argv, "-keepblockedescapes")) hrdb.setPruneEscapes(false);
+  if (checkArg(argc, argv, "-seedpolysalways")) hrdb.setSeedPolysAlways(true);
+  const std::string sp = parseArgs(argc, argv, "-seedpolys");
+  if (!sp.empty()) {
+    try {
+      const int n = std::stoi(sp);
+      hrdb.setMaxSeedPolys(n < 0 ? 0 : n);
+    } catch (const std::exception& e) {
+      CERR << "invalid -seedpolys value '" << sp << "', using default" << std::endl;
+    }
+  }
   const std::string ep = parseArgs(argc, argv, "-escapepitch");
   if (!ep.empty()) {
     try {
@@ -127,6 +139,8 @@ int main(int argc, char* argv[])
        << " -escapepitch " << hrdb.escapePitchMul()
        << " -reorderbudget " << hrdb.reorderBudget()
        << (hrdb.pruneEscapes() ? "" : " -keepblockedescapes")
+       << " -seedpolys " << hrdb.maxSeedPolys()
+       << (hrdb.seedPolysAlways() ? " -seedpolysalways" : "")
        << " -threads " << hrdb.threads();
   if (!ndrfile.empty())     COUT << " -ndr " << ndrfile;
   if (!interlefdir.empty()) COUT << " -uil " << interlefdir;

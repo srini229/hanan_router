@@ -335,6 +335,11 @@ class Router {
     // Cells already covered by an accepted escape point, keyed by (layer, dir).
     // Per net; cleared with the sources and targets.
     std::map<IntPair, std::set<IntPair>> _escapecells;
+    // Searches that already failed on an identical problem, per module. A* is
+    // deterministic, so the same obstacles, the same entry points and the same
+    // flags must fail again; skipping them cannot change any result.
+    std::set<unsigned long long> _failedSearches;
+    size_t _memoHits{0};
     std::string _modname, _netname;
     int _uu;
     Geom::LayerTree _ltree;
@@ -349,6 +354,8 @@ class Router {
     bool _relaxViaEscape{false};
     int _escapePitchMul{1};
     bool _pruneEscapes{true};
+    int _maxSeedPolys{0};
+    bool _seedPolysAlways{false};
     // Transient per-net state: only true while findSol() is retrying a still-
     // unrouted net's own pin escape via with relaxed spacing (see isViaValid).
     // Reset to false at the top of every findSol() call.
@@ -549,6 +556,10 @@ class Router {
     // Hanan grid, so it can only be asked after generateHananGrid().
     bool escapeUsable(const Node* n) const;
     bool pruneDeadEscapes();
+    // Fingerprint of everything the search reads: the resolved obstacle set, the
+    // entry points, and the flags that steer expansion. Needs the Hanan grid to
+    // have been built, since that is what resolves _tobstacles.
+    unsigned long long searchKey(const int pass) const;
     void buildSol(Geom::LayerRects& sol);
     int roundup(const int x) const
     {
@@ -653,7 +664,13 @@ class Router {
     void updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
         const std::map<int, int>& ndrspaces, const std::map<int, DRC::Direction>& ndrdirs,
         const std::set<int>& preflayers, const std::map<int, DRC::ViaArray>& ndrvias);
-    void setModName(const std::string& n) { _modname = n; }
+    void setModName(const std::string& n)
+    {
+      // obstacles differ from block to block, so nothing carries over
+      if (n != _modname) { _failedSearches.clear(); _memoHits = 0; }
+      _modname = n;
+    }
+    size_t memoHits() const { return _memoHits; }
     void setNetName(const std::string& n) { _netname = n; }
     void setuu(const int uu) { _uu = uu; }
     void allowDetour() { _bbox.expand(std::max(_bbox.width(), _bbox.height()) * 10); }
@@ -690,6 +707,13 @@ class Router {
     int escapePitchMul() const { return _escapePitchMul; }
     void setPruneEscapes(const bool b) { _pruneEscapes = b; }
     bool pruneEscapes() const { return _pruneEscapes; }
+    // A pin split into many polygons does not need an escape on every one: the
+    // ones nearest the other terminal are the ones a route would use, and the
+    // rest just add Hanan lines. 0 seeds them all.
+    void setMaxSeedPolys(const int n) { _maxSeedPolys = n; }
+    int maxSeedPolys() const { return _maxSeedPolys; }
+    void setSeedPolysAlways(const bool b) { _seedPolysAlways = b; }
+    bool seedPolysAlways() const { return _seedPolysAlways; }
     // Two escape points closer together than one wire pitch are interchangeable:
     // no wire can use them as distinct tracks, yet each contributes its own pair
     // of Hanan lines. This is the cell size within which the second one is
@@ -710,20 +734,28 @@ class Router {
     static const int RSMT_RELAX_AFTER_PASS = 3;
     void setRSMTCorridor(const bool b) { _rsmtcorridor = b; }
     bool rsmtCorridor() const { return _rsmtcorridor; }
+    // A net still open by this attempt gets an escape on every one of its pin
+    // polygons, not just the nearest ones.
+    static const int SEED_ALL_POLYS_FROM_ATTEMPT = 3;
     static const int TRACE_SAMENET_FROM_ATTEMPT = 3;
     static const int BOUNDARY_ESCAPE_FROM_ATTEMPT = 3;
     void setAttemptNo(const int n) { _attemptno = n; }
     int attemptNo() const { return _attemptno; }
+    static bool seedAllPolysAt(const int n) { return n >= SEED_ALL_POLYS_FROM_ATTEMPT; }
+    bool limitSeedPolys() const
+    { return _maxSeedPolys > 0 && (_seedPolysAlways || !seedAllPolysAt(_attemptno)); }
     static bool traceSameNetObstaclesAt(const int n) { return n >= TRACE_SAMENET_FROM_ATTEMPT; }
     bool traceSameNetObstacles() const { return traceSameNetObstaclesAt(_attemptno); }
     static bool boundaryEscapeAt(const int n) { return n >= BOUNDARY_ESCAPE_FROM_ATTEMPT; }
     bool boundaryEscape() const { return boundaryEscapeAt(_attemptno); }
     static int attemptMode(const int n)
-    { return (traceSameNetObstaclesAt(n) ? 1 : 0) | (boundaryEscapeAt(n) ? 2 : 0); }
+    { return (traceSameNetObstaclesAt(n) ? 1 : 0) | (boundaryEscapeAt(n) ? 2 : 0)
+           | (seedAllPolysAt(n) ? 4 : 0); }
     static std::string attemptModeName(const int n)
     {
       return std::string(traceSameNetObstaclesAt(n) ? "same-net-tracing=on" : "same-net-tracing=off")
-           + (boundaryEscapeAt(n) ? " boundary-escapes=on" : " boundary-escapes=off");
+           + (boundaryEscapeAt(n) ? " boundary-escapes=on" : " boundary-escapes=off")
+           + (seedAllPolysAt(n) ? " seed-all-polys=on" : " seed-all-polys=off");
     }
     void setThreads(const int n) { _threads = n; }
     int threads() const { return _threads; }
