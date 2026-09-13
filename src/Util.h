@@ -9,10 +9,22 @@
 
 std::ostream& threadLog();
 void setThreadLog(std::ostream* s);  // nullptr restores std::cout for this thread
-// Verbose logging gate for high-volume, per-element debug lines (e.g. one line
-// per obstacle rectangle). Off by default; enabled with -v or HANAN_VERBOSE.
-bool verboseLog();
-void setVerboseLog(bool v);
+// Logging verbosity, set once in main() before any routing.
+//   0  results only: what was routed, what was left open, DRC, shorts, summaries
+//   1  per-net and per-wire detail: the pairs chosen, the via table, obstacle
+//      filtering, where routes were attached
+//   2  per-element dumps: every escape point, every via-pad decision, the
+//      per-layer cost and width tables
+//   3  everything, including per-layer expansion breakdowns
+// Raised with -v (= 1) or -v <N>, or HANAN_VERBOSE=<N>.
+namespace LogLevel {
+  enum { RESULT = 0, NET = 1, ELEMENT = 2, TRACE = 3 };
+}
+int verboseLevel();
+void setVerboseLevel(int v);
+inline bool verboseAt(const int level) { return verboseLevel() >= level; }
+// Retained spelling of the old boolean gate: "anything beyond results".
+inline bool verboseLog() { return verboseAt(LogLevel::NET); }
 #define COUT threadLog() //<< __PRETTY_FUNCTION__ << " -:- "
 #define CERR std::cerr //<< __PRETTY_FUNCTION__ << " -:- "
 

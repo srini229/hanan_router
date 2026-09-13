@@ -7,9 +7,9 @@ std::ostream& threadLog() { return t_threadLog ? *t_threadLog : std::cout; }
 void setThreadLog(std::ostream* s) { t_threadLog = s; }
 
 // Set once in main() before any routing (so it is race-free across worker threads).
-static bool g_verbose = false;
-bool verboseLog() { return g_verbose; }
-void setVerboseLog(bool v) { g_verbose = v; }
+static int g_verbose = LogLevel::RESULT;
+int verboseLevel() { return g_verbose; }
+void setVerboseLevel(int v) { g_verbose = (v < 0) ? 0 : v; }
 
 std::string parseArgs(const int argc, char* const argv[], const std::string& arg, std::string str)
 {

@@ -457,7 +457,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
   auto hor = _cf.isHor(z);
   auto x = roundup(r.xcenter()), y = roundup(r.ycenter()); 
   Geom::PointWidthSet points;
-  COUT << _name << " points : \n";
+  if (verboseAt(LogLevel::ELEMENT)) COUT << _name << " points : \n";
   //COUT << "x : " << x << " y : " << y << "\n";
 
   if (dir == DOWN || dir == UP) {
@@ -489,7 +489,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         int yn = r.ymax() - dimy;
         while (yn >= (r.ymin() + dimy)) {
           points.insert(std::make_pair(Geom::Point(x,yn), widthy(z)));
-          COUT << "pointv : " << x << ',' << yn << ',' << widthy(z) << '\n';
+          if (verboseAt(LogLevel::ELEMENT)) COUT << "pointv : " << x << ',' << yn << ',' << widthy(z) << '\n';
           yn -= space;
         }
       }
@@ -503,7 +503,7 @@ Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, co
         int xn = r.xmax() - dimx;
         while (xn >= (r.xmin() + dimx)) {
           points.insert(std::make_pair(Geom::Point(xn,y), widthx(z)));
-          COUT << "pointh : " << xn << ',' << y << ',' << widthx(z) << '\n';
+          if (verboseAt(LogLevel::ELEMENT)) COUT << "pointh : " << xn << ',' << y << ',' << widthx(z) << '\n';
           xn -= space;
         }
       }
@@ -663,11 +663,13 @@ Geom::PointWidthSet Router::findBoundaryPoints(const Geom::Rect& r, const int z,
       }
     }
   }
-  for (auto& pp : points) {
-    COUT << "pointb : " << pp.first.x() << ',' << pp.first.y() << ',' << pp.second
-         << " dir " << ((dir == EAST) ? 'E' : 'N') << " layer " << z
-         << (hor ? " H" : "") << (vert ? " V" : "")
-         << " pin " << r.str() << '\n';
+  if (verboseAt(LogLevel::ELEMENT)) {
+    for (auto& pp : points) {
+      COUT << "pointb : " << pp.first.x() << ',' << pp.first.y() << ',' << pp.second
+           << " dir " << ((dir == EAST) ? 'E' : 'N') << " layer " << z
+           << (hor ? " H" : "") << (vert ? " V" : "")
+           << " pin " << r.str() << '\n';
+    }
   }
   return points;
 }
@@ -1983,6 +1985,7 @@ Geom::LayerRects Router::findSol()
         if (_targets.find(t) != _targets.end()) {
           _sol = t;
           COUT << "sol found with " << _expansions << " expansions! cost " << t->fcost() << " for " << _name << std::endl;
+          if (verboseAt(LogLevel::TRACE))
           for (unsigned i = 0; i < layerExpansions.size(); ++i) {
             COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
           }
@@ -2003,6 +2006,7 @@ Geom::LayerRects Router::findSol()
         if (memoise) _failedSearches.insert(key);
         _everFailed.insert(_name);
         COUT << "search failed in pass " << attempt << " for " << _name << " after " << _expansions << " expansions!\n";
+        if (verboseAt(LogLevel::TRACE))
         for (unsigned i = 0; i < layerExpansions.size(); ++i) {
           COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
         }
@@ -2065,6 +2069,7 @@ Geom::LayerRects Router::findSol()
         if (_targets.find(t) != _targets.end()) {
           _sol = t;
           COUT << "sol found with pin width for " << _name << " after " << _expansions << " expansions!\n";
+          if (verboseAt(LogLevel::TRACE))
           for (unsigned i = 0; i < escLayerExpansions.size(); ++i) {
             COUT << "\texpanded : " << i << ' ' << escLayerExpansions[i] << '\n';
           }
@@ -2120,6 +2125,7 @@ Geom::LayerRects Router::findSol()
           if (_targets.find(t) != _targets.end()) {
             _sol = t;
             COUT << "sol found with via escape relaxed for " << _name << " after " << _expansions << " expansions!\n";
+            if (verboseAt(LogLevel::TRACE))
             for (unsigned i = 0; i < relaxLayerExpansions.size(); ++i) {
               COUT << "\texpanded : " << i << ' ' << relaxLayerExpansions[i] << '\n';
             }
@@ -2133,6 +2139,7 @@ Geom::LayerRects Router::findSol()
         }
         if (!_sol) {
           COUT << "via escape relax stage failed for " << _name << " after " << _expansions << " expansions!\n";
+          if (verboseAt(LogLevel::TRACE))
           for (unsigned i = 0; i < relaxLayerExpansions.size(); ++i) {
             COUT << "\texpanded : " << i << ' ' << relaxLayerExpansions[i] << '\n';
           }
@@ -2461,7 +2468,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
         }
       }
     }
-    for (unsigned i = 0; i < _ndrwidthx.size(); ++i) {
+    for (unsigned i = 0; verboseAt(LogLevel::ELEMENT) && i < _ndrwidthx.size(); ++i) {
       COUT << "after updatendr layer : " << i << " width : " << _widthx[i] << ' ' << _widthy[i];
       if (_ndrwidthx[i] != INT_MAX) {
         COUT << " ndr widthx : " << _ndrwidthx[i] ;
@@ -2479,7 +2486,7 @@ void Router::updatendr(const bool usendr, const std::map<int, int>& ndrwidths,
     }
   }
 //#if DEBUG
-  for (unsigned i = 0; i < _ndrwidthx.size(); ++i) {
+  for (unsigned i = 0; verboseAt(LogLevel::ELEMENT) && i < _ndrwidthx.size(); ++i) {
     COUT << "layer : " << i << " width : " << _widthx[i] << ' ' << _widthy[i];
     if (_ndrwidthx[i] != INT_MAX) {
       COUT << " ndr widthx : " << _ndrwidthx[i] ;
@@ -2768,7 +2775,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
     return false;
   };
   auto report = [&]() {
-    if (legal > 1) {
+    if (legal > 1 && verboseAt(LogLevel::ELEMENT)) {
       COUT << "VIAPAD " << (chosen == 1 ? "kept" : "switched") << " : " << legal
            << " legal vias at (" << n->x() << ',' << n->y() << ") z=" << n->z()
            << (up ? " up" : " down") << " -> #" << chosen
@@ -3095,7 +3102,7 @@ void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
   }
 
   for (auto& v : _vias) {
-    COUT << "via : " << v->str() << '\n';
+    if (verboseAt(LogLevel::NET)) COUT << "via : " << v->str() << '\n';
   }
 
   for (int z = _minLayer; z < _maxLayer; ++z) {
@@ -3112,7 +3119,7 @@ void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
     if (hi < COST_MAX) extra += hi * uex;
     if (extra > 0) {
       _cf.addViaPadCost(z, z + 1, extra);
-      COUT << "via pad cost : layers " << z << '-' << (z + 1)
+      if (verboseLog()) COUT << "via pad cost : layers " << z << '-' << (z + 1)
            << " pads " << lp.str() << ' ' << up.str()
            << " -> +" << extra << '\n';
     }

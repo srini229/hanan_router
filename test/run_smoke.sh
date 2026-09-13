@@ -349,8 +349,10 @@ run_case ViaArrayGeneratorsMixed "VG2VT_CONC_0.def" \
 #      pad stayed at whatever uninitialized memory the struct happened to
 #      hold).
 LOGMUST="via : l: 2 u: 3 c: 8 center: (0,0) lb: \[(-36,-36),(36,36)\] ub: \[(-36,-36),(36,36)\]|via : l: 2 u: 3 c: 8 center: (0,0) lb: \[(-26,-26),(26,26)\] ub: \[(-46,-46),(46,46)\]"
+#      (-v 1: the via table is per-net detail, not a result, so it only prints
+#      above the default verbosity)
 run_case via_array_venc "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers_via_venc.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+  -d $IN/layers_via_venc.json -p $IN/test.placement_verilog.json -l $IN/test.lef -v 1
 
 # 16. use_pin_width_escape: pins narrower than the layer width block standard routing
 #     (OBS column at x=36..80 bloats to cover pin centre x=4 with standard widthy=32,

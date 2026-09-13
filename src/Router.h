@@ -613,7 +613,7 @@ class Router {
       _endextnymin.clear();
       _endextnxmax.clear();
       _endextnymax.clear();
-      COUT << "flushing nodes\n";
+      if (verboseLog()) COUT << "flushing nodes\n";
 #if DEBUG
       COUT << " remaining " << Node::_nodectr << ' ' << _nodeset.size() << "\n";
       for (auto& n : _nodeset) {

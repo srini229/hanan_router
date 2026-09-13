@@ -83,7 +83,7 @@ PortPairs Net::reorderPorts() const
       if (ports[i]->isVirtualPort() || ports[j]->isVirtualPort()) dist /= 10;
       portpairdist[i][j] = dist;
       portpairdist[j][i] = dist;
-      COUT << "ports dist : " << ports[i]->name() << ' ' << ports[j]->name() << ' ' << dist << '\n';
+      if (verboseLog()) COUT << "ports dist : " << ports[i]->name() << ' ' << ports[j]->name() << ' ' << dist << '\n';
       if (mindist > dist) {
         mindist = dist;
         idx1 = static_cast<int>(std::min(i, j));
@@ -102,7 +102,7 @@ PortPairs Net::reorderPorts() const
   std::vector<std::pair<int, int>> primorder;
   primorder.reserve(ports.size() - 1);
   primorder.push_back(std::make_pair(idx1, idx2));
-  COUT << "ports to route order : " << ports[idx1]->name() << ' ' << ports[idx2]->name() << '\n';
+  if (verboseAt(LogLevel::NET)) COUT << "ports to route order : " << ports[idx1]->name() << ' ' << ports[idx2]->name() << '\n';
   std::vector<int> selected(ports.size(), 0);
   selected[idx1] = 1;
   selected[idx2] = 1;
@@ -121,7 +121,7 @@ PortPairs Net::reorderPorts() const
     }
     if (minidx2 >= 0) {
       primorder.push_back(std::make_pair(minidx1, minidx2));
-      COUT << "ports to route order : " << ports[minidx1]->name() << ' ' << ports[minidx2]->name() << '\n';
+      if (verboseAt(LogLevel::NET)) COUT << "ports to route order : " << ports[minidx1]->name() << ' ' << ports[minidx2]->name() << '\n';
       selected[minidx2] = 1;
     }
   }
@@ -167,7 +167,7 @@ PortPairs Net::clockRouteOrder() const
       { return Geom::Dist(p1.first->bbox(), p1.second->bbox()) > Geom::Dist(p2.first->bbox(), p2.second->bbox()); }
       );
   for (auto& p : porder) {
-    COUT << "ports to route order : " << p.first->name() << ' ' << p.second->name() << ' ' << Geom::Dist(p.first->bbox(), p.second->bbox()) << '\n';
+    if (verboseAt(LogLevel::NET)) COUT << "ports to route order : " << p.first->name() << ' ' << p.second->name() << ' ' << Geom::Dist(p.first->bbox(), p.second->bbox()) << '\n';
   }
   return porder;
 }
@@ -301,7 +301,7 @@ Geom::LayerRects Net::dropSameNetObstacles(const Geom::LayerRects& obs) const
     for (const auto& k : krects) out.emplace_back(bp::xl(k), bp::yl(k), bp::xh(k), bp::yh(k));
     const size_t dropped = lo.second.size() ? (lo.second.size() - std::min(lo.second.size(), out.size())) : 0;
     if (!krects.empty() || !lo.second.empty()) {
-      if (out.size() != lo.second.size()) {
+      if (out.size() != lo.second.size() && verboseAt(LogLevel::NET)) {
         COUT << "same-net trace : net " << _name << " layer " << lo.first << " : "
              << lo.second.size() << " obstacle(s) -> " << out.size()
              << " after dropping metal continuous with our own pins";
@@ -396,7 +396,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       const auto& port1 = pp.first;
       const auto& port2 = pp.second;
       router.clearSourceTargets();
-      COUT << "routing ports : " << port1->name() << ' ' << port2->name() << '\n';
+      if (verboseAt(LogLevel::NET)) COUT << "routing ports : " << port1->name() << ' ' << port2->name() << '\n';
       router.setName(_name + "__" + port1->name() + "__" + port2->name());
       router.setMBox(bbox);
       const auto& p1 = port1->shapes();
@@ -543,7 +543,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         addOpenWire(router.name());
       }
       if (!port1->isVirtualPort() || !_driver.empty()) {
-        COUT << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;
+        if (verboseAt(LogLevel::NET)) COUT << "Adding routes to " << port1->name() << ' ' << sol.size() << std::endl;
         Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), sol, &_bbox);
         if (port2->isVirtualPort()) {
           Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port1->shapes()), port2->shapes(), &_bbox);
@@ -552,7 +552,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
       if (!port2->isVirtualPort() || !_driver.empty()) {
-        COUT << "Adding routes to " << port2->name() << ' ' << sol.size() << std::endl;
+        if (verboseAt(LogLevel::NET)) COUT << "Adding routes to " << port2->name() << ' ' << sol.size() << std::endl;
         Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), sol, &_bbox);
         if (port1->isVirtualPort()) {
           Geom::MergeLayerRects(const_cast<Geom::LayerRects&>(port2->shapes()), port1->shapes(), &_bbox);

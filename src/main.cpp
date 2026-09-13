@@ -1,4 +1,7 @@
 #include "Util.h"
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include "Geom.h"
 #include "Layer.h"
 #include "Placement.h"
@@ -22,10 +25,24 @@ int main(int argc, char* argv[])
       << "\t-rsmt (confine each net to a Borah Steiner corridor over its pins)\n"
       << "\t-threads <N> (route non-overlapping nets in parallel using N worker threads; default 1)\n"
       << "\t-relaxvia (in the final pass, for a net that still fails to route, retry its escape via with spacing relaxed to as close as 5 to, but never on, a shape -- source pins first, then also target pins if that alone isn't enough)\n"
-      << "\t-v (verbose: emit high-volume per-element debug logging)\n";
+      << "\t-v [N] (log verbosity: 0 results only (default), 1 per-net detail, 2 per-element dumps, 3 everything)\n";
     exit(0);
   }
-  setVerboseLog(checkArg(argc, argv, "-v") || getenv("HANAN_VERBOSE"));
+  {
+    // -v alone means level 1; -v <N> selects the level, as does HANAN_VERBOSE=<N>
+    int level = LogLevel::RESULT;
+    if (const char* e = getenv("HANAN_VERBOSE")) {
+      level = (*e && isdigit(static_cast<unsigned char>(*e))) ? atoi(e) : LogLevel::NET;
+    }
+    if (checkArg(argc, argv, "-v")) {
+      if (level < LogLevel::NET) level = LogLevel::NET;
+      const std::string lv = parseArgs(argc, argv, "-v");
+      if (!lv.empty() && lv.find_first_not_of("0123456789") == std::string::npos) {
+        level = std::stoi(lv);
+      }
+    }
+    setVerboseLevel(level);
+  }
   SaveRestoreStream srs(logfile);
   TIME_M();
   std::string layerJSONFile = parseArgs(argc, argv, "-d");
@@ -148,7 +165,7 @@ int main(int argc, char* argv[])
   if (relaxViaOpt)          COUT << " -relaxvia";
   if (rsmtOpt)              COUT << " -rsmt";
   if (checkArg(argc, argv, "-cornerescape")) COUT << " -cornerescape";
-  if (verboseLog())         COUT << " -v";
+  if (verboseLevel())       COUT << " -v " << verboseLevel();
   COUT << std::endl;
   hrdb.setRSMTCorridor(rsmtOpt);
   const std::string replayfile = parseArgs(argc, argv, "-replay");
