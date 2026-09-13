@@ -64,6 +64,7 @@ hanan_router -d <layers.json> -p <placement file> -l <lef file> [options]
 | `-maxexp <N>` | no | A\* node-expansion budget per search stage (default `100000`). Lower is faster and leaves more nets open. |
 | `-escapepitch <N>` | no | Thin pin-escape points to one per `N` wire pitches, keeping the one nearest each pin rectangle's centre (default `1`; `0` seeds every candidate). See [Pin escape points](#pin-escape-points). |
 | `-keepblockedescapes` | no | Seed every pin-escape point, including ones sitting inside a bloated obstacle that no wire can start from. Default is to drop them. |
+| `-viaalign` | no | When more than one via rotation is legal, pick the one whose pads run along the wires they join rather than the first legal one. Off by default; see [Via selection](#via-selection). |
 | `-seedpolys <N>` | no | For a pin split into more than `N` polygons, seed only the `N` nearest the other terminal (default `0` = seed all). |
 | `-seedpolysalways` | no | Keep that limit on every attempt; by default the rest are restored for a net still open by attempt 3. |
 | `-rsmt` | no | Confine each net to a Borah-Owens-Irwin Steiner corridor over its pins. |
@@ -121,6 +122,21 @@ both the size of the Hanan grid and the cost of seeding the search:
 * `-escapepitch <N>` drops escape points closer together than `N` wire pitches, keeping the one nearest each pin rectangle's centre (the cheapest under the off-centre escape cost). Every pin rectangle keeps at least one escape in every direction it had one. `-escapepitch 0` restores every candidate.
 * Escape points sitting inside an already-bloated obstacle -- which no wire can start from and no route can enter -- are dropped before the search, and the grid is rebuilt without the lines they contributed (`pruned N blocked escape point(s)`). `-keepblockedescapes` turns that off.
 * `-seedpolys <N>` limits how many polygons of a multi-polygon pin are seeded, keeping those nearest the other terminal.
+
+## Via selection
+
+Where a technology defines several vias for a layer pair -- typically the same
+cut rotated 90 degrees -- the router has to pick one. A via that lands **on a
+pin** picks the rotation whose pad overlaps the pin most (`VIAPAD kept/switched`
+at `-v 2`). A via **away from a pin** takes the first legal candidate.
+
+`-viaalign` scores the away-from-a-pin case too: +2 when the pad on the node's
+own layer runs along the wire arriving there, +1 when the pad on the far layer
+runs along that layer's preferred direction. Pin overlap still decides wherever
+there is a pin; alignment only breaks its ties.
+
+It is off by default because it has not been shown to pay -- see
+`docs/ROUTING_NOTES.md`. On a technology with square cuts it is a no-op.
 
 ## Log verbosity
 

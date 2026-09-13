@@ -18,6 +18,7 @@ int main(int argc, char* argv[])
       << "\t-escapepitch <N> (thin pin-escape points to one per N wire pitches; 0 keeps them all; default 1)\n"
       << "\t-reorderbudget <N> (cap a block's reorder passes so base-route expansions x passes stays under N; 0 uncapped; default 15000000)\n"
       << "\t-keepblockedescapes (seed every pin-escape point, including ones no wire can start from; default is to drop them)\n"
+      << "\t-viaalign (pick the via rotation whose pads run along the wires they join, instead of the first legal one)\n"
       << "\t-seedpolys <N> (for a pin split into more than N polygons, seed only the N nearest the other end; 0 seeds all; default 0)\n"
       << "\t-seedpolysalways (keep that limit on every attempt; default restores the rest for a net still open by attempt 3)\n"
       << "\t-replay <ATTEMPT_*.lef> (re-route one wire from a HANAN_DEBUG_WIRE dump; needs -d only)\n"
@@ -114,6 +115,7 @@ int main(int argc, char* argv[])
     }
   }
   if (checkArg(argc, argv, "-keepblockedescapes")) hrdb.setPruneEscapes(false);
+  if (checkArg(argc, argv, "-viaalign")) hrdb.setViaAlign(true);
   if (checkArg(argc, argv, "-seedpolysalways")) hrdb.setSeedPolysAlways(true);
   const std::string sp = parseArgs(argc, argv, "-seedpolys");
   if (!sp.empty()) {
@@ -156,6 +158,7 @@ int main(int argc, char* argv[])
        << " -escapepitch " << hrdb.escapePitchMul()
        << " -reorderbudget " << hrdb.reorderBudget()
        << (hrdb.pruneEscapes() ? "" : " -keepblockedescapes")
+       << (hrdb.viaAlign() ? " -viaalign" : "")
        << " -seedpolys " << hrdb.maxSeedPolys()
        << (hrdb.seedPolysAlways() ? " -seedpolysalways" : "")
        << " -threads " << hrdb.threads();

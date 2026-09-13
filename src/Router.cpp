@@ -2767,6 +2767,38 @@ void Router::createSourceTargetNodes()
   }
 }
 
+// +2 when the pad on the node's own layer runs along the wire arriving there
+// (falling back to that layer's preferred direction when the arrival is not a
+// same-layer run), +1 when the pad on the far layer runs along that layer's
+// preferred direction. Square pads score nothing either way.
+int Router::viaPadAlign(const Node* n, const bool up, const Via& v) const
+{
+  const Geom::Rect& nearpad = up ? v.lpad() : v.upad();
+  const Geom::Rect& farpad  = up ? v.upad() : v.lpad();
+  const int fz = up ? v.u() : v.l();
+  auto longAxisVert = [](const Geom::Rect& r, bool& vert) {
+    if (r.height() == r.width()) return false;
+    vert = r.height() > r.width();
+    return true;
+  };
+  int score = 0;
+  bool padvert = false;
+  if (longAxisVert(nearpad, padvert)) {
+    const Node* p = n->parent();
+    bool want;
+    if (p && p->z() == n->z() && (p->x() == n->x()) != (p->y() == n->y())) {
+      want = (p->x() == n->x());            // arrived along a vertical run
+    } else {
+      want = _cf.isVert(n->z());            // no run to go on: the layer's own direction
+    }
+    if (padvert == want) score += 2;
+  }
+  if (fz >= _minLayer && fz <= _maxLayer && longAxisVert(farpad, padvert)) {
+    if (padvert == _cf.isVert(fz)) score += 1;
+  }
+  return score;
+}
+
 const Via* Router::isViaValid(const Node* n, const bool up) const
 {
   Via* via{nullptr};
@@ -2775,10 +2807,15 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
   long long bestOverlap{-1};
   int legal{0}, chosen{0};
   auto consider = [&](Via*& cand) {
-    if (!pin) { best = cand; cand = nullptr; return true; }
+    // Without -viaalign a mid-path via takes the first candidate that is legal,
+    // which is how every via away from a pin used to be chosen.
+    if (!pin && !_viaAlign) { best = cand; cand = nullptr; return true; }
     ++legal;
-    const long long ov = padPinOverlap(up ? cand->lpad() : cand->upad(), *pin);
-    if (ov > bestOverlap) { delete best; bestOverlap = ov; best = cand; chosen = legal; }
+    // Pin overlap still decides wherever there is a pin to overlap; alignment
+    // only breaks its ties, and stands alone mid-path.
+    const long long ov = pin ? padPinOverlap(up ? cand->lpad() : cand->upad(), *pin) : 0;
+    const long long sc = ov * 8 + (_viaAlign ? viaPadAlign(n, up, *cand) : 0);
+    if (sc > bestOverlap) { delete best; bestOverlap = sc; best = cand; chosen = legal; }
     else delete cand;
     cand = nullptr;
     return false;

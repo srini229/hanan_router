@@ -488,6 +488,7 @@ class Router {
     bool _relaxViaEscape{false};
     int _escapePitchMul{1};
     bool _pruneEscapes{true};
+    bool _viaAlign{false};
     int _maxSeedPolys{0};
     bool _seedPolysAlways{false};
     // Transient per-net state: only true while findSol() is retrying a still-
@@ -809,6 +810,10 @@ class Router {
     void addTargetShapes(const Geom::Rect& r, const int z) { addSourceTargetShapes(r, z, false); }
     void addSourceTarget(const Geom::Rect& r, const int z, const bool src);
     const Via* isViaValid(const Node* n, const bool up) const;
+    // How well a via candidate's pads lie along the wires they join. The pads in
+    // this technology are ~3:1, so a pad turned across its wire buys nothing and
+    // occupies the neighbouring track instead.
+    int viaPadAlign(const Node* n, const bool up, const Via& v) const;
 
     struct PatWp { int x, y, z; bool via; };
     bool patternRun(const int x, const int y, const int z, const bool vert, const int to) const;
@@ -863,6 +868,8 @@ class Router {
     // 0 disables it and every candidate point becomes a search entry.
     void setEscapePitchMul(const int n) { _escapePitchMul = n; }
     int escapePitchMul() const { return _escapePitchMul; }
+    void setViaAlign(const bool b) { _viaAlign = b; }
+    bool viaAlign() const { return _viaAlign; }
     void setPruneEscapes(const bool b) { _pruneEscapes = b; }
     bool pruneEscapes() const { return _pruneEscapes; }
     // A pin split into many polygons does not need an escape on every one: the
