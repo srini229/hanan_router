@@ -427,13 +427,13 @@ CostType Router::guideDeviation(const int x, const int y, const int z) const
 Node* Router::createNode(const int x, const int y, const int z,
     const Node* parent, const int fcost, const int tcost)
 {
-  auto coord = std::make_pair(x,y);
+  const uint64_t coord = nodeKey(x, y);
   auto it = _nodes[z].find(coord);
   Node* n = nullptr;
   if (z < _minLayer || z > _maxLayer) COUT << "ERROR in layer no : " << z << '\n';
   if (it == _nodes[z].end()) {
     n = new Node(x, y, z, fcost, tcost, parent);
-    auto itr = _nodes[z].emplace(std::make_pair(coord, n));
+    auto itr = _nodes[z].emplace(coord, n);
     it = itr.first;
     if (!itr.second) {
       COUT << "ERROR adding node to nz "; n->print("n : ");
@@ -765,7 +765,7 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
       for (auto& bp : findBoundaryPoints(r, z, dir, points)) {
         const auto coord = std::make_pair(bp.first.x(), bp.first.y());
         if (points.find(bp) != points.end()) continue;
-        if (_nodes[z].count(coord) && !boundaryAdded.count(coord)) continue;
+        if (_nodes[z].count(nodeKey(coord.first, coord.second)) && !boundaryAdded.count(coord)) continue;
         bpoints.insert(bp);
         boundaryAdded.insert(coord);
       }
@@ -842,11 +842,56 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
 void Router::insertToPQ(const Node* n)
 {
   setexpand(const_cast<Node*>(n), n->parent());
-  _pq.insert(n);
+  Node* nn = const_cast<Node*>(n);
+  if (inPQ(nn)) { pqSiftUp(nn->pqidx()); return; }
+  _pq.push_back(nullptr);
+  pqPlace(nn, static_cast<int>(_pq.size()) - 1);
+  pqSiftUp(static_cast<int>(_pq.size()) - 1);
 #if DEBUG
   n->print("\tadding to pq :");
   if (n->parent()) n->parent()->print("\t\tparent:");
 #endif
+}
+
+void Router::pqSiftUp(int i)
+{
+  NodeCostComp better;
+  Node* n = _pq[i];
+  while (i > 0) {
+    const int p = (i - 1) / 2;
+    if (!better(n, _pq[p])) break;
+    pqPlace(_pq[p], i);
+    i = p;
+  }
+  pqPlace(n, i);
+}
+
+void Router::pqSiftDown(int i)
+{
+  NodeCostComp better;
+  const int sz = static_cast<int>(_pq.size());
+  Node* n = _pq[i];
+  for (;;) {
+    const int l = 2 * i + 1;
+    if (l >= sz) break;
+    const int r = l + 1;
+    const int c = (r < sz && better(_pq[r], _pq[l])) ? r : l;
+    if (!better(_pq[c], n)) break;
+    pqPlace(_pq[c], i);
+    i = c;
+  }
+  pqPlace(n, i);
+}
+
+Node* Router::popPQ()
+{
+  if (_pq.empty()) return nullptr;
+  Node* best = _pq[0];
+  best->setPQIdx(-1);
+  Node* last = _pq.back();
+  _pq.pop_back();
+  if (!_pq.empty()) { pqPlace(last, 0); pqSiftDown(0); }
+  return best;
 }
 
 void Router::setexpand(Node* newn, const Node* parent) const
@@ -951,7 +996,7 @@ void Router::checkAndInsert(Node* newn, const Node* n)
   } else if (newn->parent() != n) {
     auto oldfcost = newn->fcost();
     auto oldparent = newn->parent();
-    auto it = _pq.find(newn);
+    const bool queued = inPQ(newn);
     newn->setParent(n);
     if (n->z() == newn->z()) {
       if (n->x() == newn->x()) {
@@ -964,9 +1009,10 @@ void Router::checkAndInsert(Node* newn, const Node* n)
     if (newn->fcost() > oldfcost) {
       newn->setParent(oldparent);
       newn->setFCost(oldfcost);
-    } else if (it != _pq.end()) {
-      _pq.erase(it);
-      insertToPQ(newn);
+    } else if (queued) {
+      // cost only went down, so the node just moves up from the slot it is in
+      setexpand(newn, newn->parent());
+      pqImproved(newn);
     }
   }
 #if DEBUG
@@ -1004,39 +1050,39 @@ int Router::snap(const Node* n, const bool vert, const bool up) const
   return snapc;
 }
 
-void Router::getTargetGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc)
+void Router::getTargetGrid(std::vector<int>& s, const Node* n, const bool vert, const int snapc)
 {
   for (auto& t : _targets) {
     if (vert) {
       auto maxc = std::max(n->y(), snapc);
       auto minc = std::min(n->y(), snapc);
-      if (t->y() > minc && t->y() < maxc) s.insert(t->y());
+      if (t->y() > minc && t->y() < maxc) s.push_back(t->y());
     } else {
       auto maxc = std::max(n->x(), snapc);
       auto minc = std::min(n->x(), snapc);
-      if (t->x() > minc && t->x() < maxc) s.insert(t->x());
+      if (t->x() > minc && t->x() < maxc) s.push_back(t->x());
     }
   }
 }
 
-void Router::getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc)
+void Router::getAdjacentGrid(std::vector<int>& s, const Node* n, const bool above, const bool up, const int snapc)
 {
   int adjLayer = (above ? (n->z() < _maxLayer ? n->z() + 1 : -1) : (n->z() > _minLayer ? n->z() - 1 : -1));
   if (adjLayer >= 0) {
     auto vert = _cf.isVert(n->z());
     const auto& grid = (vert ? _hanangridh[adjLayer] : _hanangridv[adjLayer]);
     if (!grid.empty()) {
-      auto coord = (vert ? n->y() : n->x());
-      for (auto& pos : grid) {
-        if ((up && pos.first > coord && pos.first < snapc) || (!up && pos.first < coord && pos.first > snapc)) {
-          s.insert(pos.first);
-        }
+      const int coord = (vert ? n->y() : n->x());
+      const int lo = up ? coord : snapc;
+      const int hi = up ? snapc : coord;
+      for (auto it = grid.upper_bound(lo); it != grid.end() && it->first < hi; ++it) {
+        s.push_back(it->first);
       }
     }
   }
 }
 
-void Router::getCrossGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc)
+void Router::getCrossGrid(std::vector<int>& s, const Node* n, const bool vert, const int snapc)
 {
   const auto& grid = vert ? _hanangridh[n->z()] : _hanangridv[n->z()];
   if (grid.empty()) return;
@@ -1047,7 +1093,7 @@ void Router::getCrossGrid(std::set<int>& s, const Node* n, const bool vert, cons
   for (auto it = grid.lower_bound(lo); it != grid.end() && it->first < hi; ++it) {
     if (it->first <= lo) continue;
     for (const auto& r : it->second) {
-      if (lkp >= r.first && lkp <= r.second) { s.insert(it->first); break; }
+      if (lkp >= r.first && lkp <= r.second) { s.push_back(it->first); break; }
     }
   }
 }
@@ -1101,7 +1147,14 @@ void Router::expandNode(const Node* n1)
     n->expand(SOUTH, false);
   }
 
-  std::set<int> gridpos;
+  // reused across the four directions; sorted and de-duplicated before use so
+  // the iteration order is exactly what the old std::set gave
+  std::vector<int>& gridpos = _gridposbuf;
+  gridpos.clear();
+  auto orderGridPos = [&gridpos]() {
+    std::sort(gridpos.begin(), gridpos.end());
+    gridpos.erase(std::unique(gridpos.begin(), gridpos.end()), gridpos.end());
+  };
   if (n->expandwest()) {
 #if DEBUG
     COUT << "\texpanding left\n";
@@ -1119,6 +1172,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, false, false, snapc);
     getTargetGrid(gridpos, n, false, snapc);
     getCrossGrid(gridpos, n, false, snapc);
+    orderGridPos();
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -1148,6 +1202,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, false, true, snapc);
     getTargetGrid(gridpos, n, false, snapc);
     getCrossGrid(gridpos, n, false, snapc);
+    orderGridPos();
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -1176,6 +1231,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, false, false, snapc);
     getTargetGrid(gridpos, n, true, snapc);
     getCrossGrid(gridpos, n, true, snapc);
+    orderGridPos();
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -1205,6 +1261,7 @@ void Router::expandNode(const Node* n1)
     getAdjacentGrid(gridpos, n, false, true, snapc);
     getTargetGrid(gridpos, n, true, snapc);
     getCrossGrid(gridpos, n, true, snapc);
+    orderGridPos();
     for (auto &pos : gridpos) {
 #if DEBUG
       COUT << "\t\tgrid pos : " << pos << '\n';
@@ -1852,10 +1909,15 @@ Geom::LayerRects Router::findSol()
         if (!s->closed()) insertToPQ(s);
       }
       _exploredEdges.clear();
+      // the explored-edge trail exists purely to be drawn in a debug LEF; when no
+      // one is going to read it, recording it is 6 ints per expansion for nothing
 #if DEBUG
+      const bool tracing = true;
 #else
-      if (!debugplot.empty() && (debugplot == "1" || debugplot == _name || _debugplot))
+      const bool tracing = _dumpOpenNets || _debugplot
+        || (!debugplot.empty() && (debugplot == "1" || debugplot == _name));
 #endif
+      if (tracing)
         writeLEF("ATTEMPT_" + std::to_string(_attemptno) + (attempt ? "_1" : "_0"));
 
 #if DEBUG
@@ -1887,11 +1949,24 @@ Geom::LayerRects Router::findSol()
       // a guided search rather than risk it.
       const bool memoise = !hasGuide();
       const unsigned long long key = memoise ? searchKey(attempt) : 0;
+      // A wire that has failed here before is worth a reachability sweep: it is
+      // far cheaper than letting A* exhaust the space to reach the same answer.
+      if (_everFailed.count(_name) && !escapesConnected()) {
+        ++_memoHits;
+        COUT << "search skipped for " << _name << " in pass " << attempt
+             << " : no target is reachable from any source\n";
+        if (memoise) _failedSearches.insert(key);
+        clearPQ();
+        _hanangridv.clear();
+        _hanangridh.clear();
+        _expansions = 0;
+        continue;
+      }
       if (memoise && _failedSearches.count(key)) {
         ++_memoHits;
         COUT << "search skipped for " << _name << " in pass " << attempt
              << " : identical problem already failed\n";
-        _pq.clear();
+        clearPQ();
         _hanangridv.clear();
         _hanangridh.clear();
         _expansions = 0;
@@ -1902,8 +1977,9 @@ Geom::LayerRects Router::findSol()
       if (patterned) {
         COUT << "sol found with pattern! cost " << _sol->fcost() << " for " << _name << std::endl;
       }
-      while (!patterned && !_pq.empty()) {
-        auto t = const_cast<Node*>(*_pq.begin());
+      while (!patterned) {
+        Node* t = popPQ();
+        if (!t) break;
         if (_targets.find(t) != _targets.end()) {
           _sol = t;
           COUT << "sol found with " << _expansions << " expansions! cost " << t->fcost() << " for " << _name << std::endl;
@@ -1912,10 +1988,11 @@ Geom::LayerRects Router::findSol()
           }
           break;
         }
-        _pq.erase(_pq.begin());
         ++layerExpansions[t->z()];
-        if (auto parent = t->parent()) {
-          _exploredEdges.push_back({t->x(), t->y(), t->z(), parent->x(), parent->y(), parent->z()});
+        if (tracing) {
+          if (auto parent = t->parent()) {
+            _exploredEdges.push_back({t->x(), t->y(), t->z(), parent->x(), parent->y(), parent->z()});
+          }
         }
         expandNode(t);
         ++_expansions;
@@ -1924,6 +2001,7 @@ Geom::LayerRects Router::findSol()
       }
       if (!_sol) {
         if (memoise) _failedSearches.insert(key);
+        _everFailed.insert(_name);
         COUT << "search failed in pass " << attempt << " for " << _name << " after " << _expansions << " expansions!\n";
         for (unsigned i = 0; i < layerExpansions.size(); ++i) {
           COUT << "\texpanded : " << i << ' ' << layerExpansions[i] << '\n';
@@ -1935,7 +2013,7 @@ Geom::LayerRects Router::findSol()
           writeLEF("ATTEMPT_" + std::to_string(_attemptno) + (attempt ? "_1" : "_0"));
       }
       minExpansions = std::min(minExpansions, _expansions);
-      _pq.clear();
+      clearPQ();
       _hanangridv.clear();
       _hanangridh.clear();
       _expansions = 0;
@@ -1981,8 +2059,9 @@ Geom::LayerRects Router::findSol()
         if (!s->closed()) insertToPQ(s);
       }
       std::vector<unsigned> escLayerExpansions(_maxLayer + 1, 0);
-      while (!_pq.empty()) {
-        auto t = const_cast<Node*>(*_pq.begin());
+      for (;;) {
+        Node* t = popPQ();
+        if (!t) break;
         if (_targets.find(t) != _targets.end()) {
           _sol = t;
           COUT << "sol found with pin width for " << _name << " after " << _expansions << " expansions!\n";
@@ -1991,7 +2070,6 @@ Geom::LayerRects Router::findSol()
           }
           break;
         }
-        _pq.erase(_pq.begin());
         ++escLayerExpansions[t->z()];
         expandNode(t);
         ++_expansions;
@@ -2001,7 +2079,7 @@ Geom::LayerRects Router::findSol()
       if (!_sol) {
         COUT << "pin width also failed for " << _name << " after " << _expansions << " expansions!\n";
       }
-      _pq.clear();
+      clearPQ();
       _hanangridv.clear();
       _hanangridh.clear();
       _expansions = 0;
@@ -2036,8 +2114,9 @@ Geom::LayerRects Router::findSol()
           if (!s->closed()) insertToPQ(s);
         }
         std::vector<unsigned> relaxLayerExpansions(_maxLayer + 1, 0);
-        while (!_pq.empty()) {
-          auto t = const_cast<Node*>(*_pq.begin());
+        for (;;) {
+          Node* t = popPQ();
+          if (!t) break;
           if (_targets.find(t) != _targets.end()) {
             _sol = t;
             COUT << "sol found with via escape relaxed for " << _name << " after " << _expansions << " expansions!\n";
@@ -2046,7 +2125,6 @@ Geom::LayerRects Router::findSol()
             }
             break;
           }
-          _pq.erase(_pq.begin());
           ++relaxLayerExpansions[t->z()];
           expandNode(t);
           ++_expansions;
@@ -2059,7 +2137,7 @@ Geom::LayerRects Router::findSol()
             COUT << "\texpanded : " << i << ' ' << relaxLayerExpansions[i] << '\n';
           }
         }
-        _pq.clear();
+        clearPQ();
         _hanangridv.clear();
         _hanangridh.clear();
         _expansions = 0;
@@ -2499,6 +2577,100 @@ unsigned long long Router::searchKey(const int pass) const
     }
   }
   return h;
+}
+
+// Segments of free space on one grid line: a vertical line at x carries free y
+// intervals, a horizontal line at y carries free x intervals. A route is a walk
+// over such segments, crossing from one to a perpendicular one where they meet
+// and stepping between layers where two segments share a point. Walking that
+// graph from the sources answers "can any target be reached" without a priority
+// queue, a cost model, or via legality -- and because every A* move is also a
+// move here, a "no" is conclusive.
+bool Router::escapesConnected() const
+{
+  struct Seg { int line, lo, hi, z; bool vert; };
+  std::vector<Seg> segs;
+  // (z, vert, line) -> indices of that line's segments, in interval order
+  std::map<std::tuple<int, int, int>, std::pair<int, int>> byLine;
+  for (const bool vert : {true, false}) {
+    const auto& grids = vert ? _hanangridv : _hanangridh;
+    for (int z = 0; z < static_cast<int>(grids.size()); ++z) {
+      for (const auto& line : grids[z]) {
+        const int first = static_cast<int>(segs.size());
+        for (const auto& r : line.second) {
+          segs.push_back(Seg{line.first, r.first, r.second, z, vert});
+        }
+        if (static_cast<int>(segs.size()) > first) {
+          byLine.emplace(std::make_tuple(z, vert ? 1 : 0, line.first),
+                         std::make_pair(first, static_cast<int>(segs.size())));
+        }
+      }
+    }
+  }
+  if (segs.empty()) return true;
+
+  auto segAt = [&](const int z, const bool vert, const int line, const int pos) -> int {
+    auto it = byLine.find(std::make_tuple(z, vert ? 1 : 0, line));
+    if (it == byLine.end()) return -1;
+    for (int i = it->second.first; i < it->second.second; ++i) {
+      if (pos >= segs[i].lo && pos <= segs[i].hi) return i;
+    }
+    return -1;
+  };
+  // every segment through (x,y) on layer z, whichever orientation
+  auto segsThrough = [&](const int z, const int x, const int y, std::vector<int>& out) {
+    const int a = segAt(z, true, x, y);
+    if (a >= 0) out.push_back(a);
+    const int b = segAt(z, false, y, x);
+    if (b >= 0) out.push_back(b);
+  };
+
+  std::vector<char> seen(segs.size(), 0);
+  std::vector<int> stack;
+  for (const auto* t : _targets) {
+    std::vector<int> hit;
+    segsThrough(t->z(), t->x(), t->y(), hit);
+    for (const int i : hit) seen[i] = 2;          // 2 marks a target segment
+  }
+  for (const auto* s : _sources) {
+    std::vector<int> hit;
+    segsThrough(s->z(), s->x(), s->y(), hit);
+    for (const int i : hit) {
+      if (seen[i] == 2) return true;
+      if (!seen[i]) { seen[i] = 1; stack.push_back(i); }
+    }
+  }
+  if (stack.empty()) return true;   // no source sits on the grid; not our call
+
+  int visits = 0;
+  auto reach = [&](const int i) {
+    if (i < 0) return false;
+    if (seen[i] == 2) return true;
+    if (!seen[i]) { seen[i] = 1; stack.push_back(i); }
+    return false;
+  };
+  while (!stack.empty()) {
+    if (++visits > REACH_VISIT_LIMIT) return true;   // inconclusive, let A* decide
+    const Seg s = segs[stack.back()];
+    stack.pop_back();
+    // perpendicular lines crossing this segment, on this layer and its neighbours
+    for (int dz = -1; dz <= 1; ++dz) {
+      const int z = s.z + dz;
+      if (z < _minLayer || z > _maxLayer) continue;
+      const auto& cross = s.vert ? _hanangridh[z] : _hanangridv[z];
+      for (auto it = cross.lower_bound(s.lo); it != cross.end() && it->first <= s.hi; ++it) {
+        if (reach(segAt(z, !s.vert, it->first, s.line))) return true;
+      }
+      if (dz == 0) continue;
+      // and the same-orientation line directly above or below
+      auto it = byLine.find(std::make_tuple(z, s.vert ? 1 : 0, s.line));
+      if (it == byLine.end()) continue;
+      for (int i = it->second.first; i < it->second.second; ++i) {
+        if (segs[i].lo <= s.hi && segs[i].hi >= s.lo && reach(i)) return true;
+      }
+    }
+  }
+  return false;
 }
 
 bool Router::pruneDeadEscapes()

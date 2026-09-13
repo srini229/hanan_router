@@ -1,6 +1,8 @@
 #ifndef ROUTER_H_
 #define ROUTER_H_
 #include <set>
+#include <unordered_map>
+#include <cstdint>
 #include <map>
 #include <queue>
 #include <bitset>
@@ -79,6 +81,66 @@ class CostFn {
     std::set<int> _preflayers;
     std::map<int, Geom::Rects> _relaxzones;
     std::map<int, std::vector<int>> _relaxuf;   // union-find over overlapping zones
+    // Extent of all of a layer's zones. Both endpoints have to fall inside some
+    // zone for the relaxed rate to apply, so one point outside this settles it
+    // without touching the zone list.
+    std::map<int, Geom::Rect> _relaxbbox;
+    // ...and inside the extent, a uniform bucket grid over the zones, so a
+    // lookup touches the handful of zones near the point instead of all of them.
+    // A net with hundreds of pin rectangles has hundreds of zones, and relaxed()
+    // is called for every cost evaluation.
+    struct RelaxIndex {
+      Geom::Rect bbox;
+      int nx{0}, ny{0};
+      long long cw{1}, ch{1};
+      std::vector<std::vector<int>> cell;
+    };
+    mutable std::map<int, RelaxIndex> _relaxindex;
+    mutable bool _relaxdirty{true};
+    void buildRelaxIndex() const
+    {
+      _relaxindex.clear();
+      for (const auto& lz : _relaxzones) {
+        const auto& v = lz.second;
+        if (v.empty()) continue;
+        RelaxIndex ix;
+        ix.bbox = _relaxbbox.at(lz.first);
+        int dim = 1;
+        while (dim * dim < static_cast<int>(v.size()) && dim < 128) ++dim;
+        ix.nx = ix.ny = dim;
+        ix.cw = std::max<long long>(1, (ix.bbox.width()  + dim - 1) / dim);
+        ix.ch = std::max<long long>(1, (ix.bbox.height() + dim - 1) / dim);
+        ix.cell.resize(static_cast<size_t>(dim) * dim);
+        for (size_t i = 0; i < v.size(); ++i) {
+          const int cx0 = cellOfCoord(v[i].xmin() - ix.bbox.xmin(), ix.cw, dim);
+          const int cx1 = cellOfCoord(v[i].xmax() - ix.bbox.xmin(), ix.cw, dim);
+          const int cy0 = cellOfCoord(v[i].ymin() - ix.bbox.ymin(), ix.ch, dim);
+          const int cy1 = cellOfCoord(v[i].ymax() - ix.bbox.ymin(), ix.ch, dim);
+          for (int cx = cx0; cx <= cx1; ++cx)
+            for (int cy = cy0; cy <= cy1; ++cy)
+              ix.cell[static_cast<size_t>(cy) * dim + cx].push_back(static_cast<int>(i));
+        }
+        _relaxindex.emplace(lz.first, std::move(ix));
+      }
+      _relaxdirty = false;
+    }
+    static int cellOfCoord(const long long off, const long long span, const int dim)
+    {
+      if (off <= 0) return 0;
+      const long long c = off / span;
+      return static_cast<int>(c >= dim ? dim - 1 : c);
+    }
+    // zones whose cell the point falls in; empty span means the point is outside
+    const std::vector<int>* relaxCandidates(const int z, const Geom::Point& p) const
+    {
+      auto it = _relaxindex.find(z);
+      if (it == _relaxindex.end()) return nullptr;
+      const RelaxIndex& ix = it->second;
+      if (!ix.bbox.contains(p, false)) return nullptr;
+      const int cx = cellOfCoord(p.x() - ix.bbox.xmin(), ix.cw, ix.nx);
+      const int cy = cellOfCoord(p.y() - ix.bbox.ymin(), ix.ch, ix.ny);
+      return &ix.cell[static_cast<size_t>(cy) * ix.nx + cx];
+    }
     CostType _minMetalCost{0};
     static int root(const std::vector<int>& uf, int a)
     {
@@ -89,11 +151,14 @@ class CostFn {
     CostType deltaCost(const Node& n1, const Node& n2) const;
     CostFn(const DRC::LayerInfo& lf);
     void setRelaxFloor(const CostType c) { if (c > 0 && c < COST_MAX) _minMetalCost = c; }
-    void clearRelaxZones() { _relaxzones.clear(); _relaxuf.clear(); }
+    void clearRelaxZones()
+    { _relaxzones.clear(); _relaxuf.clear(); _relaxbbox.clear(); _relaxindex.clear(); _relaxdirty = true; }
     void addRelaxZone(const int z, const Geom::Rect& r)
     {
       auto& v = _relaxzones[z];
       auto& uf = _relaxuf[z];
+      _relaxbbox[z].merge(r);
+      _relaxdirty = true;
       const int idx = static_cast<int>(v.size());
       v.push_back(r);
       uf.push_back(idx);
@@ -108,16 +173,26 @@ class CostFn {
                      const int x2, const int y2) const
     {
       if (base <= _minMetalCost || _relaxzones.empty()) return base;
+      if (_relaxdirty) buildRelaxIndex();
+      const Geom::Point p1(x1, y1), p2(x2, y2);
+      const std::vector<int>* c1 = relaxCandidates(z, p1);
+      if (!c1 || c1->empty()) return base;
+      const std::vector<int>* c2 = relaxCandidates(z, p2);
+      if (!c2 || c2->empty()) return base;
       auto it = _relaxzones.find(z);
       if (it == _relaxzones.end()) return base;
       const auto& v = it->second;
       const auto& uf = _relaxuf.at(z);
-      const Geom::Point p1(x1, y1), p2(x2, y2);
       int g1[8], g2[8];
       int n1 = 0, n2 = 0;
-      for (size_t i = 0; i < v.size(); ++i) {
-        if (n1 < 8 && v[i].contains(p1, false)) g1[n1++] = root(uf, static_cast<int>(i));
-        if (n2 < 8 && v[i].contains(p2, false)) g2[n2++] = root(uf, static_cast<int>(i));
+      for (const int i : *c1) {
+        if (n1 >= 8) break;
+        if (v[i].contains(p1, false)) g1[n1++] = root(uf, i);
+      }
+      if (n1 == 0) return base;
+      for (const int i : *c2) {
+        if (n2 >= 8) break;
+        if (v[i].contains(p2, false)) g2[n2++] = root(uf, i);
       }
       for (int a = 0; a < n1; ++a)
         for (int b = 0; b < n2; ++b)
@@ -171,6 +246,10 @@ class Node {
     const Via *_upVia, *_dnVia;
     std::bitset<MAXDIR> _expanddir;
     bool _noVia{false};
+    // This node's slot in the priority queue, -1 when not queued. Holding it on
+    // the node is what makes re-prioritising O(1) to locate: the queue never has
+    // to be searched for the entry.
+    int _pqidx{-1};
     Node(const int x = 0, const int y = 0, const int z = -1,
         const CostType fcost = -1, const CostType tcost = -1, Node const* parent = nullptr)
       : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _fcost(fcost), _tcost(tcost),
@@ -209,6 +288,8 @@ class Node {
     bool expandsouth() const { return _expanddir.test(SOUTH); }
 
     void expand(const int dir, const bool val) { if (dir < MAXDIR) _expanddir.set(dir, val); }
+    int pqidx() const { return _pqidx; }
+    void setPQIdx(const int i) { _pqidx = i; }
     bool noVia() const { return _noVia; }
     void setNoVia() { _noVia = true; }
     void setexpand() { _expanddir.set(); }
@@ -292,14 +373,34 @@ struct IntPairComp {
 };
 typedef std::set<IntPair, IntPairComp> IntRangeSet;
 typedef std::set<Node*, NodeComp> NodeSet;
-typedef std::multiset<const Node*, NodeCostComp> PriorityQueue;
-typedef std::vector<std::map<IntPair, Node*, IntPairComp>> NodeMap;
+// Binary min-heap whose elements know where they are (Node::_pqidx). A node
+// whose cost improves sifts up from its own slot, so the queue is never searched
+// and never holds a superseded copy.
+typedef std::vector<Node*> PriorityQueue;
+// Nodes are looked up by coordinate several times per expansion, so the layer
+// maps are hashed rather than ordered -- nothing ever iterates them in order.
+inline uint64_t nodeKey(const int x, const int y)
+{
+  const uint64_t k = (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32)
+                   | static_cast<uint32_t>(y);
+  // splitmix64 finaliser: coordinates are multiples of the manufacturing grid,
+  // so the low bits are poorly distributed on their own
+  uint64_t h = k + 0x9e3779b97f4a7c15ULL;
+  h = (h ^ (h >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  h = (h ^ (h >> 27)) * 0x94d049bb133111ebULL;
+  return h ^ (h >> 31);
+}
+struct NodeKeyHash {
+  size_t operator() (const uint64_t k) const { return static_cast<size_t>(k); }
+};
+typedef std::vector<std::unordered_map<uint64_t, Node*, NodeKeyHash>> NodeMap;
 bool replay(class Router& r, const std::string& leffile, const int uu, const bool detour,
     const std::string& ndrfile, const DRC::LayerInfo& lf);
 
 class Router {
   private:
     PriorityQueue _pq;
+    std::vector<int> _gridposbuf;
     NodeSet _sources, _targets;
     NodeMap _nodes;
 #if DEBUG
@@ -470,6 +571,18 @@ class Router {
     void evalCost(Node* n) { evalFCost(n); evalTCost(n); }
 
     void insertToPQ(const Node* n);
+    static bool inPQ(const Node* n) { return n->pqidx() >= 0; }
+    void clearPQ()
+    {
+      for (auto* n : _pq) n->setPQIdx(-1);
+      _pq.clear();
+    }
+    Node* popPQ();
+    void pqSiftUp(int i);
+    void pqSiftDown(int i);
+    void pqPlace(Node* n, const int i) { _pq[i] = n; n->setPQIdx(i); }
+    // A node's cost only ever improves, so re-prioritising is a sift up.
+    void pqImproved(Node* n) { if (inPQ(n)) pqSiftUp(n->pqidx()); }
 
     void invertRange(IntRangeSet& s, const bool vert);
     void insertRange(IntRangeSet& s, const IntPair& r);
@@ -477,12 +590,12 @@ class Router {
     void generateHananGrid();
     void checkAndInsert(Node* newn, const Node* n);
     int snap(const Node* n, const bool vert, const bool up) const;
-    void getTargetGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc);
-    void getAdjacentGrid(std::set<int>& s, const Node* n, const bool above, const bool up, const int snapc);
-    void getCrossGrid(std::set<int>& s, const Node* n, const bool vert, const int snapc);
+    void getTargetGrid(std::vector<int>& s, const Node* n, const bool vert, const int snapc);
+    void getAdjacentGrid(std::vector<int>& s, const Node* n, const bool above, const bool up, const int snapc);
+    void getCrossGrid(std::vector<int>& s, const Node* n, const bool vert, const int snapc);
     void flushNodes()
     {
-      _pq.clear();
+      clearPQ();
       for (auto& l : _nodes) {
         for (auto& n : l) {
           delete n.second;
@@ -524,11 +637,11 @@ class Router {
     // pin node itself. These look up whatever node (if any) already exists at
     // (x,y,z) and test that node instead.
     bool isSourceAt(const int x, const int y, const int z) const {
-      auto it = _nodes[z].find(std::make_pair(x, y));
+      auto it = _nodes[z].find(nodeKey(x, y));
       return it != _nodes[z].end() && isSource(it->second);
     }
     bool isTargetAt(const int x, const int y, const int z) const {
-      auto it = _nodes[z].find(std::make_pair(x, y));
+      auto it = _nodes[z].find(nodeKey(x, y));
       return it != _nodes[z].end() && isTarget(it->second);
     }
     const Geom::Rect* pinShapeAt(const int x, const int y, const int z) const
@@ -560,6 +673,14 @@ class Router {
     // entry points, and the flags that steer expansion. Needs the Hanan grid to
     // have been built, since that is what resolves _tobstacles.
     unsigned long long searchKey(const int pass) const;
+    // Over-approximate reachability over the Hanan grid: true means "maybe",
+    // false means the search provably cannot reach any target. Only the false
+    // answer is acted on, so over-connecting is safe and under-connecting is not.
+    bool escapesConnected() const;
+    // Wires that have already failed once in this block; only those pay for the
+    // reachability sweep, since the first failure is what identifies them.
+    std::set<std::string> _everFailed;
+    static const int REACH_VISIT_LIMIT = 20000;
     void buildSol(Geom::LayerRects& sol);
     int roundup(const int x) const
     {
@@ -667,7 +788,7 @@ class Router {
     void setModName(const std::string& n)
     {
       // obstacles differ from block to block, so nothing carries over
-      if (n != _modname) { _failedSearches.clear(); _memoHits = 0; }
+      if (n != _modname) { _failedSearches.clear(); _everFailed.clear(); _memoHits = 0; }
       _modname = n;
     }
     size_t memoHits() const { return _memoHits; }
@@ -694,6 +815,8 @@ class Router {
     void setReorderBudget(const long long n) { _reorderBudget = n; }
     long long reorderBudget() const { return _reorderBudget; }
     static const int MIN_REORDER_PASSES = 2;
+    // Reorder passes in a row that fail to improve on the best before giving up.
+    static const int REORDER_STALE_LIMIT = 2;
     int effectiveReorderPasses(const size_t baseExpansions) const
     {
       if (_reorderBudget <= 0 || baseExpansions == 0) return _reorderPasses;

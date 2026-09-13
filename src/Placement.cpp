@@ -830,6 +830,10 @@ void Module::route(Router::Router& router, const std::string& outdir)
 
       std::mt19937 rng(0);
       bool randomOrder = false;
+      // Consecutive passes that failed to beat the best. Each pass costs a full
+      // re-route of the block, so once the orderings stop helping there is
+      // nothing to buy by running more of them.
+      int stale = 0;
       const int maxIters = passes * 8;
       const int maxShuffles = 64;
       int pass = 0;
@@ -885,7 +889,12 @@ void Module::route(Router::Router& router, const std::string& outdir)
         ++pass;
         COUT << "  reorder pass " << pass << "/" << passes << " : "
              << u << " unrouted (best so far " << std::min(u, bestUnrouted) << ")\n";
-        if (u < bestUnrouted) { bestUnrouted = u; bestOrder = nets; }
+        if (u < bestUnrouted) { bestUnrouted = u; bestOrder = nets; stale = 0; }
+        else if (++stale >= Router::Router::REORDER_STALE_LIMIT) {
+          COUT << "module " << _name << " : no improvement in "
+               << stale << " pass(es); stopping at " << pass << "/" << passes << '\n';
+          break;
+        }
       }
       const bool reroute = (routedOrder != bestOrder);
       nets = bestOrder;
