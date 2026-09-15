@@ -26,6 +26,10 @@ struct LayerModel {
   std::function<int(int)> space;    // required spacing on layer z
   std::function<bool(int)> canUp;   // a via connects z and z+1
   std::function<bool(int)> canDown; // a via connects z and z-1
+  // Mirrors the router's -abutescape rule: a shape already touching the pin has
+  // no spacing to it left to protect, so it blocks an escape only by running
+  // into it. Without this the check disagrees with the router it is predicting.
+  bool abutEscape{false};
 };
 
 struct Chosen {

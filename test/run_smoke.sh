@@ -1001,6 +1001,23 @@ run_case abut_off "ESCB_CONC_0.def" \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 same_defs abut_no_effect_when_clear abut_off abut_not_near "ESCB_CONC_0.def"
 
+# 54. pindup_obs: an OBS rect covered by one of the macro's own pin polygons is
+#     the pin redrawn as blockage, not a real blockage -- whether it matches the
+#     pin rect exactly or merely sits inside it. It is dropped unconditionally,
+#     and the result must match the same design without that copy. A clean
+#     design must not report a drop at all.
+LOGNOT="covered by a pin shape"
+run_case pindup_clean "ESCB_CONC_0.def" \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json -l $IN/escblock.lef
+LOGMUST="dropped 2 obstacle(s) covered by a pin shape"
+run_case pindup_exact "ESCB_CONC_0.def" \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json -l $IN/pindupobs.lef
+LOGMUST="dropped 2 obstacle(s) covered by a pin shape"
+run_case pindup_inside "ESCB_CONC_0.def" \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json -l $IN/pininobs.lef
+same_defs pindup_exact_as_clean pindup_clean pindup_exact "ESCB_CONC_0.def"
+same_defs pindup_inside_as_clean pindup_clean pindup_inside "ESCB_CONC_0.def"
+
 # 33. parallel speedup (opt-in, timing-based, ~2-4s): a batch of many disjoint,
 #     individually-expensive nets routes substantially faster with N worker
 #     threads than sequentially -- and lays down exactly the same wires. Off by

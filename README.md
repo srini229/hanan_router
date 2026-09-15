@@ -66,7 +66,7 @@ hanan_router -d <layers.json> -p <placement file> -l <lef file> [options]
 | `-keepblockedescapes` | no | Seed every pin-escape point, including ones sitting inside a bloated obstacle that no wire can start from. Default is to drop them. |
 | `-satfirst` | no | Route the nets whose pins the pre-route escape check could not clear before the rest. Off by default; see [Search effort](#search-effort). |
 | `-hopeless <N>` | no | Retire a net the escape check flagged once it has routed nothing in `N` whole attempts (default `3`; `0` never retires). |
-| `-abutescape` | no | A shape already touching a pin does not block that pin's escape via on spacing; only a pad that would overlap it does. Off by default; see [Via selection](#via-selection). |
+| `-abutescape` | no | A shape already touching a pin does not block that pin's escape via on spacing; only a pad that would overlap it does. Off by default; see [Abutting shapes and pin escapes](#abutting-shapes-and-pin-escapes). |
 | `-viaalign` | no | When more than one via rotation is legal, pick the one whose pads run along the wires they join rather than the first legal one. Off by default; see [Via selection](#via-selection). |
 | `-seedpolys <N>` | no | For a pin split into more than `N` polygons, seed only the `N` nearest the other terminal (default `0` = seed all). |
 | `-seedpolysalways` | no | Keep that limit on every attempt; by default the rest are restored for a net still open by attempt 3. |
@@ -153,9 +153,18 @@ into it. Abutment is tested against the drawn geometry rather than an un-bloated
 copy of the obstacle, because the obstacle rects are merged and split as they are
 built and do not un-bloat back to the drawn shape.
 
-It is off by default: it unblocks a great many escapes and is DRC-clean, but on
-the design it was written for it leaves one more net open, not fewer. See
-`docs/ROUTING_NOTES.md`.
+It is off by default. On the design it was written for it routes one net more
+than the default rule, runs 1.6x faster, and adds no short and no router-caused
+DRC. See `docs/ROUTING_NOTES.md`.
+
+### Blockage covered by a pin
+
+An OBS rect that lies inside one of the macro's own pin polygons -- whether it
+repeats the pin rect exactly or merely sits within it -- is the pin redrawn as
+blockage. It is dropped as the cell's obstacles are read, unconditionally. It
+protects nothing: a pin is already an obstacle to every other net in its own
+right, and the pin shape is what the DRC check reports against. Kept, it would
+only wall that pin's own escapes in.
 
 ## Log verbosity
 

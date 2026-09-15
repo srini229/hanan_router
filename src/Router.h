@@ -713,9 +713,14 @@ class Router {
     // is landing on a pin, such a shape is judged on overlap alone -- the pad
     // may sit beside it, but must not run into it, which would be a short.
     // Returns true if this obstacle should stop the via.
+    // The pin to compare against is the one on the pad's OWN layer, not the one
+    // under the node being expanded: a via landing on a pin from the layer above
+    // is evaluated from a node that has no pin beneath it, and that is exactly
+    // the case this rule has to cover.
     bool padBlocked(const Geom::Rect& shrunk, const Geom::Rect& pad, const int l,
-                    const Geom::Rect* pin) const
+                    const int x, const int y) const
     {
+      const Geom::Rect* pin = _abutEscape ? pinShapeAt(x, y, l) : nullptr;
       if (!_abutEscape || !pin) return shrunk.overlaps(pad, true);
       // Ask the un-bloated geometry, not a shrunk-back copy of the bloated rect:
       // splitRects merges and splits as it builds _ltree, so un-bloating does not

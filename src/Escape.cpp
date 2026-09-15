@@ -14,12 +14,22 @@ struct Cand {
 // spacing: minimum required clearance on `layer` -- an obstacle merely within
 // this distance of `r` blocks the candidate, not just one that literally
 // overlaps it, matching the real router's isViaValid spacing checks.
-bool hitsObstacle(const Geom::Rect& r, const int layer, const Geom::LayerRects& obs, const int spacing)
+// `pin` is the shape the escape belongs to. When abutEscape is on, an obstacle
+// already touching that pin is judged on interior overlap with the candidate
+// alone -- the same relaxation the router makes in isViaValid.
+bool hitsObstacle(const Geom::Rect& r, const int layer, const Geom::LayerRects& obs,
+                  const int spacing, const Geom::Rect* pin = nullptr)
 {
   auto it = obs.find(layer);
   if (it == obs.end()) return false;
   const auto rr = r.bloatby(spacing);
-  for (const auto& o : it->second) if (rr.overlaps(o, true)) return true;
+  for (const auto& o : it->second) {
+    if (pin && o.overlaps(*pin, false)) {
+      if (o.overlaps(r, true)) return true;
+      continue;
+    }
+    if (rr.overlaps(o, true)) return true;
+  }
   return false;
 }
 
@@ -52,9 +62,10 @@ bool feasible(const std::vector<Pin>& pins, const Geom::LayerRects& obstacles,
       for (const auto& r : l.second) {
         // via up / via down: the via lands within the pin, so reserve the pin
         // footprint on the destination layer.
-        if (L + 1 <= lm.maxLayer && lm.canUp(L) && !hitsObstacle(r, L + 1, blockers, lm.space(L + 1)))
+        const Geom::Rect* ap = lm.abutEscape ? &r : nullptr;
+        if (L + 1 <= lm.maxLayer && lm.canUp(L) && !hitsObstacle(r, L + 1, blockers, lm.space(L + 1), ap))
           cands.push_back({L + 1, r, 0});
-        if (L - 1 >= lm.minLayer && lm.canDown(L) && !hitsObstacle(r, L - 1, blockers, lm.space(L - 1)))
+        if (L - 1 >= lm.minLayer && lm.canDown(L) && !hitsObstacle(r, L - 1, blockers, lm.space(L - 1), ap))
           cands.push_back({L - 1, r, 0});
         // same-layer stubs: reach the next track (one space + one width) in each
         // of the four directions.
@@ -65,7 +76,7 @@ bool feasible(const std::vector<Pin>& pins, const Geom::LayerRects& obstacles,
           Geom::Rect(r.xmin(),         r.ymin() - s - w, r.xmax(),         r.ymin())
         };
         for (const auto& st : stubs)
-          if (!hitsObstacle(st, L, blockers, s)) cands.push_back({L, st, 0});
+          if (!hitsObstacle(st, L, blockers, s, ap)) cands.push_back({L, st, 0});
       }
     }
     for (auto& c : cands) c.var = sat.newVar();

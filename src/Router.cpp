@@ -2883,7 +2883,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
                              -std::max(0, spacey(l) - MIN_ESCAPE_SPACE));
                   }
                   //COUT << "  obs_shrunk=" << o.str() << " overlaps=" << o.overlaps(p, true) << '\n';
-                  if (padBlocked(o, p, l, pin)) {
+                  if (padBlocked(o, p, l, n->x(), n->y())) {
                     //COUT << "obs viapad up : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;
                     via = nullptr;
@@ -2949,7 +2949,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
                              -std::max(0, spacey(l) - MIN_ESCAPE_SPACE));
                   }
                   //COUT << "  obs_shrunk=" << o.str() << " overlaps=" << o.overlaps(p, true) << '\n';
-                  if (padBlocked(o, p, l, pin)) {
+                  if (padBlocked(o, p, l, n->x(), n->y())) {
                     //COUT << "obs viapad down : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;
                     via = nullptr;
@@ -3039,19 +3039,21 @@ std::vector<ViaEscapeAttempt> Router::diagnoseViaEscape(const Node* n, const boo
       Geom::Rect p = (lower ? via.lpad() : via.upad());
       Geom::Rects nbrs;
       itp->second.search(nbrs, p.bloatby(spacex(l), spacey(l)));
-      bool padBlocked = false;
+      bool blocked = false;
       for (auto o : nbrs) {
         o.expand(-widthy(l)/2, -widthx(l)/2);
         if (relaxThisVia) {
           o.expand(-std::max(0, spacex(l) - MIN_ESCAPE_SPACE),
                    -std::max(0, spacey(l) - MIN_ESCAPE_SPACE));
         }
-        if (o.overlaps(p, true)) {
-          padBlocked = true;
+        // same rule the router applies, so the dump and the log agree with what
+        // actually happened rather than with what used to
+        if (padBlocked(o, p, l, n->x(), n->y())) {
+          blocked = true;
           break;
         }
       }
-      if (padBlocked) {
+      if (blocked) {
         ok = false;
         att.blockedLayer = l;
         auto obs = intersectPObstacles(_pobstacles, _ptobstacles, l, p.bloatby(spacex(l), spacey(l)));

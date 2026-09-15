@@ -176,6 +176,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
     //writeDEF("_before");
     router.clearObstacles();
     router.clearObstacles(true);
+    size_t dupobs = 0;
     for (auto& inst : _instances) {
       auto m = inst->module();
       if (!m) {
@@ -187,9 +188,50 @@ void Module::route(Router::Router& router, const std::string& outdir)
         const_cast<Module*>(m)->route(router, outdir);
       }
       inst->build(true);
+      // An obstacle rect lying inside one of the macro's own pin polygons is
+      // that pin redrawn as blockage. It protects nothing -- a pin is already an
+      // obstacle to every other net in its own right -- and it walls that pin's
+      // own escapes in. The pin area is built lazily, only for a layer whose
+      // bounding box actually swallows an obstacle rect.
+      struct PinArea { Geom::Rect bbox; Geom::Rects rects; PolySet area; bool built{false}; };
+      std::map<int, std::vector<PinArea>> selfpins;
+      if (!m->obstacles().empty()) {
+        for (auto& pp : inst->_pins) {
+          std::map<int, PinArea> per;
+          for (auto& port : pp.second->ports())
+            for (auto& l : port->shapes())
+              for (const auto& r : l.second) {
+                auto& a = per[l.first];
+                a.bbox.merge(r);
+                a.rects.push_back(r);
+              }
+          for (auto& e : per) selfpins[e.first].push_back(std::move(e.second));
+        }
+      }
+      auto coveredByPin = [&selfpins](const int l, const Geom::Rect& r) {
+        auto it = selfpins.find(l);
+        if (it == selfpins.end()) return false;
+        for (auto& a : it->second) {
+          if (!a.bbox.contains(r)) continue;
+          if (!a.built) {
+            for (const auto& p : a.rects) a.area.insert(PRect(p.xmin(), p.ymin(), p.xmax(), p.ymax()));
+            a.built = true;
+          }
+          using namespace boost::polygon::operators;
+          PolySet left;
+          left.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+          left -= a.area;
+          PRects out;
+          get_rectangles(out, left);
+          if (out.empty()) return true;
+        }
+        return false;
+      };
       for (const auto& l : m->obstacles()) {
         for (const auto& r : l.second) {
-          _obstacles[l.first].push_back(inst->transform(r));
+          const Geom::Rect tr = inst->transform(r);
+          if (coveredByPin(l.first, tr)) { ++dupobs; continue; }
+          _obstacles[l.first].push_back(tr);
         }
       }
       for (const auto& l : m->internalroutes()) {
@@ -199,6 +241,9 @@ void Module::route(Router::Router& router, const std::string& outdir)
         }
       }
     }
+    if (dupobs)
+      COUT << "dropped " << dupobs << " obstacle(s) covered by a pin shape in module "
+           << _name << '\n';
     updateNets();
     mergeCoincidentNets();   // warn + merge nets whose pins sit on the same point
     {
@@ -359,6 +404,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
         lm.space   = [&router](int z) { return std::max(router.baseSpaceX(z), router.baseSpaceY(z)); };
         lm.canUp   = [&router](int z) { return router.canViaUp(z); };
         lm.canDown = [&router](int z) { return router.canViaDown(z); };
+        lm.abutEscape = router.abutEscape();
         std::vector<Escape::Chosen> chosen;
         if (Escape::feasible(epins, _obstacles, lm, nullptr, nullptr, &chosen)) {
           for (const auto& c : chosen) {
