@@ -104,6 +104,8 @@ class Net {
     Geom::Rect _bbox;
     unsigned int _unroute : 1;
     std::vector<std::string> _openwires;
+    bool _hopeless{false};
+    int _barren{0};
     unsigned int _exclude : 1;
     unsigned int _detour : 1;
     PortPairs reorderPorts() const;
@@ -147,6 +149,13 @@ class Net {
     Geom::LayerRects dropSameNetObstacles(const Geom::LayerRects& obs) const;
     bool unrouted() const { return _unroute ? true : false; }
     const std::vector<std::string>& openWires() const { return _openwires; }
+    // Set once a net has gone through several whole attempts without routing a
+    // single wire. Every further attempt would spend exhaustive searches on it
+    // for the same answer, so it is left alone until the block is done.
+    bool hopeless() const { return _hopeless; }
+    void setHopeless(const bool b) { _hopeless = b; }
+    int barrenAttempts() const { return _barren; }
+    void noteAttempt(const bool routedAnything) { _barren = routedAnything ? 0 : _barren + 1; }
     void addOpenWire(const std::string& w) { _openwires.push_back(w); }
     void clearOpenWires() { _openwires.clear(); }
     // A net needs at least two connection points (real or virtual pins) before
@@ -313,7 +322,13 @@ class Module {
         auto it = _pinsnapshot.find(p.second);
         if (it != _pinsnapshot.end()) p.second->restorePorts(it->second);
       }
-      for (auto& n : _nets) n.second.clearRoutes();
+      for (auto& n : _nets) {
+        n.second.clearRoutes();
+        // a fresh design pass (corner escapes, relaxed vias) is a different
+        // problem: a net retired in the last one gets its chances back
+        n.second.setHopeless(false);
+        n.second.noteAttempt(true);
+      }
       _drcmarkers.clear();
       _drccount = 0;
       _drcplacement = 0;

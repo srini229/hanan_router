@@ -954,6 +954,38 @@ run_case determinism_b "NET30_CONC_0.def" \
   -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
 same_defs determinism_stable determinism_a determinism_b "NET30_CONC_0.def"
 
+# 50. satfirst: the pre-route escape check names the pins with no guaranteed
+#     escape; -satfirst routes those nets before the rest. boxedpin's pin is one.
+LOGMUST="1 net(s) with a pin the escape check could not clear, routing them first"
+ALLOW_UNROUTED=1
+run_case satfirst_order "" -satfirst \
+  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
+
+# 51. hopeless_retire: a net the escape check flagged that then routes nothing
+#     for N whole attempts is retired from the reorder loop. -hopeless 1 makes
+#     boxedpin's net retire after its first barren attempt; -hopeless 0 never
+#     retires anything, so the marker must be absent.
+LOGMUST="routed nothing in 1 attempt(s); not retrying it"
+ALLOW_UNROUTED=1
+run_case hopeless_retire "" -hopeless 1 \
+  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
+LOGNOT="not retrying it"
+ALLOW_UNROUTED=1
+run_case hopeless_never "" -hopeless 0 \
+  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
+
+# 52. hopeless_needs_sat: retirement requires the escape check's flag as well as
+#     the barren attempts. reorder_reroute's nets fail for capacity, not for
+#     escape, so none is flagged and none may be retired however low N is.
+LOGNOT="not retrying it"
+ALLOW_UNROUTED=1
+run_case hopeless_needs_sat "REORDER_CONC_0.def" -hopeless 1 \
+  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
+
 # 33. parallel speedup (opt-in, timing-based, ~2-4s): a batch of many disjoint,
 #     individually-expensive nets routes substantially faster with N worker
 #     threads than sequentially -- and lays down exactly the same wires. Off by

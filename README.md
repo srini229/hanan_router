@@ -64,6 +64,8 @@ hanan_router -d <layers.json> -p <placement file> -l <lef file> [options]
 | `-maxexp <N>` | no | A\* node-expansion budget per search stage (default `100000`). Lower is faster and leaves more nets open. |
 | `-escapepitch <N>` | no | Thin pin-escape points to one per `N` wire pitches, keeping the one nearest each pin rectangle's centre (default `1`; `0` seeds every candidate). See [Pin escape points](#pin-escape-points). |
 | `-keepblockedescapes` | no | Seed every pin-escape point, including ones sitting inside a bloated obstacle that no wire can start from. Default is to drop them. |
+| `-satfirst` | no | Route the nets whose pins the pre-route escape check could not clear before the rest. Off by default; see [Search effort](#search-effort). |
+| `-hopeless <N>` | no | Retire a net the escape check flagged once it has routed nothing in `N` whole attempts (default `3`; `0` never retires). |
 | `-viaalign` | no | When more than one via rotation is legal, pick the one whose pads run along the wires they join rather than the first legal one. Off by default; see [Via selection](#via-selection). |
 | `-seedpolys <N>` | no | For a pin split into more than `N` polygons, seed only the `N` nearest the other terminal (default `0` = seed all). |
 | `-seedpolysalways` | no | Keep that limit on every attempt; by default the rest are restored for a net still open by attempt 3. |
@@ -112,6 +114,8 @@ expensive to route once is expensive to route ten times:
 
 * `-reorderbudget <N>` scales a block's reorder passes by the search work its *first* attempt cost, so small blocks keep all ten and a large one gets fewer (`capping reorder at K pass(es) instead of 10`). It keys off expansions rather than wall time, so a run stays reproducible.
 * Passes that stop improving on the best end the loop early (`no improvement in N pass(es); stopping at K/N`).
+* Before every search, the free intervals of the Hanan grid are walked from the sources; if no target can be reached the search is skipped as provably hopeless (`no target is reachable from any source`). The walk over-approximates what the search can do, so only the negative answer is acted on.
+* The pre-route pin-escape check names the pins with no guaranteed escape. A net it flagged that then routes nothing in `-hopeless N` whole attempts is retired from the reorder loop -- the two signals have to agree, since either alone retires nets that would have routed. `-satfirst` additionally routes the flagged nets first, while the block is empty; that is faster but tends to cost wirelength, so it is off by default.
 * `-maxexp <N>` caps the node expansions one search stage may spend. A search that fails spends the whole budget, so this is the main lever on runtime -- and on how many nets are left open. Lowering it is a direct trade.
 
 ## Pin escape points

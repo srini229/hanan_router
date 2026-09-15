@@ -1960,18 +1960,20 @@ Geom::LayerRects Router::findSol()
       // a guided search rather than risk it.
       const bool memoise = !hasGuide();
       const unsigned long long key = memoise ? searchKey(attempt) : 0;
-      // A wire that has failed here before is worth a reachability sweep: it is
-      // far cheaper than letting A* exhaust the space to reach the same answer.
-      if (_everFailed.count(_name) && !escapesConnected()) {
+      // The reachability sweep is far cheaper than letting A* exhaust the space
+      // to reach the same answer, and on a congested block it proves a quarter
+      // of all searches disconnected on first sight -- so it runs for every one.
+      if (!escapesConnected()) {
         ++_memoHits;
         COUT << "search skipped for " << _name << " in pass " << attempt
-             << " : no target is reachable from any source\n";
+             << " : no target is reachable from any source"
+             << (attempt == 0 ? "; the reverse pass cannot differ, wire is open" : "") << '\n';
         if (memoise) _failedSearches.insert(key);
         clearPQ();
         _hanangridv.clear();
         _hanangridh.clear();
         _expansions = 0;
-        continue;
+        break;
       }
       if (memoise && _failedSearches.count(key)) {
         ++_memoHits;
@@ -2013,7 +2015,6 @@ Geom::LayerRects Router::findSol()
       }
       if (!_sol) {
         if (memoise) _failedSearches.insert(key);
-        _everFailed.insert(_name);
         COUT << "search failed in pass " << attempt << " for " << _name << " after " << _expansions << " expansions!\n";
         if (verboseAt(LogLevel::TRACE))
         for (unsigned i = 0; i < layerExpansions.size(); ++i) {

@@ -340,6 +340,10 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     const Geom::LayerRects *obs[] = {&l1, &l2, &l3};
     writeLEF(modname, uu, bbox, obs);
   }
+  if (_hopeless) {
+    _unroute = 1;
+    return;
+  }
   if (_exclude) {
     COUT << "excluding net : " << _name << " from routing\n";
     return;

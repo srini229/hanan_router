@@ -19,6 +19,8 @@ int main(int argc, char* argv[])
       << "\t-reorderbudget <N> (cap a block's reorder passes so base-route expansions x passes stays under N; 0 uncapped; default 15000000)\n"
       << "\t-keepblockedescapes (seed every pin-escape point, including ones no wire can start from; default is to drop them)\n"
       << "\t-viaalign (pick the via rotation whose pads run along the wires they join, instead of the first legal one)\n"
+      << "\t-satfirst (route the nets whose pins the pre-route escape check could not clear before the rest)\n"
+      << "\t-hopeless <N> (retire a net the escape check flagged once it has routed nothing in N whole attempts; 0 never; default 3)\n"
       << "\t-seedpolys <N> (for a pin split into more than N polygons, seed only the N nearest the other end; 0 seeds all; default 0)\n"
       << "\t-seedpolysalways (keep that limit on every attempt; default restores the rest for a net still open by attempt 3)\n"
       << "\t-replay <ATTEMPT_*.lef> (re-route one wire from a HANAN_DEBUG_WIRE dump; needs -d only)\n"
@@ -116,6 +118,12 @@ int main(int argc, char* argv[])
   }
   if (checkArg(argc, argv, "-keepblockedescapes")) hrdb.setPruneEscapes(false);
   if (checkArg(argc, argv, "-viaalign")) hrdb.setViaAlign(true);
+  if (checkArg(argc, argv, "-satfirst")) hrdb.setSatFirst(true);
+  const std::string ha = parseArgs(argc, argv, "-hopeless");
+  if (!ha.empty()) {
+    try { hrdb.setHopelessAfter(std::stoi(ha)); }
+    catch (const std::exception& e) { CERR << "invalid -hopeless value '" << ha << "', using default" << std::endl; }
+  }
   if (checkArg(argc, argv, "-seedpolysalways")) hrdb.setSeedPolysAlways(true);
   const std::string sp = parseArgs(argc, argv, "-seedpolys");
   if (!sp.empty()) {
@@ -159,6 +167,8 @@ int main(int argc, char* argv[])
        << " -reorderbudget " << hrdb.reorderBudget()
        << (hrdb.pruneEscapes() ? "" : " -keepblockedescapes")
        << (hrdb.viaAlign() ? " -viaalign" : "")
+       << (hrdb.satFirst() ? " -satfirst" : "")
+       << (hrdb.hopelessAfter() ? " -hopeless " : "") << (hrdb.hopelessAfter() ? std::to_string(hrdb.hopelessAfter()) : "")
        << " -seedpolys " << hrdb.maxSeedPolys()
        << (hrdb.seedPolysAlways() ? " -seedpolysalways" : "")
        << " -threads " << hrdb.threads();

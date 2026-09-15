@@ -489,6 +489,8 @@ class Router {
     int _escapePitchMul{1};
     bool _pruneEscapes{true};
     bool _viaAlign{false};
+    bool _satFirst{false};
+    int _hopelessAfter{3};
     int _maxSeedPolys{0};
     bool _seedPolysAlways{false};
     // Transient per-net state: only true while findSol() is retrying a still-
@@ -712,9 +714,6 @@ class Router {
     // false means the search provably cannot reach any target. Only the false
     // answer is acted on, so over-connecting is safe and under-connecting is not.
     bool escapesConnected() const;
-    // Wires that have already failed once in this block; only those pay for the
-    // reachability sweep, since the first failure is what identifies them.
-    std::set<std::string> _everFailed;
     static const int REACH_VISIT_LIMIT = 20000;
     void buildSol(Geom::LayerRects& sol);
     int roundup(const int x) const
@@ -828,7 +827,7 @@ class Router {
     void setModName(const std::string& n)
     {
       // obstacles differ from block to block, so nothing carries over
-      if (n != _modname) { _failedSearches.clear(); _everFailed.clear(); _memoHits = 0; }
+      if (n != _modname) { _failedSearches.clear(); _memoHits = 0; }
       _modname = n;
     }
     size_t memoHits() const { return _memoHits; }
@@ -868,6 +867,12 @@ class Router {
     // 0 disables it and every candidate point becomes a search entry.
     void setEscapePitchMul(const int n) { _escapePitchMul = n; }
     int escapePitchMul() const { return _escapePitchMul; }
+    // Whole attempts a net may go through without routing any wire before it is
+    // retired from the reorder loop. 0 never retires.
+    void setHopelessAfter(const int n) { _hopelessAfter = n < 0 ? 0 : n; }
+    int hopelessAfter() const { return _hopelessAfter; }
+    void setSatFirst(const bool b) { _satFirst = b; }
+    bool satFirst() const { return _satFirst; }
     void setViaAlign(const bool b) { _viaAlign = b; }
     bool viaAlign() const { return _viaAlign; }
     void setPruneEscapes(const bool b) { _pruneEscapes = b; }

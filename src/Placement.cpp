@@ -696,7 +696,8 @@ void Module::route(Router::Router& router, const std::string& outdir)
     };
 
     auto escapeCheck = [&](const char* when, const Geom::LayerRects* extra,
-                           const bool portsOnly) {
+                           const bool portsOnly) -> std::set<Net*> {
+      std::set<Net*> blockedNets;
       std::vector<Escape::Pin> epins;
       int netid = 0;
       for (auto& nv : nets) {
@@ -735,11 +736,28 @@ void Module::route(Router::Router& router, const std::string& outdir)
         } else {
           COUT << "pin escape SAT (" << when << ") : " << _name << " is infeasible ("
                << reason << ")\n";
-          for (auto& b : blocked) COUT << "  no escape for pin : " << b << '\n';
+          for (auto& b : blocked) {
+            COUT << "  no escape for pin : " << b << '\n';
+            for (const auto& ep : epins) {
+              if (ep.name == b) { blockedNets.insert(nets[ep.net]); break; }
+            }
+          }
         }
       }
+      return blockedNets;
     };
-    escapeCheck("pre-route", nullptr, false);
+    const std::set<Net*> satBlocked = escapeCheck("pre-route", nullptr, false);
+    // The SAT check names, before anything is routed, the pins with no guaranteed
+    // escape. Those nets are the ones the reorder loop will spend its passes
+    // promoting; putting them first while the block is still empty gives them
+    // the room up front. Stable, so the halfpm order survives within each group.
+    if (router.satFirst() && !satBlocked.empty()) {
+      const size_t pinned0 = _routeorder.size();
+      std::stable_partition(nets.begin() + pinned0, nets.end(),
+        [&satBlocked](const Net* n) { return satBlocked.count(const_cast<Net*>(n)) > 0; });
+      COUT << "module " << _name << " : " << satBlocked.size()
+           << " net(s) with a pin the escape check could not clear, routing them first\n";
+    }
 
 
     for (auto& n : _nets) n.second.snapshotRoutes();
@@ -771,6 +789,26 @@ void Module::route(Router::Router& router, const std::string& outdir)
         routeAllNets(true);
       }
       router.setDumpOpenNets(wantDump);
+      // A net that has not laid a single wire in this many whole attempts is not
+      // going to on the next one either; the reorder loop spends most of its
+      // searches on exactly these, and every one of them fails. Retire it.
+      // Two signals have to agree before a net is retired: the pre-route escape
+      // check flagged one of its pins as having no guaranteed escape, and the
+      // router has since confirmed it by routing nothing for N whole attempts.
+      // Either alone is wrong often enough to cost nets -- barren-only retires
+      // nets that route on attempt four, flagged-only has 44% precision here.
+      if (router.hopelessAfter() > 0) {
+        for (auto& n : _nets) {
+          Net& v = n.second;
+          if (v.excluded() || !v.routable() || v.hopeless()) continue;
+          v.noteAttempt(!v.unrouted() || !v.routeShapes().empty());
+          if (v.barrenAttempts() >= router.hopelessAfter() && satBlocked.count(&v)) {
+            v.setHopeless(true);
+            COUT << "module " << _name << " : net " << v.name() << " routed nothing in "
+                 << v.barrenAttempts() << " attempt(s); not retrying it\n";
+          }
+        }
+      }
       return countUnrouted();
     };
 
