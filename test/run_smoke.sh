@@ -1031,6 +1031,53 @@ LOGNOT="cycle in the solution path"
 run_case pattern_cycle "" -replay $IN/patterncycle.lef \
   -d $IN/layers_sky130.json -uu 1000 -v 2
 
+# 56. pwr_grid: bin/gen_pwr_grid.py builds the power grid out of the layer
+#     abstraction and hanan_router makes the connections to it. The unit tests
+#     cover the generator's geometry on synthetic abstractions; this case is the
+#     flow itself -- generate a grid over the test design, hand the straps to the
+#     router as another instance's pins, and require it to route everything with
+#     no short against the new metal.
+if python3 ./test_gen_pwr_grid.py >"$OUTROOT/pwr_grid_unit.log" 2>&1; then
+  echo "PASS pwr_grid_unit ($(sed -n 's/^Ran \([0-9]*\) tests.*/\1/p' "$OUTROOT/pwr_grid_unit.log") checks)"
+  PASS=$((PASS+1))
+else
+  echo "FAIL pwr_grid_unit : see $OUTROOT/pwr_grid_unit.log"
+  FAIL=$((FAIL+1)); ERRS="${ERRS}pwr_grid_unit:generator-tests-failed;\n"
+fi
+
+pgdir="$OUTROOT/pwr_grid_route"
+mkdir -p "$pgdir"
+if python3 ../bin/gen_pwr_grid.py -l ./layers.json \
+     -p ./pwrcell.placement_verilog.json --bottom M3 --top M4 --stride 2 \
+     --avoid ./pwrcell.lef \
+     --lef "$pgdir/pgrid.lef" --placement-out "$pgdir/pg_place.json" \
+     >"$pgdir/gen.log" 2>&1; then
+  cat ./pwrcell.lef "$pgdir/pgrid.lef" > "$pgdir/all.lef"
+  # the grid must declare the cells' own database units, or the router scales it
+  # differently and the straps collapse to nothing
+  grep -q "DATABASE MICRONS UNITS 1;" "$pgdir/pgrid.lef" \
+    || { echo "FAIL pwr_grid_units : grid LEF does not match the cell LEF units"
+         FAIL=$((FAIL+1)); ERRS="${ERRS}pwr_grid_units:unit-mismatch;\n"; }
+  # every supply pin taps the grid: the DEF must show the supplies climbing off
+  # M1 onto a grid layer. M3 is the lower grid layer and the one the taps land
+  # on; this PDK's V3 enclosure is wider than its M3/M4 straps, so the M3-to-M4
+  # stitch has nowhere to go here and the unit tests cover stitching instead.
+  NETROUTED="VDD|VSS"
+  LOGNOT="coincident with net"
+  run_case pwr_grid_route "PWRB_CONC_0.def" \
+    -d $IN/layers.json -p pg_place.json -l all.lef
+  pgdef="$pgdir/PWRB_CONC_0.def"
+  if [ -s "$pgdef" ] && grep -q "+ RECT M3" "$pgdef" && grep -q "+ RECT V2" "$pgdef"; then
+    echo "PASS pwr_grid_taps"; PASS=$((PASS+1))
+  else
+    echo "FAIL pwr_grid_taps : no M1-to-grid connection for the supplies"
+    FAIL=$((FAIL+1)); ERRS="${ERRS}pwr_grid_taps:no-tap;\n"
+  fi
+else
+  echo "FAIL pwr_grid_route : grid generation failed"
+  FAIL=$((FAIL+1)); ERRS="${ERRS}pwr_grid_route:gen-failed;\n"
+fi
+
 # 33. parallel speedup (opt-in, timing-based, ~2-4s): a batch of many disjoint,
 #     individually-expensive nets routes substantially faster with N worker
 #     threads than sequentially -- and lays down exactly the same wires. Off by

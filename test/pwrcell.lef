@@ -1,0 +1,33 @@
+# A cell with supply pins, so a generated power grid has something to connect to.
+MACRO PWRCELL
+  UNITS
+    DATABASE MICRONS UNITS 1;
+  END UNITS
+  ORIGIN 0 0 ;
+  FOREIGN PWRCELL 0 0 ;
+  SIZE 200 BY 200 ;
+  PIN A
+    DIRECTION INOUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER M1 ;
+        RECT 84 84 116 116 ;
+    END
+  END A
+  PIN VDD
+    DIRECTION INOUT ;
+    USE POWER ;
+    PORT
+      LAYER M1 ;
+        RECT 0 168 32 200 ;
+    END
+  END VDD
+  PIN VSS
+    DIRECTION INOUT ;
+    USE GROUND ;
+    PORT
+      LAYER M1 ;
+        RECT 0 0 32 32 ;
+    END
+  END VSS
+END PWRCELL

@@ -20,6 +20,7 @@ the layout instead.
 import argparse
 import json
 import os
+import re
 import sys
 
 
@@ -249,6 +250,22 @@ def write_ndr(path, module, nets, driver_inst, widths):
         json.dump([entry], f, indent=1)
 
 
+def lef_units(path, default=1000):
+    """The DATABASE MICRONS UNITS of an existing LEF.
+
+    The grid macro has to declare the same units as the cells it sits beside, or
+    the router scales its geometry by a different factor and the straps collapse.
+    """
+    try:
+        for line in open(path, errors='ignore'):
+            m = re.search(r'DATABASE\s+MICRONS\s+UNITS\s+([0-9.]+)', line)
+            if m:
+                return int(float(m.group(1)))
+    except OSError:
+        pass
+    return default
+
+
 def write_lef(path, name, bbox, pins, units=1000):
     """pins: {net: [(layer, rect), ...]}"""
     x0, y0, x1, y1 = bbox
@@ -277,8 +294,13 @@ def write_lef(path, name, bbox, pins, units=1000):
 def write_placement(path, src, name, bbox, pins):
     """Copy the placement and instantiate the grid over the top block."""
     d = json.load(open(src))
-    terminals = [{'name': net, 'rect': list(shapes[0][1])}
-                 for net, shapes in pins.items() if shapes]
+    terminals = []
+    for net, shapes in pins.items():
+        if not shapes:
+            continue
+        xs = [r for _, r in shapes]
+        terminals.append({'name': net, 'rect': [min(r[0] for r in xs), min(r[1] for r in xs),
+                                                max(r[2] for r in xs), max(r[3] for r in xs)]})
     d.setdefault('leaves', []).append({
         'abstract_name': name, 'concrete_name': name,
         'bbox': list(bbox), 'terminals': terminals,
@@ -327,6 +349,8 @@ def main():
     ap.add_argument('--widen', type=float, default=1.0,
                     help='strap width as a multiple of the layer width (default 1)')
     ap.add_argument('--name', default='PGRID', help='macro name (default PGRID)')
+    ap.add_argument('--units', type=int, default=0,
+                    help='LEF database units; default: match the --avoid LEF, else 1000')
     ap.add_argument('--lef', default='', help='write the grid as a LEF macro')
     ap.add_argument('--placement-out', default='',
                     help='write a placement that instantiates the grid')
@@ -389,7 +413,9 @@ def main():
         sys.exit('no straps fit in the given extent')
 
     if a.lef:
-        write_lef(a.lef, a.name, bbox, pins)
+        units = a.units or (lef_units(a.avoid) if a.avoid else 1000)
+        write_lef(a.lef, a.name, bbox, pins, units)
+        print(f'lef units   : {units}')
         print(f'wrote {a.lef}')
     if a.placement_out:
         if not a.placement:
