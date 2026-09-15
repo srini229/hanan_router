@@ -1548,7 +1548,13 @@ void Router::buildSol(Geom::LayerRects& sol)
   _sollen = 0;
   if (!_sol) return;
   const Node* n = _sol;
+  std::set<const Node*> seen;   // a cycle here would allocate until the OOM killer
   while (n) {
+    if (!seen.insert(n).second) {
+      CERR << "ERROR: cycle in the solution path at " << n->x() << ',' << n->y()
+           << ',' << n->z() << " for " << _name << "; truncating\n";
+      break;
+    }
     auto parent = n->parent();
     if (parent) {
       if (parent->z() == n->z()) {
@@ -1808,10 +1814,16 @@ bool Router::patternRoute()
 
   if (!bests || bestcost > bestlb) return false;   // not provably optimal: let A* run
 
+  // createNode hands back the node already at a coordinate, so a pattern that
+  // returns to a waypoint it has used -- a Z whose runs collapse to nothing goes
+  // up a via and straight back down at the same point -- would make that node its
+  // own ancestor. buildSol walks parents, so the cycle never ends. Reject the
+  // pattern and let A* route the wire.
   const Node* prev = bests;
+  std::set<const Node*> onpath{bests};
   for (size_t i = 1; i < best.size(); ++i) {
     Node* cur = createNode(best[i].x, best[i].y, best[i].z, prev);
-    if (!cur) return false;
+    if (!cur || !onpath.insert(cur).second) return false;
     cur->setParent(prev);
     if (best[i].z != prev->z()) {
       const Via* v = isViaValid(prev, best[i].z > prev->z());
