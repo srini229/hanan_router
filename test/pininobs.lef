@@ -1,0 +1,22 @@
+# As pindupobs.lef, but the OBS rect only sits inside the pin rect rather than
+# matching it. Metal covered by the pin protects nothing either, so it goes too.
+MACRO ESCBLK
+  UNITS
+    DATABASE MICRONS UNITS 1;
+  END UNITS
+  ORIGIN 0 0 ;
+  FOREIGN ESCBLK 0 0 ;
+  SIZE 200 BY 32 ;
+  PIN P
+    DIRECTION INOUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER M1 ;
+        RECT 0 0 200 32 ;
+    END
+  END P
+  OBS
+    LAYER M1 ;
+      RECT 40 8 160 24 ;
+  END
+END ESCBLK
