@@ -1,0 +1,23 @@
+# Same macro as escblock.lef, but OBS repeats the pin rect verbatim -- a common
+# LEF idiom where the pin metal is also drawn as blockage. Kept, that copy walls
+# the pin in; it protects nothing, so the router drops it.
+MACRO ESCBLK
+  UNITS
+    DATABASE MICRONS UNITS 1;
+  END UNITS
+  ORIGIN 0 0 ;
+  FOREIGN ESCBLK 0 0 ;
+  SIZE 200 BY 32 ;
+  PIN P
+    DIRECTION INOUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER M1 ;
+        RECT 0 0 200 32 ;
+    END
+  END P
+  OBS
+    LAYER M1 ;
+      RECT 0 0 200 32 ;
+  END
+END ESCBLK
