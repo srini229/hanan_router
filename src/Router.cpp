@@ -1823,7 +1823,13 @@ bool Router::patternRoute()
   std::set<const Node*> onpath{bests};
   for (size_t i = 1; i < best.size(); ++i) {
     Node* cur = createNode(best[i].x, best[i].y, best[i].z, prev);
-    if (!cur || !onpath.insert(cur).second) return false;
+    if (!cur) return false;
+    if (!onpath.insert(cur).second) {
+      if (verboseAt(LogLevel::ELEMENT))
+        COUT << "pattern path revisits a node at " << cur->x() << ',' << cur->y()
+             << ',' << cur->z() << " : falling back to A* for " << _name << '\n';
+      return false;
+    }
     cur->setParent(prev);
     if (best[i].z != prev->z()) {
       const Via* v = isViaValid(prev, best[i].z > prev->z());
