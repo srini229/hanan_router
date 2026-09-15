@@ -986,6 +986,21 @@ run_case hopeless_needs_sat "REORDER_CONC_0.def" -hopeless 1 \
   -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
 
+# 53. abutescape: a shape already touching a pin has no spacing to that pin left
+#     to protect, so with -abutescape it does not block the pin's escape via --
+#     but a pad that would actually run into it still does. escblock's obstacle
+#     bloats over the pin without touching it, so the rule must NOT fire there:
+#     this is the guard against it firing on merely-near shapes.
+LOGNOT="ABUT "
+run_case abut_not_near "ESCB_CONC_0.def" -abutescape \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
+# and with the flag off nothing changes for anyone
+run_case abut_off "ESCB_CONC_0.def" \
+  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
+same_defs abut_no_effect_when_clear abut_off abut_not_near "ESCB_CONC_0.def"
+
 # 33. parallel speedup (opt-in, timing-based, ~2-4s): a batch of many disjoint,
 #     individually-expensive nets routes substantially faster with N worker
 #     threads than sequentially -- and lays down exactly the same wires. Off by

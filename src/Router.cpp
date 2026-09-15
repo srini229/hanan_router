@@ -2883,7 +2883,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
                              -std::max(0, spacey(l) - MIN_ESCAPE_SPACE));
                   }
                   //COUT << "  obs_shrunk=" << o.str() << " overlaps=" << o.overlaps(p, true) << '\n';
-                  if (o.overlaps(p, true)) {
+                  if (padBlocked(o, p, l, pin)) {
                     //COUT << "obs viapad up : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;
                     via = nullptr;
@@ -2949,7 +2949,7 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
                              -std::max(0, spacey(l) - MIN_ESCAPE_SPACE));
                   }
                   //COUT << "  obs_shrunk=" << o.str() << " overlaps=" << o.overlaps(p, true) << '\n';
-                  if (o.overlaps(p, true)) {
+                  if (padBlocked(o, p, l, pin)) {
                     //COUT << "obs viapad down : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
                     delete via;
                     via = nullptr;

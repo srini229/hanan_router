@@ -402,6 +402,9 @@ typedef std::vector<std::unordered_map<uint64_t, Node*, NodeKeyHash>> NodeMap;
 bool replay(class Router& r, const std::string& leffile, const int uu, const bool detour,
     const std::string& ndrfile, const DRC::LayerInfo& lf);
 
+Geom::Rects intersectPObstacles(const LayerPolySet& pobs, const LayerPolySet& ptobs,
+                                const int layer, const Geom::Rect& query);
+
 class Router {
   private:
     PriorityQueue _pq;
@@ -490,6 +493,19 @@ class Router {
     bool _pruneEscapes{true};
     bool _viaAlign{false};
     bool _satFirst{false};
+    bool _abutEscape{false};
+    mutable size_t _abutSeen{0}, _abutAllowed{0};
+    // Raw (un-bloated) obstacle rects touching a pin, cached per pin: the pads of
+    // every candidate via at that pin ask the same question.
+    mutable std::map<std::pair<int, IntPair>, Geom::Rects> _rawnear;
+    const Geom::Rects& rawNear(const int l, const Geom::Rect& pin) const
+    {
+      const auto key = std::make_pair(l, std::make_pair(pin.xmin(), pin.ymin()));
+      auto it = _rawnear.find(key);
+      if (it != _rawnear.end()) return it->second;
+      return _rawnear.emplace(key,
+        intersectPObstacles(_pobstacles, _ptobstacles, l, pin.bloatby(1, 1))).first->second;
+    }
     int _hopelessAfter{3};
     int _maxSeedPolys{0};
     bool _seedPolysAlways{false};
@@ -692,6 +708,30 @@ class Router {
       }
       return nullptr;
     }
+    // A shape that already touches the pin has no spacing to it left to
+    // protect: the pin is up against it whatever the via does. So when the via
+    // is landing on a pin, such a shape is judged on overlap alone -- the pad
+    // may sit beside it, but must not run into it, which would be a short.
+    // Returns true if this obstacle should stop the via.
+    bool padBlocked(const Geom::Rect& shrunk, const Geom::Rect& pad, const int l,
+                    const Geom::Rect* pin) const
+    {
+      if (!_abutEscape || !pin) return shrunk.overlaps(pad, true);
+      // Ask the un-bloated geometry, not a shrunk-back copy of the bloated rect:
+      // splitRects merges and splits as it builds _ltree, so un-bloating does not
+      // land back on the drawn shape.
+      const Geom::Rects& raw = rawNear(l, *pin);
+      bool abutting = false, shorts = false;
+      for (const auto& r : raw) {
+        if (!r.overlaps(*pin, false)) continue;
+        abutting = true;
+        if (r.overlaps(pad, true)) { shorts = true; break; }
+      }
+      if (!abutting) return shrunk.overlaps(pad, true);
+      ++_abutSeen;
+      if (!shorts) ++_abutAllowed;
+      return shorts;
+    }
     static long long padPinOverlap(const Geom::Rect& pad, const Geom::Rect& pin)
     {
       const long long w = std::min(pad.xmax(), pin.xmax()) - std::max(pad.xmin(), pin.xmin());
@@ -758,6 +798,7 @@ class Router {
     int baseSpaceY(const int z) const { return (z >= 0 && z < static_cast<int>(_spacey.size())) ? _spacey[z] : 0; }
 
     void clearSourceTargets() {
+      _rawnear.clear();
       _cf.resetdirs();
       _sources.clear();
       _targets.clear();
@@ -871,6 +912,10 @@ class Router {
     // retired from the reorder loop. 0 never retires.
     void setHopelessAfter(const int n) { _hopelessAfter = n < 0 ? 0 : n; }
     int hopelessAfter() const { return _hopelessAfter; }
+    void setAbutEscape(const bool b) { _abutEscape = b; }
+    bool abutEscape() const { return _abutEscape; }
+    size_t abutSeen() const { return _abutSeen; }
+    size_t abutAllowed() const { return _abutAllowed; }
     void setSatFirst(const bool b) { _satFirst = b; }
     bool satFirst() const { return _satFirst; }
     void setViaAlign(const bool b) { _viaAlign = b; }

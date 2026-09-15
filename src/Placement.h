@@ -105,6 +105,7 @@ class Net {
     unsigned int _unroute : 1;
     std::vector<std::string> _openwires;
     bool _hopeless{false};
+    bool _escflag{false};
     int _barren{0};
     unsigned int _exclude : 1;
     unsigned int _detour : 1;
@@ -152,6 +153,9 @@ class Net {
     // Set once a net has gone through several whole attempts without routing a
     // single wire. Every further attempt would spend exhaustive searches on it
     // for the same answer, so it is left alone until the block is done.
+    // The pre-route escape check could not clear one of this net's pins.
+    bool escapeFlagged() const { return _escflag; }
+    void setEscapeFlagged(const bool b) { _escflag = b; }
     bool hopeless() const { return _hopeless; }
     void setHopeless(const bool b) { _hopeless = b; }
     int barrenAttempts() const { return _barren; }

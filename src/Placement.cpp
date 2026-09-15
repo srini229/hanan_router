@@ -614,6 +614,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
                 myrouter.setEscapePitchMul(router.escapePitchMul());
                 myrouter.setPruneEscapes(router.pruneEscapes());
                 myrouter.setViaAlign(router.viaAlign());
+                myrouter.setAbutEscape(router.abutEscape());
                 myrouter.setMaxSeedPolys(router.maxSeedPolys());
                 myrouter.setSeedPolysAlways(router.seedPolysAlways());
                 myrouter.setCornerEscape(router.cornerEscape());
@@ -747,6 +748,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
       return blockedNets;
     };
     const std::set<Net*> satBlocked = escapeCheck("pre-route", nullptr, false);
+    for (auto& n : _nets) n.second.setEscapeFlagged(satBlocked.count(&n.second) > 0);
     // The SAT check names, before anything is routed, the pins with no guaranteed
     // escape. Those nets are the ones the reorder loop will spend its passes
     // promoting; putting them first while the block is still empty gives them
@@ -988,6 +990,11 @@ void Module::route(Router::Router& router, const std::string& outdir)
       for (auto& n : _nets)
         if (!n.second.excluded()) Geom::MergeLayerRects(laid, n.second.routeShapesWithPins());
       escapeCheck("post-route", &laid, true);
+    if (router.abutEscape() && router.abutSeen() > 0) {
+      COUT << "ABUT " << _name << " : " << router.abutSeen()
+           << " pad check(s) against a shape already touching the pin, "
+           << router.abutAllowed() << " allowed through on overlap\n";
+    }
     }
     writeDEF(outdir);
   }

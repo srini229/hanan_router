@@ -66,6 +66,7 @@ hanan_router -d <layers.json> -p <placement file> -l <lef file> [options]
 | `-keepblockedescapes` | no | Seed every pin-escape point, including ones sitting inside a bloated obstacle that no wire can start from. Default is to drop them. |
 | `-satfirst` | no | Route the nets whose pins the pre-route escape check could not clear before the rest. Off by default; see [Search effort](#search-effort). |
 | `-hopeless <N>` | no | Retire a net the escape check flagged once it has routed nothing in `N` whole attempts (default `3`; `0` never retires). |
+| `-abutescape` | no | A shape already touching a pin does not block that pin's escape via on spacing; only a pad that would overlap it does. Off by default; see [Via selection](#via-selection). |
 | `-viaalign` | no | When more than one via rotation is legal, pick the one whose pads run along the wires they join rather than the first legal one. Off by default; see [Via selection](#via-selection). |
 | `-seedpolys <N>` | no | For a pin split into more than `N` polygons, seed only the `N` nearest the other terminal (default `0` = seed all). |
 | `-seedpolysalways` | no | Keep that limit on every attempt; by default the rest are restored for a net still open by attempt 3. |
@@ -141,6 +142,20 @@ there is a pin; alignment only breaks its ties.
 
 It is off by default because it has not been shown to pay -- see
 `docs/ROUTING_NOTES.md`. On a technology with square cuts it is a no-op.
+
+### Abutting shapes and pin escapes
+
+A shape that already touches a pin has no spacing to that pin left to protect --
+the pin is up against it whatever the via does -- yet the bloated obstacle it
+becomes will cover the pin and block every escape via there. `-abutescape` judges
+such a shape on overlap alone: the escape pad may sit beside it, but must not run
+into it. Abutment is tested against the drawn geometry rather than an un-bloated
+copy of the obstacle, because the obstacle rects are merged and split as they are
+built and do not un-bloat back to the drawn shape.
+
+It is off by default: it unblocks a great many escapes and is DRC-clean, but on
+the design it was written for it leaves one more net open, not fewer. See
+`docs/ROUTING_NOTES.md`.
 
 ## Log verbosity
 
