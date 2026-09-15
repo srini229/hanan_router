@@ -1018,6 +1018,19 @@ run_case pindup_inside "ESCB_CONC_0.def" \
 same_defs pindup_exact_as_clean pindup_clean pindup_exact "ESCB_CONC_0.def"
 same_defs pindup_inside_as_clean pindup_clean pindup_inside "ESCB_CONC_0.def"
 
+# 55. pattern_cycle: createNode returns the node already at a coordinate, so a
+#     pattern path that comes back to a waypoint it has used would make that node
+#     its own ancestor -- and buildSol walks parents, so it allocated via shapes
+#     until the machine died (126GB on the design this wire came from). The
+#     waypoint is a Z whose runs collapse: up a via and straight back down at the
+#     same point. patterncycle.lef is that one wire, dumped with
+#     HANAN_DEBUG_WIRE and replayed on its own: the pattern must be rejected in
+#     favour of A*, the wire must still route, and no cycle may reach buildSol.
+LOGMUST="pattern path revisits a node|REPLAY RESULT routed"
+LOGNOT="cycle in the solution path"
+run_case pattern_cycle "" -replay $IN/patterncycle.lef \
+  -d $IN/layers_sky130.json -uu 1000 -v 2
+
 # 33. parallel speedup (opt-in, timing-based, ~2-4s): a batch of many disjoint,
 #     individually-expensive nets routes substantially faster with N worker
 #     threads than sequentially -- and lays down exactly the same wires. Off by
