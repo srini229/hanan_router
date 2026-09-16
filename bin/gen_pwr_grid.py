@@ -103,6 +103,28 @@ def lef_macros(path):
     return macros
 
 
+def def_shapes(path, wanted):
+    """Routed metal from a DEF, already in block coordinates.
+
+    Signal routing creates metal on the grid layers, so a grid built before
+    routing is stale. This reads what a routing pass actually committed.
+    """
+    out, innets = [], False
+    for line in open(path, errors='ignore'):
+        if line.startswith('NETS'):
+            innets = True
+            continue
+        if line.startswith('END NETS'):
+            break
+        if not innets:
+            continue
+        m = re.match(r'\s*\+ RECT (\w+) \( (-?\d+) (-?\d+) \) \( (-?\d+) (-?\d+) \)', line)
+        if m and m.group(1) in wanted:
+            v = [int(x) for x in m.groups()[1:]]
+            out.append((m.group(1), (v[0], v[1], v[2], v[3])))
+    return out
+
+
 def placed_shapes(placement, macros, wanted):
     """Existing geometry on `wanted` layers, in block coordinates."""
     d = json.load(open(placement))
@@ -357,6 +379,8 @@ def main():
     ap.add_argument('--avoid', default='',
                     help='LEF of the placed cells; straps are cut back around '
                          'metal already on the grid layers')
+    ap.add_argument('--avoid-def', action='append', default=[],
+                    help='DEF whose routed metal the straps must avoid; repeatable')
     ap.add_argument('--no-stitch', action='store_true',
                     help='leave strap crossings untied')
     ap.add_argument('--ndr-out', default='',
@@ -391,8 +415,12 @@ def main():
     for name in gl:
         for net, r in straps(bbox, layers[name], nets, a.stride, a.widen):
             pins[net].append((name, r))
-    if a.avoid:
-        blockers = placed_shapes(a.placement, lef_macros(a.avoid), set(gl))
+    if a.avoid or a.avoid_def:
+        blockers = []
+        if a.avoid:
+            blockers += placed_shapes(a.placement, lef_macros(a.avoid), set(gl))
+        for dfl in a.avoid_def:
+            blockers += def_shapes(dfl, set(gl))
         keep = min(layers[l]['pitch'] or 0 for l in gl) * 2
         trimmed, dropped = carve(pins, blockers, layers, keep)
         print(f'avoiding    : {len(blockers)} existing shape(s) on {", ".join(gl)}'

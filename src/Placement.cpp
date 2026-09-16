@@ -1017,7 +1017,11 @@ void Module::route(Router::Router& router, const std::string& outdir)
           COUT << "excluded : " << itn->second.name() << "\n";
           for (auto& pin : itn->second.pins()) {
             COUT << "pin : " << pin->name() << '\n';
-            for (auto& port : pin->ports()) {
+            // copyRects appends a port, and the module's own boundary pin is a
+            // member of its net -- so pin can be p.second and the append would
+            // reallocate the vector being iterated. Walk a snapshot instead.
+            const Ports ports = pin->ports();
+            for (auto& port : ports) {
               COUT << "port : " << port->name() << '\n';
               p.second->copyRects(port->shapes(), true);
             }
