@@ -256,8 +256,7 @@ def stitch(pins, vias, layers):
                             cy = oy + j * (v['wy'] + v['sy'])
                             cuts.append((cl, (cx, cy, cx + v['wx'], cy + v['wy'])))
         if cuts:
-            shapes.extend(cuts)
-            added[net] = len(cuts)
+            added[net] = cuts
     return added
 
 
@@ -383,6 +382,11 @@ def main():
                     help='DEF whose routed metal the straps must avoid; repeatable')
     ap.add_argument('--no-stitch', action='store_true',
                     help='leave strap crossings untied')
+    ap.add_argument('--cuts-in-lef', action='store_true',
+                    help='put the stitch cuts in the routing LEF as well; slow, '
+                         'and the router has no use for them')
+    ap.add_argument('--cuts-out', default='',
+                    help='write the stitch cuts here for merging after routing')
     ap.add_argument('--ndr-out', default='',
                     help='write an NDR that taps every power pin to the grid')
     ap.add_argument('--ndr-width', type=int, default=0,
@@ -425,7 +429,15 @@ def main():
         trimmed, dropped = carve(pins, blockers, layers, keep)
         print(f'avoiding    : {len(blockers)} existing shape(s) on {", ".join(gl)}'
               f' -> {trimmed} strap(s) cut, {dropped} fully removed')
-    stitched = {} if a.no_stitch else stitch(pins, via_layers(js, layers), layers)
+    # The cuts tie the straps physically, but the router never routes through a
+    # cut: carrying them in the routing input only feeds thousands of rectangles
+    # to the grid builder. They are emitted separately and merged after routing.
+    cuts = {} if a.no_stitch else stitch(pins, via_layers(js, layers), layers)
+    stitched = {n: len(v) for n, v in cuts.items()}
+    if a.cuts_in_lef:
+        for net, v in cuts.items():
+            pins[net].extend(v)
+        cuts = {}
 
     total = sum(len(v) for v in pins.values())
     print(f'grid layers : {", ".join(gl)}')
@@ -440,6 +452,11 @@ def main():
     if not total:
         sys.exit('no straps fit in the given extent')
 
+    if a.cuts_out and cuts:
+        with open(a.cuts_out, 'w') as f:
+            json.dump({n: [[l] + list(r) for l, r in v] for n, v in cuts.items()}, f)
+        print(f'cuts        : {sum(len(v) for v in cuts.values())} written to '
+              f'{a.cuts_out} for post-route merge')
     if a.lef:
         units = a.units or (lef_units(a.avoid) if a.avoid else 1000)
         write_lef(a.lef, a.name, bbox, pins, units)

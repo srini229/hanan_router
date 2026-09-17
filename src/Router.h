@@ -493,6 +493,7 @@ class Router {
     bool _pruneEscapes{true};
     bool _viaAlign{false};
     bool _satFirst{false};
+    int _gridprune{0};     // collapse grid coordinates closer than this % of pitch
     bool _abutEscape{false};
     mutable size_t _abutSeen{0}, _abutAllowed{0};
     // Raw (un-bloated) obstacle rects touching a pin, cached per pin: the pads of
@@ -659,8 +660,14 @@ class Router {
         l.clear();
       }
       resetNodePool();   // storage stays, the objects in it are gone
-      _nodes.clear();
-      _nodes.resize(_maxLayer + 1);
+      // The maps above were cleared, which keeps their bucket arrays. Destroying
+      // and rebuilding the vector would throw those away and make every wire
+      // rehash its way back up from zero buckets -- the cost of that grows with
+      // the design, so per-expansion cost degrades as blocks get larger.
+      if (_nodes.size() != static_cast<size_t>(_maxLayer) + 1) {
+        _nodes.clear();
+        _nodes.resize(_maxLayer + 1);
+      }
       // these maps are keyed by Node*, which are gone now
       _endextnxmin.clear();
       _endextnymin.clear();
@@ -917,6 +924,8 @@ class Router {
     // retired from the reorder loop. 0 never retires.
     void setHopelessAfter(const int n) { _hopelessAfter = n < 0 ? 0 : n; }
     int hopelessAfter() const { return _hopelessAfter; }
+    void setGridPrune(const int p) { _gridprune = p; }
+    int gridPrune() const { return _gridprune; }
     void setAbutEscape(const bool b) { _abutEscape = b; }
     bool abutEscape() const { return _abutEscape; }
     size_t abutSeen() const { return _abutSeen; }

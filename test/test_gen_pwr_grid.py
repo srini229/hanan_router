@@ -109,26 +109,29 @@ class Stitch(unittest.TestCase):
         self.pins = {'A': [('M4', (0, 0, 10000, 800)), ('M5', (2000, 0, 3180, 10000))]}
 
     def test_cuts_land_inside_both_straps(self):
+        # stitch() returns the cuts; it no longer adds them to the routing
+        # shapes, because the router never routes through a cut
         added = pg.stitch(self.pins, self.vias, self.layers)
         self.assertTrue(added.get('A'), 'the crossing was left untied')
-        cuts = [r for l, r in self.pins['A'] if l == 'V4']
-        self.assertEqual(len(cuts), added['A'])
+        self.assertEqual([r for l, r in self.pins['A'] if l == 'V4'], [],
+                         'cuts must stay out of the routing shapes')
+        cuts = [r for l, r in added['A']]
         for c in cuts:
             self.assertTrue(2000 <= c[0] and c[2] <= 3180, f'{c} outside the M5 strap')
             self.assertTrue(0 <= c[1] and c[3] <= 800, f'{c} outside the M4 strap')
             self.assertEqual((c[2] - c[0], c[3] - c[1]), (200, 200))
 
     def test_cuts_keep_the_across_strap_enclosure(self):
-        pg.stitch(self.pins, self.vias, self.layers)
-        for _, c in [(l, r) for l, r in self.pins['A'] if l == 'V4']:
+        added = pg.stitch(self.pins, self.vias, self.layers)
+        for _, c in added['A']:
             self.assertGreaterEqual(c[0] - 2000, 65)   # VencA of the vertical layer
             self.assertGreaterEqual(3180 - c[2], 65)
             self.assertGreaterEqual(c[1] - 0, 65)      # VencA of the horizontal one
             self.assertGreaterEqual(800 - c[3], 65)
 
     def test_cuts_are_spaced_on_the_cut_pitch(self):
-        pg.stitch(self.pins, self.vias, self.layers)
-        xs = sorted({c[0] for l, c in self.pins['A'] if l == 'V4'})
+        added = pg.stitch(self.pins, self.vias, self.layers)
+        xs = sorted({c[0] for l, c in added['A']})
         self.assertTrue(all(b - a == 400 for a, b in zip(xs, xs[1:])),
                         'cuts must sit on width + space')
 
@@ -280,11 +283,27 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual({c['driver'] for c in d[0]['clock_nets']},
                          {'X_PGRID/VDDA', 'X_PGRID/GNDA'})
 
-    def test_no_stitch_leaves_the_cut_layer_out(self):
-        self.run_gen('--lef', 'g.lef')
+    def test_cuts_are_kept_out_of_the_routing_lef(self):
+        r = self.run_gen('--lef', 'g.lef', '--cuts-out', 'cuts.json')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn('LAYER V4 ;', self.read('g.lef'),
+                         'cuts must not reach the router')
+        cuts = json.loads(self.read('cuts.json'))
+        self.assertTrue(sum(len(v) for v in cuts.values()),
+                        'cuts must still be emitted for the post-route merge')
+        for v in cuts.values():
+            for c in v:
+                self.assertEqual(c[0], 'V4')
+                self.assertEqual((c[3] - c[1], c[4] - c[2]), (200, 200))
+
+    def test_cuts_in_lef_puts_them_back(self):
+        self.run_gen('--cuts-in-lef', '--lef', 'g.lef')
         self.assertIn('LAYER V4 ;', self.read('g.lef'))
-        self.run_gen('--no-stitch', '--lef', 'bare.lef')
+
+    def test_no_stitch_emits_no_cuts_at_all(self):
+        self.run_gen('--no-stitch', '--lef', 'bare.lef', '--cuts-out', 'c2.json')
         self.assertNotIn('LAYER V4 ;', self.read('bare.lef'))
+        self.assertFalse(os.path.exists(os.path.join(self.d, 'c2.json')))
 
     def test_bbox_can_replace_the_placement(self):
         cmd = [sys.executable, GEN, '-l', 'layers.json',
@@ -303,10 +322,20 @@ class EndToEnd(unittest.TestCase):
         self.write('place.json', placement(instances=[
             {'concrete_template_name': 'CELL', 'instance_name': 'X0',
              'transformation': {'oX': 0, 'oY': 0}}]))
-        plain = self.run_gen('--lef', 'a.lef').stdout
+        def metal_area(name):
+            # carving shortens straps rather than removing them, so compare the
+            # area covered, not the rectangle count
+            total = 0
+            for line in self.read(name).splitlines():
+                t = line.split()
+                if t and t[0] == 'RECT':
+                    v = [int(x) for x in t[1:5]]
+                    total += (v[2] - v[0]) * (v[3] - v[1])
+            return total
+        self.run_gen('--lef', 'a.lef')
         cut = self.run_gen('--avoid', 'cells.lef', '--lef', 'b.lef').stdout
         self.assertIn('avoiding', cut)
-        self.assertLess(len(self.read('b.lef')), len(self.read('a.lef')),
+        self.assertLess(metal_area('b.lef'), metal_area('a.lef'),
                         'carving removed nothing')
 
 

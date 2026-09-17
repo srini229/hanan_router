@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
       << "\t-keepblockedescapes (seed every pin-escape point, including ones no wire can start from; default is to drop them)\n"
       << "\t-viaalign (pick the via rotation whose pads run along the wires they join, instead of the first legal one)\n"
       << "\t-satfirst (route the nets whose pins the pre-route escape check could not clear before the rest)\n"
-      << "\t-abutescape (a shape already touching a pin does not block that pin's escape via on spacing; only a real overlap does)\n"
+      << "\t-gridprune <percent of pitch: collapse grid coordinates closer than this>\n\t-abutescape (a shape already touching a pin does not block that pin's escape via on spacing; only a real overlap does)\n"
       << "\t-hopeless <N> (retire a net the escape check flagged once it has routed nothing in N whole attempts; 0 never; default 3)\n"
       << "\t-seedpolys <N> (for a pin split into more than N polygons, seed only the N nearest the other end; 0 seeds all; default 0)\n"
       << "\t-seedpolysalways (keep that limit on every attempt; default restores the rest for a net still open by attempt 3)\n"
@@ -121,6 +121,11 @@ int main(int argc, char* argv[])
   if (checkArg(argc, argv, "-viaalign")) hrdb.setViaAlign(true);
   if (checkArg(argc, argv, "-satfirst")) hrdb.setSatFirst(true);
   if (checkArg(argc, argv, "-abutescape")) hrdb.setAbutEscape(true);
+  const std::string gp = parseArgs(argc, argv, "-gridprune");
+  if (!gp.empty()) {
+    try { hrdb.setGridPrune(std::stoi(gp)); }
+    catch (const std::exception&) { CERR << "ignoring bad -gridprune " << gp << '\n'; }
+  }
   const std::string ha = parseArgs(argc, argv, "-hopeless");
   if (!ha.empty()) {
     try { hrdb.setHopelessAfter(std::stoi(ha)); }
@@ -170,6 +175,7 @@ int main(int argc, char* argv[])
        << (hrdb.pruneEscapes() ? "" : " -keepblockedescapes")
        << (hrdb.viaAlign() ? " -viaalign" : "")
        << (hrdb.satFirst() ? " -satfirst" : "")
+       << (hrdb.gridPrune() ? " -gridprune " + std::to_string(hrdb.gridPrune()) : "")
        << (hrdb.abutEscape() ? " -abutescape" : "")
        << (hrdb.hopelessAfter() ? " -hopeless " : "") << (hrdb.hopelessAfter() ? std::to_string(hrdb.hopelessAfter()) : "")
        << " -seedpolys " << hrdb.maxSeedPolys()

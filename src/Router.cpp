@@ -6,6 +6,9 @@ namespace Router {
 size_t Node::_nodectr = 0;
 #endif
 #define NUM_POINTS 1000
+// a run of at least this many coordinates packed tighter than one pitch counts
+// as a dense cluster worth thinning; shorter runs are left alone
+#define DENSE_CLUSTER 4
 
 int Router::_precision = 1;
 
@@ -1510,6 +1513,91 @@ void Router::generateHananGrid()
     for (auto& s : (src ? _sources : _targets)) {
       xcoords.insert(s->x());
       ycoords.insert(s->y());
+    }
+  }
+  // Dense device arrays put obstacle corners a few nanometres apart, and a wire
+  // cannot use two tracks closer together than its own width plus spacing. Those
+  // extra coordinates cost a grid line each -- and a grid line costs on every
+  // expansion that crosses it.
+  //
+  // The thinning is local, not uniform: a run of coordinates packed tighter than
+  // one pitch is a dense cluster and gets thinned to roughly one per pitch, while
+  // anything already spread out is left exactly as it is, so sparse regions keep
+  // every track they had. Cluster ends survive because they are the obstacle
+  // boundaries that make a track legal, and any coordinate crossing a pin
+  // survives outright -- thinning the grid over a pin costs escapes, which is
+  // the one thing this router cannot afford.
+  if (_gridprune > 0) {
+    int pitch = INT_MAX;
+    for (auto l = _minLayer; l <= _maxLayer; ++l) {
+      pitch = std::min(pitch, std::min(widthx(l) + spacex(l), widthy(l) + spacey(l)));
+    }
+    const int keepapart = (pitch == INT_MAX) ? 0 : (pitch * _gridprune) / 100;
+    if (keepapart > 0) {
+      for (auto axis : {0, 1}) {
+        auto& coords = (axis == 0) ? xcoords : ycoords;
+        // spans of every pin this wire may start or end on, plus the seeded points
+        std::vector<IntPair> pinspans;
+        std::set<int> pinpoints;
+        for (const auto* m : {&_sourceshapes, &_targetshapes}) {
+          for (const auto& l : *m) {
+            for (const auto& r : l.second) {
+              pinspans.emplace_back(axis == 0 ? r.xmin() : r.ymin(),
+                                    axis == 0 ? r.xmax() : r.ymax());
+            }
+          }
+        }
+        std::sort(pinspans.begin(), pinspans.end());
+        for (bool src : {true, false}) {
+          for (const auto& s : (src ? _sources : _targets)) {
+            pinpoints.insert(axis == 0 ? s->x() : s->y());
+          }
+        }
+        auto onPin = [&pinspans](const int c) {
+          auto it = std::upper_bound(pinspans.begin(), pinspans.end(),
+                                     std::make_pair(c, INT_MAX));
+          if (it == pinspans.begin()) return false;
+          --it;
+          // spans are sorted by low edge; scan back over the few that can cover c
+          for (; ; --it) {
+            if (it->second >= c) return true;
+            if (it == pinspans.begin()) break;
+          }
+          return false;
+        };
+
+        const std::vector<int> c(coords.begin(), coords.end());
+        std::set<int> kept;
+        size_t i = 0;
+        size_t clusters = 0, thinned = 0;
+        while (i < c.size()) {
+          size_t j = i;
+          while (j + 1 < c.size() && c[j + 1] - c[j] < keepapart) ++j;
+          if (j - i + 1 < DENSE_CLUSTER) {          // sparse here: keep it all
+            for (size_t k = i; k <= j; ++k) kept.insert(c[k]);
+          } else {
+            ++clusters;
+            int last = INT_MIN;
+            for (size_t k = i; k <= j; ++k) {
+              const int x = c[k];
+              if (k == i || k == j || pinpoints.count(x) || onPin(x) ||
+                  last == INT_MIN || x - last >= keepapart) {
+                kept.insert(x);
+                last = x;
+              } else {
+                ++thinned;
+              }
+            }
+          }
+          i = j + 1;
+        }
+        if (verboseAt(LogLevel::ELEMENT)) {
+          COUT << "grid prune : axis " << axis << ' ' << coords.size() << " -> "
+               << kept.size() << " coordinate(s); " << thinned << " dropped from "
+               << clusters << " dense cluster(s), " << keepapart << " apart\n";
+        }
+        coords.swap(kept);
+      }
     }
   }
   for (auto& l : _tobstacles) {
