@@ -208,15 +208,19 @@ if args.layers:
                         labellayers[layer] = l["LabelLayerNo"]
 print(labellayers)
         
+read = set()
 for j,m in modules.items():
     m.add()
     defname = args.def_dir + '/' + j + '.def'
     print(f'Reading def file : {defname}')
     if args.def_dir != "" and os.path.isfile(defname):
         read_def(defname, m)
+        read.add(os.path.realpath(defname))
     gdslib.add(m._cell)
 
-if args.deff and args.top_cell in modules:
+# -i usually points at the directory the top def itself sits in, so without
+# this the top's wires land in the cell twice
+if args.deff and args.top_cell in modules and os.path.realpath(args.deff) not in read:
     read_def(args.deff, modules[args.top_cell])
 
 print(f'writing gds file {args.top_cell}_out.gds')

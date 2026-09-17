@@ -1045,6 +1045,21 @@ else
   FAIL=$((FAIL+1)); ERRS="${ERRS}pwr_grid_unit:generator-tests-failed;\n"
 fi
 
+# 57. check_nets: the router's open count is its own bookkeeping. bin/check_nets.py
+#     checks the artefact -- flatten the routed GDS, join metal that touches and
+#     metal a cut bridges, and require one conductor per top-level net. It caught
+#     a two-pass power flow whose second pass overwrote the first pass's DEF, and
+#     a tracer blind to a via sharing its GDS layer with a second abstraction
+#     (sky130 draws V4 and CapMIMContact both on 70/44). These are the generator's
+#     own tests on synthetic GDS; the flow cases above cover the router.
+if python3 ./test_check_nets.py >"$OUTROOT/check_nets_unit.log" 2>&1; then
+  echo "PASS check_nets_unit ($(sed -n 's/^Ran \([0-9]*\) tests.*/\1/p' "$OUTROOT/check_nets_unit.log") checks)"
+  PASS=$((PASS+1))
+else
+  echo "FAIL check_nets_unit : see $OUTROOT/check_nets_unit.log"
+  FAIL=$((FAIL+1)); ERRS="${ERRS}check_nets_unit:tracer-tests-failed;\n"
+fi
+
 pgdir="$OUTROOT/pwr_grid_route"
 mkdir -p "$pgdir"
 if python3 ../bin/gen_pwr_grid.py -l ./layers.json \

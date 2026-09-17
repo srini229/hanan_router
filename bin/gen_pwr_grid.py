@@ -214,7 +214,7 @@ def via_layers(js, layers):
     return out
 
 
-def stitch(pins, vias, layers):
+def stitch(pins, vias, layers, maxcuts=1):
     """Tie crossing straps of one net together with cut arrays.
 
     A grid is only a grid if every crossing is connected. At a crossing the cut
@@ -246,6 +246,9 @@ def stitch(pins, vias, layers):
                         continue
                     nx = max(1, (x1 - x0 + v['sx']) // (v['wx'] + v['sx']))
                     ny = max(1, (y1 - y0 + v['sy']) // (v['wy'] + v['sy']))
+                    if maxcuts > 0:      # a crossing needs contacts, not a carpet
+                        nx = min(nx, maxcuts)
+                        ny = min(ny, maxcuts)
                     spanx = nx * v['wx'] + (nx - 1) * v['sx']
                     spany = ny * v['wy'] + (ny - 1) * v['sy']
                     ox = x0 + (x1 - x0 - spanx) // 2
@@ -258,6 +261,63 @@ def stitch(pins, vias, layers):
         if cuts:
             added[net] = cuts
     return added
+
+
+def single_mesh(pins, cuts, layers):
+    """Reduce each supply's grid to one connected mesh.
+
+    Carving a strap around existing metal splits it, and the pieces are only
+    joined where a via ties them to a crossing strap of the same net. Whatever
+    does not end up in the largest connected component is floating metal, which
+    a connectivity trace reports as an extra net, so it is removed along with the
+    cuts that landed on it. What remains is exactly one net per supply.
+    """
+    removed = 0
+    for net, shapes in pins.items():
+        cl = cuts.get(net, [])
+        if not shapes or not cl:
+            continue     # nothing stitched here, so nothing to judge as stranded
+        parent = list(range(len(shapes)))
+
+        def find(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        def union(i, j):
+            a, b = find(i), find(j)
+            if a != b:
+                parent[b] = a
+
+        def inside(c, r):
+            return r[0] <= c[0] and c[2] <= r[2] and r[1] <= c[1] and c[3] <= r[3]
+
+        # a cut ties every piece it lands on, which is how the mesh is formed
+        for _, c in cl:
+            hit = [i for i, (_, r) in enumerate(shapes) if inside(c, r)]
+            for i in hit[1:]:
+                union(hit[0], i)
+        # overlapping pieces on one layer are the same conductor anyway
+        for i, (li, ri) in enumerate(shapes):
+            for j in range(i + 1, len(shapes)):
+                lj, rj = shapes[j]
+                if li == lj and not (ri[2] < rj[0] or rj[2] < ri[0]
+                                     or ri[3] < rj[1] or rj[3] < ri[1]):
+                    union(i, j)
+
+        groups = {}
+        for i in range(len(shapes)):
+            groups.setdefault(find(i), []).append(i)
+        if len(groups) <= 1:
+            continue
+        keep = set(max(groups.values(), key=len))
+        removed += len(shapes) - len(keep)
+        pins[net] = [s for i, s in enumerate(shapes) if i in keep]
+        kept = pins[net]
+        cuts[net] = [(cl_, c) for cl_, c in cl
+                     if any(inside(c, r) for _, r in kept)]
+    return removed
 
 
 def write_ndr(path, module, nets, driver_inst, widths):
@@ -365,8 +425,9 @@ def main():
                          'own global_power signals, else VDD,VSS')
     ap.add_argument('--bottom', default='', help='lowest grid layer (default from layers.json)')
     ap.add_argument('--top', default='', help='highest grid layer (default from layers.json)')
-    ap.add_argument('--stride', type=int, default=1,
-                    help='strap every Nth track of the layer pitch (default 1)')
+    ap.add_argument('--stride', default='1',
+                    help='strap every Nth track of the layer pitch; a comma list '
+                         'gives one value per grid layer, bottom-up (e.g. 7,8)')
     ap.add_argument('--widen', type=float, default=1.0,
                     help='strap width as a multiple of the layer width (default 1)')
     ap.add_argument('--name', default='PGRID', help='macro name (default PGRID)')
@@ -382,6 +443,9 @@ def main():
                     help='DEF whose routed metal the straps must avoid; repeatable')
     ap.add_argument('--no-stitch', action='store_true',
                     help='leave strap crossings untied')
+    ap.add_argument('--cuts-per-crossing', type=int, default=0,
+                    help='cuts per axis at each crossing; 0 (the default) fills the '
+                         'crossing, which is what a power via should do')
     ap.add_argument('--cuts-in-lef', action='store_true',
                     help='put the stitch cuts in the routing LEF as well; slow, '
                          'and the router has no use for them')
@@ -415,9 +479,11 @@ def main():
         sys.exit('need -p or --bbox for the grid extent')
 
     gl = grid_layers(js, layers, a.bottom or None, a.top or None)
+    strides = [int(x) for x in str(a.stride).split(',') if x.strip()] or [1]
     pins = {n: [] for n in nets}
     for name in gl:
-        for net, r in straps(bbox, layers[name], nets, a.stride, a.widen):
+        st = strides[min(gl.index(name), len(strides) - 1)]
+        for net, r in straps(bbox, layers[name], nets, st, a.widen):
             pins[net].append((name, r))
     if a.avoid or a.avoid_def:
         blockers = []
@@ -432,7 +498,11 @@ def main():
     # The cuts tie the straps physically, but the router never routes through a
     # cut: carrying them in the routing input only feeds thousands of rectangles
     # to the grid builder. They are emitted separately and merged after routing.
-    cuts = {} if a.no_stitch else stitch(pins, via_layers(js, layers), layers)
+    cuts = {} if a.no_stitch else stitch(pins, via_layers(js, layers), layers,
+                                        a.cuts_per_crossing)
+    stranded = single_mesh(pins, cuts, layers)
+    if stranded:
+        print(f'stranded    : {stranded} strap piece(s) off the main mesh, removed')
     stitched = {n: len(v) for n, v in cuts.items()}
     if a.cuts_in_lef:
         for net, v in cuts.items():

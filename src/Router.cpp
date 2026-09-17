@@ -1751,6 +1751,13 @@ bool Router::patternRun(const int x, const int y, const int z, const bool vert, 
 {
   const int from = vert ? y : x;
   if (to == from) return true;
+  // The run has to sit on a track this layer actually has. A pattern waypoint can
+  // come from a different layer's grid -- an L corner is the target's coordinate,
+  // a Z midpoint is drawn from the layer the other run uses -- and snap() reports
+  // a layer whose grid is empty as reaching the block boundary, so a run placed
+  // off-grid would be checked against nothing.
+  const auto& grid = vert ? _hanangridv[z] : _hanangridh[z];
+  if (grid.find(vert ? x : y) == grid.end()) return false;
   const Node probe(x, y, z);
   const int reach = snap(&probe, vert, to > from);
   return (to > from) ? (reach >= to) : (reach <= to);
