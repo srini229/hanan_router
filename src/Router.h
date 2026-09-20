@@ -150,6 +150,11 @@ class CostFn {
     }
   public:
     CostType deltaCost(const Node& n1, const Node& n2) const;
+    // Same shape as deltaCost's general (non-adjacent, non-same-layer) case,
+    // used only to pre-rank patternRoute()'s candidate (source, target)
+    // pairs -- see the definition for why it needs a wider layer window than
+    // deltaCost's real per-move cost accounting can safely use everywhere.
+    CostType patternLowerBound(const Node& n1, const Node& n2) const;
     CostFn(const DRC::LayerInfo& lf);
     void setRelaxFloor(const CostType c) { if (c > 0 && c < COST_MAX) _minMetalCost = c; }
     void clearRelaxZones()

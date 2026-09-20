@@ -265,6 +265,107 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   return dc;
 }
 
+// A copy of deltaCost's active logic (the large commented-out block deltaCost
+// carries is dead code, not duplicated here), except the layer-window search
+// below can widen past one adjacent layer. patternRoute() uses this only to
+// *rank and prune* candidate (source, target) pairs before doing real pattern
+// construction -- lb here never becomes an actual routed cost, so widening it
+// can't change what a real path costs, only which candidates patternRoute()
+// bothers to try first. deltaCost() itself keeps the original single-hop
+// window: it is also the A* search's real per-move edge cost and target-
+// distance heuristic, and other net-ordering machinery (e.g. the M1-pin-as-
+// M2-obstacle projection in Module::route) turned out to implicitly depend on
+// the narrower, more local layer choices that window produces -- widening it
+// there caused a real net to go unrouted (test/run_smoke.sh, m1_pin_adj_
+// obstacle) even after every existing fallback. This function exists so the
+// wider, more accurate lower bound benefits pair selection without touching
+// any of that.
+CostType CostFn::patternLowerBound(const Node& n1, const Node& n2) const
+{
+  CostType dc{0};
+
+  if (n1.z() == n2.z()) {
+    CostType bendCost{0};
+    if (n1.parent() == &n2 && n2.parent() && n2.parent()->z() == n2.z()) {
+      if ((n1.x() == n2.x() && n2.parent()->x() != n1.x())
+          || (n1.y() == n2.y() && n2.parent()->y() != n1.y())){
+        bendCost = _bendCost[n1.z()];
+      }
+    }
+    if (n1.x() == n2.x() && _layerVCost[n1.z()] < COST_MAX) {
+      const CostType c = relaxed(_layerVCost[n1.z()], n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
+      return (bendCost + c * std::abs(n1.y() - n2.y()));
+    }
+    if (n1.y() == n2.y() && _layerHCost[n1.z()] < COST_MAX) {
+      const CostType c = relaxed(_layerHCost[n1.z()], n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
+      return (bendCost + c * std::abs(n1.x() - n2.x()));
+    }
+  }
+  if (n1.x() == n2.x() && n1.y() == n2.y()) {
+    if (abs(n2.z() - n1.z()) == 1) {
+      return _layerPairCost[n1.z()][n2.z()];
+    }
+  }
+  const int dx = std::abs(n1.x() - n2.x());
+  const int dy = std::abs(n1.y() - n2.y());
+  auto minz = std::min(n1.z(), n2.z());
+  auto maxz = std::max(n1.z(), n2.z());
+  CostType minHCost(COST_MAX), minVCost(COST_MAX);
+  auto window = [&]() {
+    minHCost = COST_MAX;
+    minVCost = COST_MAX;
+    for (int i = minz; i <= maxz; ++i) {
+      minHCost = std::min(minHCost, _layerHCost[i]);
+      minVCost = std::min(minVCost, _layerVCost[i]);
+    }
+  };
+  if (_layerHCost[minz] != _layerVCost[minz]) {
+    // Unlike deltaCost, keep widening outward (upward, then downward) as
+    // long as it keeps finding something cheaper than what's already in
+    // view -- see the file-level comment above for why this needs to be
+    // scoped to pair pre-ranking only, not deltaCost itself.
+    CostType best = std::min(_layerHCost[minz], _layerVCost[minz]);
+    while (maxz < _topRoutingLayer) {
+      const CostType next = std::min(_layerHCost[maxz + 1], _layerVCost[maxz + 1]);
+      if (next >= best) break;
+      ++maxz;
+      best = std::min(best, next);
+    }
+    while (minz > 0) {
+      const CostType next = std::min(_layerHCost[minz - 1], _layerVCost[minz - 1]);
+      if (next >= best) break;
+      --minz;
+      best = std::min(best, next);
+    }
+  }
+  window();
+  if (dx > 0 && minHCost >= COST_MAX) minHCost = _minMetalCost;
+  if (dy > 0 && minVCost >= COST_MAX) minVCost = _minMetalCost;
+  if (n1.z() == n2.z()) {
+    minHCost = relaxed(minHCost, n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
+    minVCost = relaxed(minVCost, n1.z(), n1.x(), n1.y(), n2.x(), n2.y());
+  }
+  dc += (minHCost * dx) + (minVCost * dy);
+  if (dx && dy) {
+    for (int i = minz; i <= maxz; ++i) {
+      if (_layerHCost[i] == minHCost && minHCost == minVCost && _layerVCost[i] == _layerHCost[i]) {
+        dc += (i < _topRoutingLayer) ? _layerPairCost[i][i + 1] / 2 : _layerPairCost[i][i - 1] / 2;
+        break;
+      }
+    }
+  }
+  for (int i = std::min(n1.z(), minz); i < std::max(n1.z(), minz); ++i) {
+    dc += _layerPairCost[i][i+1];
+  }
+  for (int i = minz; i < maxz; ++i) {
+    dc += _layerPairCost[i][i+1];
+  }
+  for (int i = std::min(n2.z(), maxz); i < std::max(n2.z(), maxz); ++i) {
+    dc += _layerPairCost[i][i+1];
+  }
+  return dc;
+}
+
 void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::set<int>& preflayers)
 {
   _savedLayerHCost = _layerHCost;
@@ -1877,7 +1978,7 @@ bool Router::patternRoute()
   std::vector<std::pair<CostType, std::pair<const Node*, const Node*>>> pairs;
   pairs.reserve(_sources.size() * _targets.size());
   for (auto* s : _sources) {
-    for (auto* t : _targets) pairs.emplace_back(_cf.deltaCost(*s, *t), std::make_pair(s, t));
+    for (auto* t : _targets) pairs.emplace_back(_cf.patternLowerBound(*s, *t), std::make_pair(s, t));
   }
   std::sort(pairs.begin(), pairs.end(),
       [](const auto& a, const auto& b) { return a.first < b.first; });
