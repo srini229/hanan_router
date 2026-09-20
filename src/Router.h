@@ -148,6 +148,48 @@ class CostFn {
       while (uf[a] != a) a = uf[a];
       return a;
     }
+    // patternLowerBound()'s widened (minz,maxz) search result, keyed by the
+    // *un*-widened (minz,maxz) pair it started from -- that result depends
+    // only on the layer cost tables, never on which nodes are being
+    // compared, so it is the same for every pair patternRoute() ranks with
+    // the same starting layers. Computed once per _layerHCost/_layerVCost
+    // state (there are at most a handful of distinct (minz,maxz) pairs to
+    // begin with -- (topRoutingLayer+1)^2), instead of re-walked by every
+    // one of the thousands of pair evaluations a single net's pattern
+    // routing can do -- that re-walk, not the O(layers) cost of any single
+    // widen, is what showed up as a real wall-clock slowdown on the
+    // sky130-benchmarks suite (mfb_biquad +18%, mos_bandgap_fb +105%).
+    // Invalidated wherever _layerHCost/_layerVCost themselves change
+    // (updatendr(), resetdirs()), never elsewhere.
+    mutable std::vector<std::vector<std::pair<int, int>>> _widenedWindowCache;
+    mutable bool _widenedWindowDirty{true};
+    void buildWidenedWindowCache() const
+    {
+      const int n = _topRoutingLayer + 1;
+      _widenedWindowCache.assign(n, std::vector<std::pair<int, int>>(n, {0, 0}));
+      for (int minz0 = 0; minz0 < n; ++minz0) {
+        for (int maxz0 = minz0; maxz0 < n; ++maxz0) {
+          int minz = minz0, maxz = maxz0;
+          if (_layerHCost[minz] != _layerVCost[minz]) {
+            CostType best = std::min(_layerHCost[minz], _layerVCost[minz]);
+            while (maxz < _topRoutingLayer) {
+              const CostType next = std::min(_layerHCost[maxz + 1], _layerVCost[maxz + 1]);
+              if (next >= best) break;
+              ++maxz;
+              best = std::min(best, next);
+            }
+            while (minz > 0) {
+              const CostType next = std::min(_layerHCost[minz - 1], _layerVCost[minz - 1]);
+              if (next >= best) break;
+              --minz;
+              best = std::min(best, next);
+            }
+          }
+          _widenedWindowCache[minz0][maxz0] = {minz, maxz};
+        }
+      }
+      _widenedWindowDirty = false;
+    }
   public:
     CostType deltaCost(const Node& n1, const Node& n2) const;
     // Same shape as deltaCost's general (non-adjacent, non-same-layer) case,
@@ -155,6 +197,7 @@ class CostFn {
     // pairs -- see the definition for why it needs a wider layer window than
     // deltaCost's real per-move cost accounting can safely use everywhere.
     CostType patternLowerBound(const Node& n1, const Node& n2) const;
+    void markCostTablesDirty() { _widenedWindowDirty = true; }
     CostFn(const DRC::LayerInfo& lf);
     void setRelaxFloor(const CostType c) { if (c > 0 && c < COST_MAX) _minMetalCost = c; }
     void clearRelaxZones()
@@ -228,6 +271,7 @@ class CostFn {
       if (!_savedLayerHCost.empty()) _layerHCost = _savedLayerHCost;
       if (!_savedLayerVCost.empty()) _layerVCost = _savedLayerVCost;
       _preflayers.clear();
+      _widenedWindowDirty = true;
     }
 };
 
@@ -496,6 +540,7 @@ class Router {
     Geom::LayerTree _ltree;
     std::set<int> _preflayers;
     bool _usepinwidth{false}, _debugplot{false};
+    bool _useWidePatternBound{false};
     int _reorderPasses{10};
     long long _reorderBudget{15000000};
     int _threads{1};
@@ -810,6 +855,19 @@ class Router {
     void setName(const std::string& n) { _name = n; }
     const std::string& name() const { return _name; }
     void setusepinwidth(const bool u) { _usepinwidth = u; }
+    // patternRoute()'s pair pre-ranking uses CostFn::patternLowerBound (a
+    // wider, more optimistic layer-cost search) instead of deltaCost when
+    // this is set -- validated to improve both wirelength and confinement
+    // for an isolated net with little competition for the layers it wants
+    // (the RSMT-corridor GUI-completion path), but measured as a net
+    // *regression* -- worse average wirelength, more full-A* fallback, real
+    // slowdowns -- on whole-chip multi-net sky130-benchmarks circuits: many
+    // nets chasing the same cheap layer congest it, an effect a single
+    // isolated net's test can't show. Module::route() sets this per module
+    // from its own net count, not globally, so a small hierarchy benefits
+    // without risking the main flow's larger blocks.
+    void setWidePatternBound(const bool b) { _useWidePatternBound = b; }
+    bool useWidePatternBound() const { return _useWidePatternBound; }
 
     int widthx(const int z) const { return (_ndrwidthx[z] != INT_MAX ? _ndrwidthx[z] : _widthx[z]); }
     int widthy(const int z) const { return (_ndrwidthy[z] != INT_MAX ? _ndrwidthy[z] : _widthy[z]); }
