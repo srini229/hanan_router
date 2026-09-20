@@ -1278,7 +1278,9 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
       ofs << "END COMPONENTS\n\n";
     }
     if (!_nets.empty()) {
-      ofs << "NETS " << _nets.size() << " ;\n ";
+      unsigned corridorNets = 0;
+      for (auto& n : _nets) if (!n.second.corridor().empty()) ++corridorNets;
+      ofs << "NETS " << (_nets.size() + corridorNets) << " ;\n ";
       for (auto& n : _nets) {
         ofs << "- " << n.first << "\n";
         // Emit the pins in a stable, name-sorted order. Net::pins() is a
@@ -1325,6 +1327,15 @@ void Module::writeDEF(const std::string& outdir, const std::string& nstr, const 
               }
             }
           }
+        }
+        ofs << " ;\n";
+      }
+      for (auto& n : _nets) {
+        if (n.second.corridor().empty()) continue;
+        ofs << "- " << n.first << "_RSMT_CORRIDOR\n";
+        for (auto& r : n.second.corridor()) {
+          ofs << "  + RECT RSMT_CORRIDOR ( " << r.xmin() << ' ' << r.ymin()
+              << " ) ( " << r.xmax() << ' ' << r.ymax() << " )\n";
         }
         ofs << " ;\n";
       }

@@ -444,6 +444,15 @@ class Router {
 #endif
     Geom::LayerRects _obstacles, _tobstacles;
     LayerPolySet _pobstacles, _ptobstacles;
+    // Obstacles added via addObstacles(..., true, /*noCoverHoles=*/true):
+    // merged into _ptobstacles in generateHananGrid() *after* coverHoles()
+    // runs, so they never contribute a "hole" for it to see and fill in --
+    // for a keepout ring (RSMT corridor wall) whose whole interior is
+    // legitimate open routing space, not a small void worth paving over.
+    // Kept separate rather than a per-rect flag so real obstacles' own
+    // coverHoles behaviour (correct for genuine obstacle geometry) is
+    // completely untouched.
+    LayerPolySet _ptobstaclesNoHole;
     LayerPolySet _psources, _ptargets;
 
     CostFn _cf;
@@ -849,13 +858,14 @@ class Router {
       if(temp) {
           _tobstacles.clear();
           _ptobstacles.clear();
+          _ptobstaclesNoHole.clear();
       }
       else {
           _obstacles.clear();
           _pobstacles.clear();
       }
     }
-    void addObstacles(const Geom::LayerRects& lr, const bool temp = false);
+    void addObstacles(const Geom::LayerRects& lr, const bool temp = false, const bool noCoverHoles = false);
 
     void addSourceTargetShapes(const Geom::Rect& r, const int z, const bool src);
     void addSourceShapes(const Geom::Rect& r, const int z) { addSourceTargetShapes(r, z, true); }

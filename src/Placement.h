@@ -148,6 +148,8 @@ class Net {
     const Geom::Rects& corridor() const { return _corridor; }
     const Geom::Rects& corridorEdges() const { return _corridorEdges; }
     Geom::LayerRects dropSameNetObstacles(const Geom::LayerRects& obs) const;
+    Geom::LayerRects ownMetalShapes() const;
+    Geom::LayerRects trimWallToOwnMetal(const Geom::LayerRects& wall) const;
     bool unrouted() const { return _unroute ? true : false; }
     const std::vector<std::string>& openWires() const { return _openwires; }
     // Set once a net has gone through several whole attempts without routing a

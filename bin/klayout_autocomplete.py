@@ -317,7 +317,7 @@ def build_router_inputs(work_dir, net_name, islands, obstacles_by_layer,
 
 
 def run_router(router_bin, layers_json, placement_path, lef_path, ndr_path,
-               work_dir, uu, rsmt=True):
+               work_dir, uu, net_name, rsmt=True):
     """`rsmt` confines the router's search to a corridor around the true
     rectilinear Steiner minimal tree over the net's own pins
     (`hanan_router -rsmt`). For the handful of pins a GUI completion ever
@@ -332,16 +332,29 @@ def run_router(router_bin, layers_json, placement_path, lef_path, ndr_path,
     without it, on the exact same pins. On a whole-chip multi-net run
     `-rsmt` is a real search-space restriction with its own tradeoffs, but
     for one net's worth of pins at GUI-interactive scale it costs nothing
-    and removes a real, observed defect, so it defaults on here."""
+    and removes a real, observed defect, so it defaults on here.
+
+    `HANAN_DEBUG_NET=net_name` makes the router dump `net_TOP_CONC_0_
+    <net_name>.lef` -- a LEF holding exactly the pins and the obstacles it
+    saw for this net *before* routing (see `Net::route`/`Placement.cpp`'s
+    `applyDebug`) -- always on, since it's one small file and it is the
+    only direct way to confirm the obstacles a caller declared actually
+    reached the router unchanged (`net_debug_obstacles`/
+    `paint_net_obstacles` below read it back). Runs with `cwd=work_dir` so
+    that file (and the router's own `route.log`/`err.log`, which it always
+    writes by bare relative name) land somewhere the caller controls
+    instead of wherever the calling process's cwd happened to be."""
     out_dir = os.path.join(work_dir, "route_out")
     os.makedirs(out_dir, exist_ok=True)
     cmd = [router_bin, "-d", layers_json, "-p", placement_path,
            "-l", lef_path, "-uu", str(uu), "-ndr", ndr_path, "-o", out_dir]
     if rsmt:
         cmd.append("-rsmt")
-    p = subprocess.run(cmd, capture_output=True, text=True)
+    env = dict(os.environ, HANAN_DEBUG_NET=net_name)
+    p = subprocess.run(cmd, capture_output=True, text=True, cwd=work_dir, env=env)
     routed_def = os.path.join(out_dir, "TOP_CONC_0.def")
-    return p.returncode, p.stdout + p.stderr, routed_def
+    debug_lef = os.path.join(work_dir, f"net_TOP_CONC_0_{net_name}.lef")
+    return p.returncode, p.stdout + p.stderr, routed_def, debug_lef
 
 
 def def_net_rects(def_path, net_name):
@@ -368,6 +381,87 @@ def def_net_rects(def_path, net_name):
     return out
 
 
+CORRIDOR_LAYER = (999, 0)  # not used by any real sky130 (or other) layers.json
+                            # layer number seen so far -- purely a debug
+                            # visualization layer, never a routable one.
+CORRIDOR_WALL_LAYER = (998, 0)  # the corridor's own boundary-wall obstacles
+                                 # (what `-rsmt` actually adds to the router as
+                                 # a keepout, not just the band area) -- a
+                                 # route can stay inside CORRIDOR_LAYER's
+                                 # bands and still be blocked by one of these
+                                 # walls; distinct from CORRIDOR_LAYER so the
+                                 # two can be toggled independently.
+
+
+def lef_obs_layer_rects(lef_path, layer_name):
+    """[(x0, y0, x1, y1) microns] for one named OBS layer in a router-written
+    LEF (`Module::writeLEF`'s hierarchical interim LEF, `TOP_CONC_0_interim_
+    hier.lef` -- distinct from `Net::writeLEF`'s per-net debug dump that
+    `net_debug_obstacles` reads). Empty, not an error, if the file or that
+    layer isn't present -- e.g. routed without `-rsmt`, or the router
+    predates this OBS layer."""
+    if not os.path.exists(lef_path):
+        return []
+    with open(lef_path, errors="ignore") as f:
+        text = f.read()
+    m = re.search(r"\n    OBS\n(.*?)\n    END\n", text, re.S)
+    if not m:
+        return []
+    out, layer = [], None
+    for line in m.group(1).splitlines():
+        lm = re.match(r"\s*LAYER (\S+) ;", line)
+        if lm:
+            layer = lm.group(1)
+            continue
+        rm = re.match(r"\s*RECT (\S+) (\S+) (\S+) (\S+) ;", line)
+        if rm and layer == layer_name:
+            out.append(tuple(float(v) for v in rm.groups()))
+    return out
+
+
+def paint_corridor_walls(layout, cell, hier_lef_path, net_name, dbu,
+                          layer_spec=CORRIDOR_WALL_LAYER):
+    """Paint the `-rsmt` corridor's actual boundary-wall obstacles -- what
+    `Net::route()` adds to the router as a keepout around `CORRIDOR_LAYER`'s
+    bands -- onto their own scratch layer. These walls are what can block a
+    port pair even while every routed shape still ends up inside the
+    corridor's own area: the wall is a real obstacle in its own right, not
+    just an outline of where the bands are. Reads `net_TOP_CONC_0_<net>`'s
+    sibling `TOP_CONC_0_interim_hier.lef` (written unconditionally by
+    `Module::writeLEF`, not gated behind `HANAN_DEBUG_NET` -- that env var
+    only controls the *per-net pre-route snapshot* `net_debug_obstacles`
+    reads, a different file entirely)."""
+    idx = layout.layer(*layer_spec)
+    inserted = 0
+    for x0, y0, x1, y1 in lef_obs_layer_rects(hier_lef_path, f"RSMT_{net_name}"):
+        box = db.Box(round(x0 / dbu), round(y0 / dbu),
+                      round(x1 / dbu), round(y1 / dbu))
+        cell.shapes(idx).insert(box)
+        inserted += 1
+    return inserted
+
+
+def paint_rsmt_corridor(layout, cell, def_path, net_name, dbu,
+                         layer_spec=CORRIDOR_LAYER):
+    """Paint the `-rsmt` search corridor the router actually confined
+    `net_name` to (a `<net>_RSMT_CORRIDOR` pseudo-net the DEF carries
+    whenever `-rsmt` was used) onto a scratch layer, so it's visible
+    alongside the routed wires -- e.g. to see whether a suboptimal topology
+    genuinely had no better path inside the corridor, or whether the
+    corridor itself already covered a shorter one the port-pairing missed.
+    A DEF without that pseudo-net (routed without `-rsmt`) paints nothing
+    and returns 0, not an error."""
+    idx = layout.layer(*layer_spec)
+    scale = (1.0 / dbu) / layout.dbu
+    inserted = 0
+    for _layer_name, x0, y0, x1, y1 in def_net_rects(def_path, f"{net_name}_RSMT_CORRIDOR"):
+        box = db.Box(round(x0 * scale), round(y0 * scale),
+                      round(x1 * scale), round(y1 * scale))
+        cell.shapes(idx).insert(box)
+        inserted += 1
+    return inserted
+
+
 def paint_routed_def(layout, cell, def_path, net_name, draw_by_name, dbu):
     """Insert the router's new geometry for `net_name` directly into `cell`
     (metal *and* via-cut layers -- `draw_by_name` covers both, keyed exactly
@@ -389,17 +483,77 @@ def paint_routed_def(layout, cell, def_path, net_name, draw_by_name, dbu):
     return inserted
 
 
+def net_debug_obstacles(lef_path):
+    """{layer_name: [(x0, y0, x1, y1) microns]} from a `net_TOP_CONC_0_
+    <net>.lef` debug dump (see `run_router`) -- the OBS block only, "BBOX"
+    (the net's own bounding box, not a real obstacle) excluded. Empty dict,
+    not an error, if the file doesn't exist (`HANAN_DEBUG_NET` unsupported
+    by an older router, or the OBS block came back empty)."""
+    if not os.path.exists(lef_path):
+        return {}
+    with open(lef_path, errors="ignore") as f:
+        text = f.read()
+    m = re.search(r"\n  OBS\n(.*?)\n  END\n", text, re.S)
+    if not m:
+        return {}
+    out, layer = {}, None
+    for line in m.group(1).splitlines():
+        lm = re.match(r"\s*LAYER (\S+) ;", line)
+        if lm:
+            layer = lm.group(1)
+            continue
+        rm = re.match(r"\s*RECT (\S+) (\S+) (\S+) (\S+) ;", line)
+        if rm and layer and layer != "BBOX":
+            out.setdefault(layer, []).append(tuple(float(v) for v in rm.groups()))
+    return out
+
+
+OBSTACLE_DATATYPE = 98  # paired with each metal's own GDS layer number (not
+                         # CORRIDOR_LAYER's dummy number) so toggling one
+                         # metal's obstacle overlay in the Layers panel sits
+                         # right next to that metal's own routed geometry.
+
+
+def paint_net_obstacles(layout, cell, lef_path, draw_by_name, dbu,
+                         datatype=OBSTACLE_DATATYPE):
+    """Paint exactly the obstacles `run_router`'s `HANAN_DEBUG_NET` dump
+    says the router saw for this net -- before any routing happened -- onto
+    each obstacle metal's own GDS layer number at `datatype`, so "did my
+    obstacle actually reach the router" is a direct visual diff against the
+    real drawn shape on the same layer, not a guess. A layer name the debug
+    LEF mentions that isn't in `draw_by_name` (shouldn't happen -- the
+    router only ever echoes layer names from `layers.json`) is skipped
+    rather than raising, consistent with `paint_routed_def`."""
+    inserted = 0
+    for layer_name, rects in net_debug_obstacles(lef_path).items():
+        spec = draw_by_name.get(layer_name)
+        if spec is None:
+            continue
+        idx = layout.layer(spec[0], datatype)
+        for x0, y0, x1, y1 in rects:
+            box = db.Box(round(x0 / dbu), round(y0 / dbu),
+                          round(x1 / dbu), round(y1 / dbu))
+            cell.shapes(idx).insert(box)
+            inserted += 1
+    return inserted
+
+
 def complete_net_on_layout(layout, cell, layers_json, net_name, router_bin,
-                            work_dir, uu=1000, margin_um=5.0, rsmt=True):
+                            work_dir, uu=1000, margin_um=5.0, rsmt=True,
+                            show_corridor=True, show_obstacles=True):
     """The reusable core: find islands, route if broken, paint back into
     `cell` in place. Takes an already-open `db.Layout`/`pya.Layout` and
     `cell` directly -- this is what a GUI macro calls on the live, currently
     open layout, with no GDS export/reimport round trip; `complete_net`
     (below) is the thin file-based wrapper CLI/test use goes through.
     `rsmt` is passed straight to `run_router` -- see there for why it
-    defaults on. Returns a status dict -- never raises for an ordinary "not
-    broken" or "net not found" outcome, only for a real I/O or router
-    failure."""
+    defaults on. `show_corridor` (only meaningful with `rsmt`) additionally
+    paints the RSMT search corridor onto a scratch layer (`CORRIDOR_LAYER`)
+    -- a debug aid, on by default while the router's own MST-vs-Steiner
+    topology gap is still being characterized; a caller happy to trust the
+    routed result without inspecting the corridor can pass `False`. Returns
+    a status dict -- never raises for an ordinary "not broken" or "net not
+    found" outcome, only for a real I/O or router failure."""
     metals, labels, vias, draw_by_name, widths = load_layers(layers_json)
     islands, all_by_layer = net_islands(layout, cell, metals, labels, vias, net_name)
 
@@ -430,21 +584,33 @@ def complete_net_on_layout(layout, cell, layers_json, net_name, router_bin,
     placement_path, ndr_path, lef_path = build_router_inputs(
         work_dir, net_name, islands, obstacles_by_layer, dbu_um, uu, bbox_um,
         widths)
-    rc, log, routed_def = run_router(router_bin, layers_json, placement_path,
-                                      lef_path, ndr_path, work_dir, uu, rsmt)
+    rc, log, routed_def, debug_lef = run_router(
+        router_bin, layers_json, placement_path, lef_path, ndr_path,
+        work_dir, uu, net_name, rsmt)
     if rc != 0 or not os.path.exists(routed_def):
         return {"status": "route_failed", "net": net_name, "log": log}
 
     inserted = paint_routed_def(layout, cell, routed_def, net_name, draw_by_name, uu)
+    hier_lef = os.path.join(work_dir, "route_out", "TOP_CONC_0_interim_hier.lef")
+    corridor_shapes = (paint_rsmt_corridor(layout, cell, routed_def, net_name, uu)
+                        if rsmt and show_corridor else 0)
+    corridor_wall_shapes = (paint_corridor_walls(layout, cell, hier_lef, net_name, dbu_um)
+                             if rsmt and show_corridor else 0)
+    obstacle_shapes = (paint_net_obstacles(layout, cell, debug_lef, draw_by_name, dbu_um)
+                        if show_obstacles else 0)
     islands2, _ = net_islands(layout, cell, metals, labels, vias, net_name)
     return {"status": "completed" if len(islands2) == 1 else "still_broken",
             "net": net_name, "islands_before": len(islands),
             "islands_after": len(islands2), "shapes_inserted": inserted,
+            "corridor_shapes": corridor_shapes,
+            "corridor_wall_shapes": corridor_wall_shapes,
+            "obstacle_shapes": obstacle_shapes,
             "layout": layout, "log": log}
 
 
 def complete_net_from_points(layout, cell, layers_json, points, router_bin,
-                              work_dir, uu=1000, margin_um=5.0, rsmt=True):
+                              work_dir, uu=1000, margin_um=5.0, rsmt=True,
+                              show_corridor=True, show_obstacles=True):
     """Like `complete_net_on_layout`, but the net is derived from a set of
     world-space points -- typically one per shape the user selected in the
     GUI -- instead of being typed in: "select the pin shape and get the
@@ -475,7 +641,8 @@ def complete_net_from_points(layout, cell, layers_json, points, router_bin,
 
     net_name = next(iter(names))
     result = complete_net_on_layout(layout, cell, layers_json, net_name,
-                                     router_bin, work_dir, uu, margin_um, rsmt)
+                                     router_bin, work_dir, uu, margin_um, rsmt,
+                                     show_corridor, show_obstacles)
     result["resolved_from_selection"] = True
     if unresolved:
         result["unresolved_points"] = unresolved
@@ -483,7 +650,8 @@ def complete_net_from_points(layout, cell, layers_json, points, router_bin,
 
 
 def complete_net(gds_path, layers_json, net_name, router_bin, work_dir,
-                  top_cell=None, uu=1000, margin_um=5.0, rsmt=True):
+                  top_cell=None, uu=1000, margin_um=5.0, rsmt=True,
+                  show_corridor=True, show_obstacles=True):
     """File-based wrapper around `complete_net_on_layout` for CLI/test use --
     reads `gds_path` fresh and returns the (modified, in-memory) layout for
     the caller to write out; never touches the file on disk itself."""
@@ -491,7 +659,8 @@ def complete_net(gds_path, layers_json, net_name, router_bin, work_dir,
     layout.read(gds_path)
     cell = layout.top_cell() if top_cell is None else layout.cell(top_cell)
     return complete_net_on_layout(layout, cell, layers_json, net_name,
-                                   router_bin, work_dir, uu, margin_um, rsmt)
+                                   router_bin, work_dir, uu, margin_um, rsmt,
+                                   show_corridor, show_obstacles)
 
 
 def main():
@@ -507,12 +676,18 @@ def main():
     ap.add_argument("--margin", type=float, default=5.0)
     ap.add_argument("--no-rsmt", action="store_true",
                      help="don't confine routing to an RSMT corridor (on by default)")
+    ap.add_argument("--no-corridor", action="store_true",
+                     help=f"don't paint the RSMT corridor onto layer {CORRIDOR_LAYER} (on by default)")
+    ap.add_argument("--no-obstacles", action="store_true",
+                     help="don't paint the obstacles the router actually saw for this net, onto "
+                          f"each obstacle metal's own layer at datatype {OBSTACLE_DATATYPE} (on by default)")
     a = ap.parse_args()
 
     with tempfile.TemporaryDirectory() as work_dir:
         result = complete_net(a.gds, a.layers, a.net, a.router, work_dir,
                                top_cell=a.top_cell, uu=a.uu, margin_um=a.margin,
-                               rsmt=not a.no_rsmt)
+                               rsmt=not a.no_rsmt, show_corridor=not a.no_corridor,
+                               show_obstacles=not a.no_obstacles)
     layout = result.pop("layout", None)
     print(json.dumps(result, indent=2, default=str))
     if layout is not None:

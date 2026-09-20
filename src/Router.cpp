@@ -1446,8 +1446,24 @@ void Router::generateHananGrid()
   for (auto& l : _ptobstacles) {
     auto its = _psources.find(l.first);
     auto ith = _ptargets.find(l.first);
-    coverHoles(l.second, ((its != _psources.end()) ? its->second : PolySet()), 
+    coverHoles(l.second, ((its != _psources.end()) ? its->second : PolySet()),
         ((ith != _ptargets.end()) ? ith->second : PolySet()));
+  }
+  // Merge in the no-cover-holes obstacles (e.g. the RSMT corridor's keepout
+  // wall) only *after* coverHoles has run -- every layer alike, not just
+  // whichever layer a pin happens to sit on. A keepout wall is a closed ring
+  // by construction; if it were visible to coverHoles above, the ring's own
+  // interior -- the corridor's entire routable area -- reads as exactly the
+  // kind of small enclosed void coverHoles exists to pave over, and gets
+  // filled in solid. Verified: this is what made a trivially-open L-shaped
+  // route inside an intact, correctly-shaped corridor register as fully
+  // blocked on M1 through M4 alike, not one specific layer.
+  for (auto& l : _ptobstaclesNoHole) {
+    _ptobstacles[l.first] += l.second;
+  }
+  for (auto& l : _ptobstacles) {
+    auto its = _psources.find(l.first);
+    auto ith = _ptargets.find(l.first);
     if (its != _psources.end()) {
       l.second -= its->second;
     }
@@ -1874,6 +1890,13 @@ bool Router::patternRoute()
       if (lb >= bestcost) break;              // sorted: nothing later can win
       auto keep = [&]() {
         const CostType c = patternCost(w);
+        if (getenv("HANAN_DEBUG_PATTERN")) {
+          CERR << "DEBUGPATTERN candidate s=(" << s->x() << ',' << s->y() << ',' << s->z()
+               << ") t=(" << t->x() << ',' << t->y() << ',' << t->z() << ") lb=" << lb
+               << " cost=" << c << " waypoints:";
+          for (auto& wp : w) CERR << " (" << wp.x << ',' << wp.y << ',' << wp.z << ')';
+          CERR << (c < bestcost ? "  <-- new best\n" : "\n");
+        }
         if (c < bestcost) { bestcost = c; best = w; bests = s; bestt = t; bestlb = lb; }
       };
       for (const bool xfirst : {true, false}) {
@@ -2413,7 +2436,7 @@ void Router::plot() const
   }
 }*/
 
-void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
+void Router::addObstacles(const Geom::LayerRects& lr, const bool temp, const bool noCoverHoles)
 {
   std::set<int> uselayers;
   bool srcInPref{false}, tgtInPref{false};
@@ -2489,7 +2512,9 @@ void Router::addObstacles(const Geom::LayerRects& lr, const bool temp)
         if (olsrcortgt) break;
       }*/
       //if (!olsrcortgt) {
-        if (temp) {
+        if (temp && noCoverHoles) {
+          _ptobstaclesNoHole[layer] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
+        } else if (temp) {
           _ptobstacles[layer] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
         } else {
           _pobstacles[layer] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
@@ -2755,22 +2780,45 @@ bool Router::escapesConnected() const
     if (b >= 0) out.push_back(b);
   };
 
+  // HANAN_DEBUG_ESCAPE=1 traces this function's own reachability walk to
+  // stderr (err.log, once redirected) -- source/target grid hits, every
+  // segment popped, every crossing candidate checked and whether segAt()
+  // resolved it. Added to localize a real bug (2026-09-20: an RSMT keepout
+  // wall making escapesConnected() report a trivially-open pin pair as
+  // unreachable) and kept permanently since reproducing that kind of failure
+  // by hand from first principles is slow and this makes it immediate.
+  const bool debugEscape = getenv("HANAN_DEBUG_ESCAPE") != nullptr;
+
   std::vector<char> seen(segs.size(), 0);
   std::vector<int> stack;
+  if (debugEscape) {
+    for (const auto* t : _targets) CERR << "DEBUGESCAPE target " << t->x() << ' ' << t->y() << ' ' << t->z() << '\n';
+    for (const auto* s : _sources) CERR << "DEBUGESCAPE source " << s->x() << ' ' << s->y() << ' ' << s->z() << '\n';
+    for (auto& l : _tobstacles) {
+      CERR << "DEBUGESCAPE _tobstacles layer " << l.first << " (" << l.second.size() << "):";
+      for (auto& r : l.second) CERR << " [" << r.xmin() << ',' << r.ymin() << "-" << r.xmax() << ',' << r.ymax() << ']';
+      CERR << '\n';
+    }
+  }
   for (const auto* t : _targets) {
     std::vector<int> hit;
     segsThrough(t->z(), t->x(), t->y(), hit);
+    if (debugEscape) CERR << "DEBUGESCAPE target hits " << hit.size() << '\n';
     for (const int i : hit) seen[i] = 2;          // 2 marks a target segment
   }
   for (const auto* s : _sources) {
     std::vector<int> hit;
     segsThrough(s->z(), s->x(), s->y(), hit);
+    if (debugEscape) CERR << "DEBUGESCAPE source hits " << hit.size() << '\n';
     for (const int i : hit) {
       if (seen[i] == 2) return true;
       if (!seen[i]) { seen[i] = 1; stack.push_back(i); }
     }
   }
-  if (stack.empty()) return true;   // no source sits on the grid; not our call
+  if (stack.empty()) {
+    if (debugEscape) CERR << "DEBUGESCAPE stack empty, returning true\n";
+    return true;   // no source sits on the grid; not our call
+  }
 
   int visits = 0;
   auto reach = [&](const int i) {
@@ -2783,14 +2831,39 @@ bool Router::escapesConnected() const
     if (++visits > REACH_VISIT_LIMIT) return true;   // inconclusive, let A* decide
     const Seg s = segs[stack.back()];
     stack.pop_back();
+    if (debugEscape) CERR << "DEBUGESCAPE pop line=" << s.line << " lo=" << s.lo << " hi=" << s.hi << " z=" << s.z << " vert=" << s.vert << '\n';
     // perpendicular lines crossing this segment, on this layer and its neighbours
     for (int dz = -1; dz <= 1; ++dz) {
       const int z = s.z + dz;
       if (z < _minLayer || z > _maxLayer) continue;
       const auto& cross = s.vert ? _hanangridh[z] : _hanangridv[z];
+      int ccount = 0;
       for (auto it = cross.lower_bound(s.lo); it != cross.end() && it->first <= s.hi; ++it) {
-        if (reach(segAt(z, !s.vert, it->first, s.line))) return true;
+        ++ccount;
+        const int segidx = segAt(z, !s.vert, it->first, s.line);
+        if (debugEscape) {
+          CERR << "DEBUGESCAPE  dz=" << dz << " z=" << z << " cross_line=" << it->first << " segidx=" << segidx;
+          if (segidx < 0) {
+            // Why this candidate line didn't cover s.line: dump its actual
+            // free intervals (or note it has none at all) instead of just
+            // the miss, so a blocked crossing is diagnosable from the log
+            // alone rather than needing another debug pass.
+            auto bl = byLine.find(std::make_tuple(z, !s.vert ? 1 : 0, it->first));
+            if (bl == byLine.end()) {
+              CERR << " (no line at " << it->first << " on layer " << z << ")";
+            } else {
+              CERR << " (line " << it->first << " free intervals:";
+              for (int i = bl->second.first; i < bl->second.second; ++i) {
+                CERR << " [" << segs[i].lo << ',' << segs[i].hi << ']';
+              }
+              CERR << ", looking for " << s.line << ")";
+            }
+          }
+          CERR << '\n';
+        }
+        if (reach(segidx)) return true;
       }
+      if (debugEscape) CERR << "DEBUGESCAPE  dz=" << dz << " z=" << z << " cross candidates=" << ccount << '\n';
       if (dz == 0) continue;
       // and the same-orientation line directly above or below
       auto it = byLine.find(std::make_tuple(z, s.vert ? 1 : 0, s.line));
@@ -2800,6 +2873,7 @@ bool Router::escapesConnected() const
       }
     }
   }
+  if (debugEscape) CERR << "DEBUGESCAPE exhausted stack, visits=" << visits << ", returning false\n";
   return false;
 }
 

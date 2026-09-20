@@ -7,6 +7,14 @@
 using namespace boost::polygon::operators;
 static const int RSMT_CORRIDOR_PITCHES = 4;
 static const int RSMT_EDGE_WIDTH = 5;   // drawn width of the corridor outline
+// How far each wall segment overhangs past its own endpoint, along the edge,
+// on top of the perpendicular RSMT_EDGE_WIDTH/2 every segment already gets at
+// a corner. The wall is a ring of separate per-edge rects, not one polygon;
+// a bare corner-touch is one bad trim (or any future boolean op on the wall)
+// away from cutting the ring into disconnected pieces. A generous overlap
+// here means a local carve-out near one corner still leaves its two
+// neighbouring segments overlapping each other, not just meeting edge-to-edge.
+static const int RSMT_WALL_OVERLAP = RSMT_EDGE_WIDTH * 8;
 
 #include <algorithm>
 #include <mutex>
@@ -191,11 +199,11 @@ static Geom::Rects outlineBoxes(const Geom::Rects& region, const int w, int* nho
       const auto& a = pts[i];
       const auto& b = pts[(i + 1) % pts.size()];
       if (a.y() == b.y()) {
-        edges.emplace_back(std::min(a.x(), b.x()) - lo, a.y() - lo,
-                           std::max(a.x(), b.x()) + hi, a.y() + hi);
+        edges.emplace_back(std::min(a.x(), b.x()) - RSMT_WALL_OVERLAP, a.y() - lo,
+                           std::max(a.x(), b.x()) + RSMT_WALL_OVERLAP, a.y() + hi);
       } else if (a.x() == b.x()) {
-        edges.emplace_back(a.x() - lo, std::min(a.y(), b.y()) - lo,
-                           a.x() + hi, std::max(a.y(), b.y()) + hi);
+        edges.emplace_back(a.x() - lo, std::min(a.y(), b.y()) - RSMT_WALL_OVERLAP,
+                           a.x() + hi, std::max(a.y(), b.y()) + RSMT_WALL_OVERLAP);
       }
     }
   };
@@ -254,11 +262,9 @@ Geom::Rects Net::rsmtCorridor(const int margin) const
   return out;
 }
 
-Geom::LayerRects Net::dropSameNetObstacles(const Geom::LayerRects& obs) const
+Geom::LayerRects Net::ownMetalShapes() const
 {
-  Geom::LayerRects kept;
-  // Seed from all of this net's metal -- its pins and anything already routed --
-  // so obstacle shapes continuous with either are recognised as ours.
+  // Seed from all of this net's metal -- its pins and anything already routed.
   Geom::LayerRects pinshapes;
   for (auto virt : {true, false}) {
     for (auto& p : (virt ? _vpins : _pins)) {
@@ -272,6 +278,33 @@ Geom::LayerRects Net::dropSameNetObstacles(const Geom::LayerRects& obs) const
   for (const auto& l : _routeshapeswithpins) {
     for (const auto& r : l.second) pinshapes[l.first].push_back(r);
   }
+  return pinshapes;
+}
+
+Geom::LayerRects Net::trimWallToOwnMetal(const Geom::LayerRects& wall) const
+{
+  const Geom::LayerRects pinshapes = ownMetalShapes();
+  Geom::LayerRects kept;
+  for (const auto& lo : wall) {
+    const auto ip = pinshapes.find(lo.first);
+    if (ip == pinshapes.end() || lo.second.empty()) { kept[lo.first] = lo.second; continue; }
+    PolySet pins, wallps;
+    for (const auto& r : ip->second) pins.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+    for (const auto& r : lo.second)  wallps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+    wallps -= pins;
+    PRects krects;
+    get_rectangles(krects, wallps);
+    auto& out = kept[lo.first];
+    out.reserve(krects.size());
+    for (const auto& k : krects) out.emplace_back(bp::xl(k), bp::yl(k), bp::xh(k), bp::yh(k));
+  }
+  return kept;
+}
+
+Geom::LayerRects Net::dropSameNetObstacles(const Geom::LayerRects& obs) const
+{
+  Geom::LayerRects kept;
+  const Geom::LayerRects pinshapes = ownMetalShapes();
   for (const auto& lo : obs) {
     const auto ip = pinshapes.find(lo.first);
     if (ip == pinshapes.end() || lo.second.empty()) { kept[lo.first] = lo.second; continue; }
@@ -364,14 +397,19 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
 
     PortPairs ppairs = (_driver.empty() ? reorderPorts() : clockRouteOrder());
 
-    Geom::LayerRects keepout;
-    if (router.rsmtCorridor()) {
+    // Builds the RSMT corridor's boundary-wall obstacles at a given pitch
+    // margin. corridorOut/edgesOut, when non-null, also record the raw
+    // corridor for visualization (only the net-wide base call below does
+    // this -- a later per-pair retry at a wider margin must not overwrite
+    // what the whole net's corridor is reported as).
+    auto buildKeepout = [&](const int pitchMul, Geom::Rects* corridorOut, Geom::Rects* edgesOut) -> Geom::LayerRects {
+      Geom::LayerRects ko;
       int pitch = 0;
       for (int z = router.minLayer(); z <= router.maxLayer(); ++z) {
         pitch = std::max(pitch, std::max(router.baseWidthX(z), router.baseWidthY(z))
                               + std::max(router.baseSpaceX(z), router.baseSpaceY(z)));
       }
-      auto corridor = rsmtCorridor(pitch * RSMT_CORRIDOR_PITCHES);
+      auto corridor = rsmtCorridor(pitch * pitchMul);
       if (!corridor.empty() && bbox.valid()) {
         PolySet cs;
         for (const auto& r : corridor) cs.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
@@ -383,17 +421,29 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         corridor.clear();
         for (const auto& c : crects) corridor.emplace_back(bp::xl(c), bp::yl(c), bp::xh(c), bp::yh(c));
       }
-      _corridor = corridor;
       int nholes = 0;
-      _corridorEdges = outlineBoxes(corridor, RSMT_EDGE_WIDTH, &nholes);
-      if (!_corridorEdges.empty()) {
-        for (const auto& r : _corridorEdges) {
-          for (int z = router.minLayer(); z <= router.maxLayer(); ++z) keepout[z].push_back(r);
+      const auto edges = outlineBoxes(corridor, RSMT_EDGE_WIDTH, &nholes);
+      if (!edges.empty()) {
+        for (const auto& r : edges) {
+          for (int z = router.minLayer(); z <= router.maxLayer(); ++z) ko[z].push_back(r);
         }
-        COUT << "RSMT corridor for net " << _name << " : " << corridor.size()
-             << " band(s), " << nholes << " hole(s), boundary " << _corridorEdges.size() << " wall(s) on layers "
-             << router.minLayer() << ".." << router.maxLayer() << '\n';
+        COUT << "RSMT corridor for net " << _name << " (" << pitchMul << " pitch margin) : "
+             << corridor.size() << " band(s), " << nholes << " hole(s), boundary " << edges.size()
+             << " wall(s) on layers " << router.minLayer() << ".." << router.maxLayer() << '\n';
       }
+      if (corridorOut) *corridorOut = corridor;
+      if (edgesOut) *edgesOut = edges;
+      return ko;
+    };
+    // dropSameNetObstacles is re-run against the *current* keepout walls at
+    // each call site below, rather than baked in once here: _routeshapeswithpins
+    // grows as each port pair routes, so a wire this net lays for an earlier
+    // pair -- which can legitimately run right along the corridor boundary --
+    // must not be walled off from a later pair's escape.
+
+    Geom::LayerRects keepoutWalls;
+    if (router.rsmtCorridor()) {
+      keepoutWalls = buildKeepout(RSMT_CORRIDOR_PITCHES, &_corridor, &_corridorEdges);
     }
 
     for (auto& pp : ppairs) {
@@ -482,24 +532,63 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.addObstacles(tracing ? l3t : l3, true);
       router.addObstacles(tracing ? obt : _obstacles, true);
       router.addObstacles(samenetobst, true);
-      router.addObstacles(keepout, true);
+      const Geom::LayerRects keepout = trimWallToOwnMetal(keepoutWalls);
+      if (getenv("HANAN_DEBUG_ESCAPE")) {
+        for (auto& l : keepoutWalls) {
+          auto it2 = keepout.find(l.first);
+          const size_t after = (it2 == keepout.end()) ? 0 : it2->second.size();
+          CERR << "DEBUGESCAPE keepoutWalls layer " << l.first << " before=" << l.second.size()
+               << " after-drop=" << after << '\n';
+        }
+      }
+      router.addObstacles(keepout, true, true);
       auto sol = router.findSol();
       if (!router.lastSolutionFound() && !keepout.empty()) {
-        COUT << "RSMT corridor blocked " << port1->name() << " -> " << port2->name()
-             << " ; retrying without it\n";
-        router.clearObstacles(true);
-        router.clearSourceTargets();
-        router.setName(_name + "__" + port1->name() + "__" + port2->name());
-        router.setMBox(bbox);
-        addSrcTgtShapes();
-        router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers, _ndrvias);
-        if (_detour) router.allowDetour();
-        router.addObstacles(l1, true);
-        router.addObstacles(l2, true);
-        router.addObstacles(tracing ? l3t : l3, true);
-        router.addObstacles(tracing ? obt : _obstacles, true);
-        router.addObstacles(samenetobst, true);
-        sol = router.findSol();
+        // A blocked pair does not immediately mean the whole net-wide
+        // corridor is wrong for it -- it usually means a real obstacle
+        // sits inside the corridor near this particular pair. Widen the
+        // margin around the same RSMT topology a few times before giving
+        // up on staying confined at all; only the last resort drops the
+        // corridor entirely, so a genuinely unconstrained route stays rare
+        // and is logged loudly rather than being the routine outcome.
+        auto retryAttempt = [&](const Geom::LayerRects& ko, const std::string& stage) -> Geom::LayerRects {
+          router.clearObstacles(true);
+          router.clearSourceTargets();
+          // Each stage gets its own debug-dump name -- the base attempt above
+          // already claimed the plain pair name, so every retry here would
+          // otherwise overwrite the same ATTEMPT_*.lef file as the *next*
+          // retry, leaving only the very last stage's obstacle set on disk
+          // (usually the empty-keepout unconstrained one) and making it look
+          // like the corridor was never applied at all for a pair that
+          // needed retries -- it was, just not visible after the fact.
+          router.setName(_name + "__" + port1->name() + "__" + port2->name() + "__" + stage);
+          router.setMBox(bbox);
+          addSrcTgtShapes();
+          router.updatendr(update, _ndrwidths, _ndrspaces, _ndrdirs, _preflayers, _ndrvias);
+          if (_detour) router.allowDetour();
+          router.addObstacles(l1, true);
+          router.addObstacles(l2, true);
+          router.addObstacles(tracing ? l3t : l3, true);
+          router.addObstacles(tracing ? obt : _obstacles, true);
+          router.addObstacles(samenetobst, true);
+          if (!ko.empty()) router.addObstacles(ko, true, true);
+          return router.findSol();
+        };
+        static const int RETRY_PITCH_MULS[] = {
+          RSMT_CORRIDOR_PITCHES * 2, RSMT_CORRIDOR_PITCHES * 4, RSMT_CORRIDOR_PITCHES * 8};
+        bool widened = false;
+        for (const int mul : RETRY_PITCH_MULS) {
+          const Geom::LayerRects wider = trimWallToOwnMetal(buildKeepout(mul, nullptr, nullptr));
+          COUT << "RSMT corridor blocked " << port1->name() << " -> " << port2->name()
+               << " ; retrying with a wider corridor (" << mul << " pitch margin)\n";
+          sol = retryAttempt(wider, "margin" + std::to_string(mul));
+          if (router.lastSolutionFound()) { widened = true; break; }
+        }
+        if (!widened) {
+          COUT << "RSMT corridor still blocks " << port1->name() << " -> " << port2->name()
+               << " at " << RETRY_PITCH_MULS[2] << " pitch margin; routing this pair unconstrained\n";
+          sol = retryAttempt(Geom::LayerRects(), "unconstrained");
+        }
       }
       // Not sol.empty(): a source and target that already coincide need zero
       // additional shapes and legitimately return an empty sol on success.

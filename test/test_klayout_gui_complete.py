@@ -107,6 +107,54 @@ class KlayoutGuiComplete(unittest.TestCase):
         self.assertEqual(net_span(layout, layout.top_cell(), self.layers, "N1"), 1)
         self.assertEqual(net_span(layout, layout.top_cell(), self.layers, "N2"), 1)
 
+    def test_corridor_painted_on_scratch_layer_by_default(self):
+        """The RSMT search corridor lands on its own scratch layer, not
+        mixed into any real metal layer -- must not appear as extra "M1"
+        (etc.) shapes that would confuse a connectivity check."""
+        result = ka.complete_net(self.gds, self.layers, "N1", ROUTER, self.d)
+        layout = result.pop("layout", None)
+        self.assertGreater(result["corridor_shapes"], 0)
+
+        idx = layout.layer(*ka.CORRIDOR_LAYER)
+        n = sum(1 for _ in db.RecursiveShapeIterator(layout, layout.top_cell(), idx))
+        self.assertEqual(n, result["corridor_shapes"])
+        # Real-net connectivity is unaffected by the corridor's presence.
+        self.assertEqual(net_span(layout, layout.top_cell(), self.layers, "N1"), 1)
+
+    def test_show_corridor_false_paints_nothing(self):
+        result = ka.complete_net(self.gds, self.layers, "N1", ROUTER, self.d,
+                                  show_corridor=False)
+        result.pop("layout", None)
+        self.assertEqual(result["corridor_shapes"], 0)
+
+    def test_obstacles_painted_match_the_real_obstacle(self):
+        """N2's M2 strap is a real obstacle in N1's routing area (see
+        `build_fixture`) -- the debug overlay this reads back from the
+        router's own `HANAN_DEBUG_NET` dump must show it on M2's own GDS
+        layer, not just claim a nonzero count. This is the check for
+        "is the obstacle I declared actually reaching the router", not a
+        stand-in for the corridor/topology checks above."""
+        result = ka.complete_net(self.gds, self.layers, "N1", ROUTER, self.d)
+        layout = result.pop("layout", None)
+        self.assertEqual(result["status"], "completed", result)
+        self.assertGreater(result["obstacle_shapes"], 0)
+
+        m2_layer = ka.load_layers(self.layers)[3]["M2"][0]
+        idx = layout.layer(m2_layer, ka.OBSTACLE_DATATYPE)
+        painted = db.Region(db.RecursiveShapeIterator(layout, layout.top_cell(), idx))
+        self.assertEqual(painted.count(), result["obstacle_shapes"])
+        # Every painted obstacle rect must sit inside N2's real strap --
+        # not just anywhere on M2 -- confirming it's N2's geometry the
+        # router actually saw, not some unrelated M2 shape.
+        real_strap = db.Region(db.Box(9000, -2000, 9200, 5000))
+        self.assertTrue((painted - real_strap).is_empty())
+
+    def test_show_obstacles_false_paints_nothing(self):
+        result = ka.complete_net(self.gds, self.layers, "N1", ROUTER, self.d,
+                                  show_obstacles=False)
+        result.pop("layout", None)
+        self.assertEqual(result["obstacle_shapes"], 0)
+
     def test_rsmt_default_avoids_gratuitous_layer_hops(self):
         """N2's strap only sits on M2 -- it doesn't block M1 at all, so the
         cheapest real connection is a single flat M1 wire. Locks in a real
