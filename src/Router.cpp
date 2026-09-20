@@ -2897,6 +2897,7 @@ bool Router::escapesConnected() const
   std::vector<char> seen(segs.size(), 0);
   std::vector<int> stack;
   if (debugEscape) {
+    CERR << "DEBUGESCAPE for " << _name << '\n';
     for (const auto* t : _targets) CERR << "DEBUGESCAPE target " << t->x() << ' ' << t->y() << ' ' << t->z() << '\n';
     for (const auto* s : _sources) CERR << "DEBUGESCAPE source " << s->x() << ' ' << s->y() << ' ' << s->z() << '\n';
     for (auto& l : _tobstacles) {
