@@ -509,6 +509,37 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                   }
                 }
               }
+              // "corridor_topology": [[x,y], ...] in microns -- an ordered
+              // list of waypoints a person clicked on the canvas. Builds
+              // the same keepout an auto -rsmt corridor would, just over
+              // this path instead of the Borah-Owens tree
+              // (Net::rsmtCorridor()); works whether or not -rsmt itself
+              // was passed, and for any number of this net's pins.
+              auto ittopo = netiter.find("corridor_topology");
+              if (ittopo != netiter.end()) {
+                std::vector<std::pair<int, int>> pts;
+                for (auto& p : *ittopo) {
+                  if (p.size() == 2 && p[0].is_number() && p[1].is_number()) {
+                    pts.emplace_back(std::lround(static_cast<double>(p[0]) * _uu),
+                                      std::lround(static_cast<double>(p[1]) * _uu));
+                  }
+                }
+                if (!pts.empty()) {
+                  modit->second->addCorridorTopology(*itnetname, pts);
+                }
+              }
+              // "corridor_pitch": N -- multiples of the routing layer's
+              // pitch the corridor (auto or corridor_topology alike)
+              // bloats by, replacing Net.cpp's own RSMT_CORRIDOR_PITCHES
+              // default for this net only. Also rescales the retry ladder
+              // that widens the corridor a few times before giving up on
+              // staying confined at all, so a narrower request still
+              // gets proportional retries, not the default's absolute
+              // widths.
+              auto itpitch = netiter.find("corridor_pitch");
+              if (itpitch != netiter.end() && itpitch->is_number()) {
+                modit->second->setCorridorPitch(*itnetname, static_cast<int>(*itpitch));
+              }
             }
           }
           it = m.find("do_not_route");

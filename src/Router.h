@@ -675,7 +675,34 @@ class Router {
     {
       CostType tcost = CostTypeMax;
       for (auto& t : _targets) {
-        tcost = std::min(tcost, _cf.deltaCost(*n, *t));
+        // Tried swapping this to CostFn::patternLowerBound() to fix an
+        // observed suboptimal M3 jog -- it does fix that case (52%
+        // cheaper on the repro), but it regresses
+        // test/run_smoke.sh's m1_pin_adj_obstacle: with the wider
+        // heuristic, net B's own solution gets MORE expensive (37344 vs.
+        // baseline 30701) and geometrically blocks net A, which then
+        // fails to route at all. Root cause: patternLowerBound() is not
+        // proven <= deltaCost() for a given node pair -- its wider layer
+        // window lowers the per-unit-distance rate but adds more
+        // _layerPairCost via-transition terms to *reach* that window, and
+        // for close-together nodes that fixed cost can dominate, making it
+        // LARGER than deltaCost(). Paired with deltaCost() as the real A*
+        // edge cost, that's a plain inadmissible heuristic (it can
+        // overestimate), not just a differently-windowed one -- it was
+        // only ever validated as patternRoute()'s pair-ranking bound,
+        // never as evalTCost()'s heuristic.
+        //
+        // std::min(deltaCost(), patternLowerBound()) is guaranteed <=
+        // deltaCost() and does fix m1_pin_adj_obstacle (confirming the
+        // inadmissibility diagnosis) while still fixing the M3 jog. It
+        // also changes test/run_smoke.sh's reorder/reorder_disabled
+        // outcomes: that capacity-limited-gap scenario was built so the
+        // *default* net order leaves exactly one net unrouted, proving the
+        // -reorder search's value -- with this heuristic, even -reorder 0
+        // routes all 5 nets cleanly (verified DRC-clean, no opens), so the
+        // default search is simply better now and those two tests' DEFs/
+        // LOGMUST were updated to match (see test/run_smoke.sh).
+        tcost = std::min({tcost, _cf.deltaCost(*n, *t), _cf.patternLowerBound(*n, *t)});
       }
       n->setTCost(tcost);
     }

@@ -239,17 +239,37 @@ Geom::Rects Net::rsmtCorridor(const int margin) const
                           x2 + margin, std::max(y1, y2) + margin);
   };
 
-  std::vector<rsmt::Rect> terms;
-  terms.reserve(boxes.size());
-  for (auto& b : boxes) {
-    terms.push_back(rsmt::Rect(b.xmin(), b.ymin(), b.xmax(), b.ymax()));
-  }
-  const rsmt::BorahTree t = rsmt::BorahOwens(terms);
-  _rsmtlen = static_cast<long>(t.length);
-  _mstlen = static_cast<long>(t.mst_length);
-  for (const auto& ep : t.edge_pts) {
-    band(static_cast<int>(ep.first.x), static_cast<int>(ep.first.y),
-         static_cast<int>(ep.second.x), static_cast<int>(ep.second.y));
+  if (_corridorTopology.size() >= 2) {
+    // A person's own clicked waypoints replace the auto Borah-Owens tree:
+    // just the drawn centreline, bloated by the same pitch margin the
+    // auto path uses -- consecutive waypoints joined by the same
+    // Manhattan-L band(). No pin is spliced into this path or treated as
+    // its start/end: every pin already got its own bloated bubble above,
+    // unconditionally, regardless of how many pins this net has -- so
+    // "does the corridor reach every pin" only requires the drawn path
+    // to pass near enough each one for their bubbles to touch it (the
+    // margin retry ladder in Net::route() widens this same margin a few
+    // times before giving up, which also covers "not quite close
+    // enough"). This is why there's no 2-pin restriction: unlike the
+    // pin1->...->pin2 chain this replaced, nothing here depends on pin
+    // count or which pin is "first".
+    for (size_t i = 0; i + 1 < _corridorTopology.size(); ++i) {
+      band(_corridorTopology[i].first, _corridorTopology[i].second,
+           _corridorTopology[i + 1].first, _corridorTopology[i + 1].second);
+    }
+  } else {
+    std::vector<rsmt::Rect> terms;
+    terms.reserve(boxes.size());
+    for (auto& b : boxes) {
+      terms.push_back(rsmt::Rect(b.xmin(), b.ymin(), b.xmax(), b.ymax()));
+    }
+    const rsmt::BorahTree t = rsmt::BorahOwens(terms);
+    _rsmtlen = static_cast<long>(t.length);
+    _mstlen = static_cast<long>(t.mst_length);
+    for (const auto& ep : t.edge_pts) {
+      band(static_cast<int>(ep.first.x), static_cast<int>(ep.first.y),
+           static_cast<int>(ep.second.x), static_cast<int>(ep.second.y));
+    }
   }
 
   PolySet ps;
@@ -442,8 +462,14 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     // must not be walled off from a later pair's escape.
 
     Geom::LayerRects keepoutWalls;
-    if (router.rsmtCorridor()) {
-      keepoutWalls = buildKeepout(RSMT_CORRIDOR_PITCHES, &_corridor, &_corridorEdges);
+    // a person's own clicked corridor (_corridorTopology, read via NDR's
+    // "corridor_topology") builds and applies a keepout the same way the
+    // auto -rsmt corridor does, whether or not -rsmt itself was passed --
+    // it's a distinct, user-driven source for the same mechanism, not
+    // conditional on the global auto-corridor flag.
+    const int corridorPitchBase = (_corridorPitch > 0) ? _corridorPitch : RSMT_CORRIDOR_PITCHES;
+    if (router.rsmtCorridor() || !_corridorTopology.empty()) {
+      keepoutWalls = buildKeepout(corridorPitchBase, &_corridor, &_corridorEdges);
     }
 
     for (auto& pp : ppairs) {
@@ -574,8 +600,11 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           if (!ko.empty()) router.addObstacles(ko, true, true);
           return router.findSol();
         };
-        static const int RETRY_PITCH_MULS[] = {
-          RSMT_CORRIDOR_PITCHES * 2, RSMT_CORRIDOR_PITCHES * 4, RSMT_CORRIDOR_PITCHES * 8};
+        // not `static`: corridorPitchBase is per-net (a person's own
+        // corridor_pitch override, when set), so this can't be computed
+        // once and reused across nets with different overrides.
+        const int RETRY_PITCH_MULS[] = {
+          corridorPitchBase * 2, corridorPitchBase * 4, corridorPitchBase * 8};
         bool widened = false;
         for (const int mul : RETRY_PITCH_MULS) {
           const Geom::LayerRects wider = trimWallToOwnMetal(buildKeepout(mul, nullptr, nullptr));

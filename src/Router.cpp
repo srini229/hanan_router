@@ -2067,6 +2067,33 @@ bool Router::patternRoute()
   return _sol == bestt;
 }
 
+namespace {
+// The keepout walls a corridor (auto -rsmt or a person's own
+// corridor_topology) adds are a real, physical bound on how far the route
+// may legally roam -- but findSol()'s own search box, below, historically
+// only ever grew from *pin* positions (tripled), then got AND'd down to
+// whatever the caller's mbox allows. AND only ever shrinks, so a keepout
+// wall genuinely far from the pins (any corridor detour bigger than about
+// 1.5x the pin spread) sat entirely outside the search box the grid gets
+// built from -- not "too sparse a grid there", the search never looked
+// there at all. Verified directly: a corridor built correctly, walls and
+// all, whose own detour leg sat outside this box, came back "no target is
+// reachable from any source" on every single attempt including
+// unconstrained, on a case with plenty of real obstacle-edge coordinates
+// everywhere the search box *did* cover.
+Geom::Rect keepoutExtent(const LayerPolySet& ptobstaclesNoHole)
+{
+  Geom::Rect r;
+  for (auto& l : ptobstaclesNoHole) {
+    PRect b;
+    if (extents(b, l.second)) {
+      r.merge(bp::xl(b), bp::yl(b), bp::xh(b), bp::yh(b));
+    }
+  }
+  return r;
+}
+}  // namespace
+
 Geom::LayerRects Router::findSol()
 {
   TIME_M();
@@ -2123,6 +2150,7 @@ Geom::LayerRects Router::findSol()
       //    _bbox.merge(o.xmin(), o.ymin(), o.xmax(), o.ymax());
       //  }
       //}
+      _bbox.merge(keepoutExtent(_ptobstaclesNoHole));
       _bbox.expand(_bbox.width() / 2, _bbox.height() / 2);
 
       /*for (auto& l : _tobstacles) {
@@ -2307,6 +2335,7 @@ Geom::LayerRects Router::findSol()
       createSourceTargetNodes();
       for (auto& s : _sources) _bbox.merge(s->x(), s->y(), s->x(), s->y());
       for (auto& t : _targets) _bbox.merge(t->x(), t->y(), t->x(), t->y());
+      _bbox.merge(keepoutExtent(_ptobstaclesNoHole));
       _bbox.expand(_bbox.width() / 2, _bbox.height() / 2);
       generateHananGrid();
       for (auto& s : _sources) {
@@ -2363,6 +2392,7 @@ Geom::LayerRects Router::findSol()
         createSourceTargetNodes();
         for (auto& s : _sources) _bbox.merge(s->x(), s->y(), s->x(), s->y());
         for (auto& t : _targets) _bbox.merge(t->x(), t->y(), t->x(), t->y());
+        _bbox.merge(keepoutExtent(_ptobstaclesNoHole));
         _bbox.expand(_bbox.width() / 2, _bbox.height() / 2);
         generateHananGrid();
         for (auto& s : _sources) {

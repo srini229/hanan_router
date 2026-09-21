@@ -75,10 +75,18 @@ def def_nets(path, dbu=1000.0):
     return names, rects
 
 
-def trace(gds, top, layers, stack=''):
-    """[(net-or-None, {layer: count}, bbox, size)] -- one entry per conductor."""
+def trace(gds, top, layers, stack='', layer_source=None):
+    """[(net-or-None, {layer: count}, bbox, size)] -- one entry per conductor.
+
+    `layer_source`, when given, is a pre-built (draw, via) pair -- same
+    shape layer_map() returns -- used instead of reading `layers` (a
+    layers.json path). A KLayout .lyt's own <connectivity> block is one
+    such source (see lyt_layers.lyt_layer_map): cross-checked against
+    sky130.layers.json for every M1-M5/li1/V0-V4 entry, it matches exactly,
+    and it's the PDK's own canonical data rather than a hand-maintained
+    copy that can drift out of sync with it."""
     want = {x.strip() for x in stack.split(',') if x.strip()} if stack else None
-    draw, via = layer_map(layers, want)
+    draw, via = layer_source if layer_source is not None else layer_map(layers, want)
     if want:
         draw = {k: v for k, v in draw.items() if v in want}
         via = {k: v for k, v in via.items()

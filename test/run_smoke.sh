@@ -476,25 +476,31 @@ run_case sat_clash "" \
   -l $IN/sat_clash.lef -ndr $IN/sat_clash_ndr.json
 
 # 20. reorder: 5 nets criss-cross through one capacity-limited gap in a wall (left
-#     pins top->down, right pins bottom->up). The default HPWL net order strands
-#     one net; the reorder search promotes blocked nets up the routing order
-#     (priority grows each pass a net stays open) and routes all five. Built by
-#     gen_reorder.py (N=5 GAP=280,540). LOGMUST proves the default order failed
-#     (that message only prints when the first attempt leaves nets open); the
-#     ROUTE_SUMMARY unrouted count (0) and NETROUTED (every net has a via) both
-#     confirm the reorder routed the whole module.
-LOGMUST="promoting blocked nets up the routing order"
+#     pins top->down, right pins bottom->up). Built by gen_reorder.py (N=5
+#     GAP=280,540). This used to strand one net under the default HPWL net
+#     order, requiring the reorder search's blocked-net promotion to route all
+#     five -- since evalTCost() started taking the tighter of deltaCost() and
+#     patternLowerBound() as its A* heuristic (see Router.h), the default
+#     order alone finds a clean, fully-routed, DRC-clean solution for this
+#     fixture without needing to promote anything, so the "promoting blocked
+#     nets" message no longer fires here. NETROUTED (every net has a via)
+#     still confirms the module routes completely; reorder_disabled below
+#     confirms it stays that way with -reorder 0. reorder_reroute (over-
+#     subscribed, capacity < demand) still needs and exercises the promotion
+#     path.
 NETROUTED="N0|N1|N2|N3|N4"
 run_case reorder "REORDER_CONC_0.def" \
   -d $IN/layers.json -p $IN/reorder.placement_verilog.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json
 
 # 21. reorder_disabled: the same case with -reorder 0 turns the net-ordering search
-#     off, so the one net the default HPWL order strands stays open. Exercises the
-#     -reorder argument (Router::setReorderPasses) and confirms the search is what
-#     routes it: LOGMUST asserts the ROUTE_SUMMARY still reports one unrouted net.
-LOGMUST="ROUTE_SUMMARY module=REORDER_CONC_0 nets=5 unrouted=1"
-ALLOW_UNROUTED=1
+#     off. With the current heuristic (see case 20 above) the default HPWL
+#     order alone already routes all five nets DRC-clean, so disabling reorder
+#     no longer strands any of them -- LOGMUST now asserts that. -reorder's
+#     CLI wiring and the promotion mechanism itself are still exercised by
+#     reorder_budget/reorder_uncapped/reorder_converged and by
+#     reorder_reroute's over-subscribed case.
+LOGMUST="ROUTE_SUMMARY module=REORDER_CONC_0 nets=5 unrouted=0"
 run_case reorder_disabled "" \
   -d $IN/layers.json -p $IN/reorder.placement_verilog.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json -reorder 0
