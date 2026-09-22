@@ -67,12 +67,17 @@ def run_one(router, layers, name, d, workdir, rsmt, extra, timeout):
         m = re.search(rx, log)
         return conv(m.group(1)) if m else None
     nets = grab(r"ROUTE_SUMMARY module=\S+ nets=(\d+)")
+    vias = 0
+    for fn in os.listdir(out):
+        if fn.endswith(".def"):
+            vias += len(re.findall(r"^\s*\+ RECT V\d", open(os.path.join(out, fn), errors="replace").read(), re.M))
     return {
         "circuit": name, "rc": rc, "secs": secs,
         "nets": nets,
         "unrouted": grab(r"ROUTE_SUMMARY module=\S+ nets=\d+ unrouted=(\d+)"),
         "drc": grab(r"DRC_SUMMARY router-caused spacing violations = (\d+)"),
         "wirelength": grab(r"WIRELENGTH TOTAL \S+ : (\d+)"),
+        "vias": vias,
         "log": log_path,
     }
 
@@ -91,25 +96,25 @@ def pct(a, b):
 
 def md_table(rows, base):
     if base:
-        head = ["circuit", "nets", "unrouted", "DRC", "wirelength", "s", "base wl", "wl Δ", "base s", "s Δ"]
+        head = ["circuit", "nets", "unrouted", "DRC", "wirelength", "vias", "s", "base wl", "wl Δ", "base vias", "base s", "s Δ"]
         lines = ["| " + " | ".join(head) + " |", "|" + "|".join(["---"] * len(head)) + "|"]
         for r, b in zip(rows, base):
             lines.append("| " + " | ".join([
                 r["circuit"], fmt(r["nets"]), fmt(r["unrouted"]), fmt(r["drc"]), fmt(r["wirelength"]),
-                fmt(r["secs"], 2), fmt(b["wirelength"]), pct(b["wirelength"], r["wirelength"]),
-                fmt(b["secs"], 2), pct(b["secs"], r["secs"])]) + " |")
+                fmt(r["vias"]), fmt(r["secs"], 2), fmt(b["wirelength"]), pct(b["wirelength"], r["wirelength"]),
+                fmt(b["vias"]), fmt(b["secs"], 2), pct(b["secs"], r["secs"])]) + " |")
         tw = sum(r["secs"] for r in rows); tb = sum(b["secs"] for b in base)
         lines.append(f"| **total** | | {sum(r['unrouted'] or 0 for r in rows)} | {sum(r['drc'] or 0 for r in rows)} | "
-                     f"{sum(r['wirelength'] or 0 for r in rows)} | {tw:.2f} | {sum(b['wirelength'] or 0 for b in base)} | "
-                     f"{pct(sum(b['wirelength'] or 0 for b in base), sum(r['wirelength'] or 0 for r in rows))} | {tb:.2f} | {pct(tb, tw)} |")
+                     f"{sum(r['wirelength'] or 0 for r in rows)} | {sum(r['vias'] for r in rows)} | {tw:.2f} | {sum(b['wirelength'] or 0 for b in base)} | "
+                     f"{pct(sum(b['wirelength'] or 0 for b in base), sum(r['wirelength'] or 0 for r in rows))} | {sum(b['vias'] for b in base)} | {tb:.2f} | {pct(tb, tw)} |")
     else:
-        head = ["circuit", "nets", "unrouted", "DRC", "wirelength", "s"]
+        head = ["circuit", "nets", "unrouted", "DRC", "wirelength", "vias", "s"]
         lines = ["| " + " | ".join(head) + " |", "|" + "|".join(["---"] * len(head)) + "|"]
         for r in rows:
             lines.append("| " + " | ".join([r["circuit"], fmt(r["nets"]), fmt(r["unrouted"]), fmt(r["drc"]),
-                                            fmt(r["wirelength"]), fmt(r["secs"], 2)]) + " |")
+                                            fmt(r["wirelength"]), fmt(r["vias"]), fmt(r["secs"], 2)]) + " |")
         lines.append(f"| **total** | | {sum(r['unrouted'] or 0 for r in rows)} | {sum(r['drc'] or 0 for r in rows)} | "
-                     f"{sum(r['wirelength'] or 0 for r in rows)} | {sum(r['secs'] for r in rows):.2f} |")
+                     f"{sum(r['wirelength'] or 0 for r in rows)} | {sum(r['vias'] for r in rows)} | {sum(r['secs'] for r in rows):.2f} |")
     return "\n".join(lines)
 
 
@@ -153,7 +158,7 @@ def main():
             r = run_one(router, layers, name, d, os.path.join(workdir, tag), a.rsmt, extra, a.timeout)
             rows.append(r)
             print(f"{tag:8s} {name:22s} rc={r['rc']!s:8s} nets={fmt(r['nets']):>3s} unrouted={fmt(r['unrouted']):>2s} "
-                  f"drc={fmt(r['drc']):>2s} wl={fmt(r['wirelength']):>8s} {r['secs']:7.2f}s", flush=True)
+                  f"drc={fmt(r['drc']):>2s} wl={fmt(r['wirelength']):>8s} vias={r['vias']:>4d} {r['secs']:7.2f}s", flush=True)
         return rows
 
     rows = sweep(a.router, "new")

@@ -27,6 +27,9 @@ int main(int argc, char* argv[])
       << "\t-replay <ATTEMPT_*.lef> (re-route one wire from a HANAN_DEBUG_WIRE dump; needs -d only)\n"
       << "\t-detour (with -replay: allow a large detour even without NDR saying so)\n"
       << "\t-rsmt (confine each net to a Borah Steiner corridor over its pins)\n"
+      << "\t-padhalo (also put grid lines where a via pad, not just a wire, clears each obstacle; default: wire halo only)\n"
+      << "\t-admissible (A* uses the admissible distance bound everywhere, not only under a corridor guide)\n"
+      << "\t-noseed (do not seed grid lines inside corridor bands)\n"
       << "\t-threads <N> (route non-overlapping nets in parallel using N worker threads; default 1)\n"
       << "\t-relaxvia (in the final pass, for a net that still fails to route, retry its escape via with spacing relaxed to as close as 5 to, but never on, a shape -- source pins first, then also target pins if that alone isn't enough)\n"
       << "\t-v [N] (log verbosity: 0 results only (default), 1 per-net detail, 2 per-element dumps, 3 everything)\n";
@@ -119,6 +122,9 @@ int main(int argc, char* argv[])
   }
   if (checkArg(argc, argv, "-keepblockedescapes")) hrdb.setPruneEscapes(false);
   if (checkArg(argc, argv, "-viaalign")) hrdb.setViaAlign(true);
+  if (checkArg(argc, argv, "-padhalo")) hrdb.setPadHaloLines(true);
+  if (checkArg(argc, argv, "-admissible")) hrdb.setAdmissibleBound(true);
+  if (checkArg(argc, argv, "-noseed")) hrdb.setSeedCorridor(false);
   if (checkArg(argc, argv, "-satfirst")) hrdb.setSatFirst(true);
   if (checkArg(argc, argv, "-abutescape")) hrdb.setAbutEscape(true);
   const std::string gp = parseArgs(argc, argv, "-gridprune");
@@ -174,6 +180,9 @@ int main(int argc, char* argv[])
        << " -reorderbudget " << hrdb.reorderBudget()
        << (hrdb.pruneEscapes() ? "" : " -keepblockedescapes")
        << (hrdb.viaAlign() ? " -viaalign" : "")
+       << (hrdb.padHaloLines() ? " -padhalo" : "")
+       << (hrdb.admissibleBound() ? " -admissible" : "")
+       << (hrdb.seedCorridor() ? "" : " -noseed")
        << (hrdb.satFirst() ? " -satfirst" : "")
        << (hrdb.gridPrune() ? " -gridprune " + std::to_string(hrdb.gridPrune()) : "")
        << (hrdb.abutEscape() ? " -abutescape" : "")

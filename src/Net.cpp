@@ -461,7 +461,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     // re-run after every clearObstacles(true). See docs/ROUTING_NOTES.md.
     auto seedCorridorGrid = [&](const Geom::Rects& bands) {
       router.setCorridorBands(bands);
-      if (bands.empty()) return;
+      if (bands.empty() || !router.seedCorridor()) return;
       int pitch = 0;
       for (int z = router.minLayer(); z <= router.maxLayer(); ++z) {
         pitch = std::max(pitch, std::max(router.baseWidthX(z), router.baseWidthY(z))

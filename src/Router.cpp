@@ -1707,8 +1707,32 @@ void Router::generateHananGrid()
       ycoords.insert(s->y());
     }
   }
-  xcoords.insert(_seedXCoords.begin(), _seedXCoords.end());
-  ycoords.insert(_seedYCoords.begin(), _seedYCoords.end());
+  if (_seedCorridor) {
+    xcoords.insert(_seedXCoords.begin(), _seedXCoords.end());
+    ycoords.insert(_seedYCoords.begin(), _seedYCoords.end());
+  }
+  if (_padHaloLines) {
+    // Lines where a via *pad* clears each obstacle. A pad is wider than the
+    // wire, so the wire-halo line next to an obstacle can be a place where
+    // no via is legal; the pad-halo line is where one is.
+    for (auto z = _minLayer; z <= _maxLayer; ++z) {
+      int px = 0, py = 0;
+      auto pads = [&](const Vias& vs, const bool lower) {
+        for (const auto& v : vs) {
+          const Geom::Rect& p = lower ? v->lpad() : v->upad();
+          px = std::max(px, p.width() / 2 + spacex(z));
+          py = std::max(py, p.height() / 2 + spacey(z));
+        }
+      };
+      if (z < static_cast<int>(_upVias.size())) pads(_upVias[z], true);   // via above z: its lower pad sits on z
+      if (z < static_cast<int>(_dnVias.size())) pads(_dnVias[z], false);  // via below z: its upper pad sits on z
+      if (px <= 0 && py <= 0) continue;
+      for (const LayerPolySet* lps : {&_ptobstacles, &_ptobstaclesNoHole}) {
+        auto it = lps->find(z);
+        if (it != lps->end()) ringCoords(it->second, px, py);
+      }
+    }
+  }
   // drop coordinates whose grid line never crosses the corridor (pins kept)
   if (!_corridorBands.empty()) {
     int slack = 0;

@@ -559,6 +559,9 @@ class Router {
     int _escapePitchMul{1};
     bool _pruneEscapes{true};
     bool _viaAlign{false};
+    bool _padHaloLines{false};    // -padhalo: grid lines at the via-pad halo too
+    bool _admissibleAlways{false}; // -admissible: admissibleBound() in every search
+    bool _seedCorridor{true};      // -noseed clears it
     bool _satFirst{false};
     int _gridprune{0};     // collapse grid coordinates closer than this % of pitch
     bool _abutEscape{false};
@@ -696,7 +699,7 @@ class Router {
     {
       CostType tcost = CostTypeMax;
       // admissible bound under a corridor guide; deltaCost() elsewhere for speed
-      if (_hasGuide && _guidePitch > 0) {
+      if (_admissibleAlways || (_hasGuide && _guidePitch > 0)) {
         for (auto& t : _targets) tcost = std::min(tcost, _cf.admissibleBound(*n, *t));
         n->setTCost(tcost);
         return;
@@ -1039,6 +1042,12 @@ class Router {
     void setSatFirst(const bool b) { _satFirst = b; }
     bool satFirst() const { return _satFirst; }
     void setViaAlign(const bool b) { _viaAlign = b; }
+    void setPadHaloLines(const bool b) { _padHaloLines = b; }
+    void setAdmissibleBound(const bool b) { _admissibleAlways = b; }
+    void setSeedCorridor(const bool b) { _seedCorridor = b; }
+    bool padHaloLines() const { return _padHaloLines; }
+    bool admissibleBound() const { return _admissibleAlways; }
+    bool seedCorridor() const { return _seedCorridor; }
     bool viaAlign() const { return _viaAlign; }
     void setPruneEscapes(const bool b) { _pruneEscapes = b; }
     bool pruneEscapes() const { return _pruneEscapes; }
