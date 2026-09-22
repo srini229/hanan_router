@@ -451,8 +451,10 @@ typedef std::vector<std::unordered_map<uint64_t, Node*, NodeKeyHash>> NodeMap;
 bool replay(class Router& r, const std::string& leffile, const int uu, const bool detour,
     const std::string& ndrfile, const DRC::LayerInfo& lf);
 
+// walls: the corridor keepout, kept separate from ptobs (see generateHananGrid)
 Geom::Rects intersectPObstacles(const LayerPolySet& pobs, const LayerPolySet& ptobs,
-                                const int layer, const Geom::Rect& query);
+                                const int layer, const Geom::Rect& query,
+                                const LayerPolySet* walls = nullptr);
 
 class Router {
   private:
@@ -564,7 +566,7 @@ class Router {
       auto it = _rawnear.find(key);
       if (it != _rawnear.end()) return it->second;
       return _rawnear.emplace(key,
-        intersectPObstacles(_pobstacles, _ptobstacles, l, pin.bloatby(1, 1))).first->second;
+        intersectPObstacles(_pobstacles, _ptobstacles, l, pin.bloatby(1, 1), &_ptobstaclesNoHole)).first->second;
     }
     int _hopelessAfter{3};
     int _maxSeedPolys{0};

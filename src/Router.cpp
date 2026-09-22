@@ -1587,18 +1587,9 @@ void Router::generateHananGrid()
     coverHoles(l.second, ((its != _psources.end()) ? its->second : PolySet()),
         ((ith != _ptargets.end()) ? ith->second : PolySet()));
   }
-  // Merge in the no-cover-holes obstacles (e.g. the RSMT corridor's keepout
-  // wall) only *after* coverHoles has run -- every layer alike, not just
-  // whichever layer a pin happens to sit on. A keepout wall is a closed ring
-  // by construction; if it were visible to coverHoles above, the ring's own
-  // interior -- the corridor's entire routable area -- reads as exactly the
-  // kind of small enclosed void coverHoles exists to pave over, and gets
-  // filled in solid. Verified: this is what made a trivially-open L-shaped
-  // route inside an intact, correctly-shaped corridor register as fully
-  // blocked on M1 through M4 alike, not one specific layer.
-  for (auto& l : _ptobstaclesNoHole) {
-    _ptobstacles[l.first] += l.second;
-  }
+  // Keepout walls (_ptobstaclesNoHole) are folded in separately below: after
+  // coverHoles (a closed ring would read as a void to fill), and with a
+  // width/2 halo only, never spacing. See docs/ROUTING_NOTES.md.
   for (auto& l : _ptobstacles) {
     auto its = _psources.find(l.first);
     auto ith = _ptargets.find(l.first);
@@ -1641,18 +1632,24 @@ void Router::generateHananGrid()
     splitRects(_tobstacles[l.first], l.second, _bbox, sx, sy);
     _tobstacles[l.first] = splitRects(_tobstacles[l.first]);
   }
+  auto wallHalo = [&](const int layer, int& sx, int& sy) {
+    sx = sy = 0;
+    if (layer < static_cast<int>(_widthx.size()) && layer <= _maxLayer) {
+      sx = (widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1);
+      sy = (widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1);
+    }
+  };
+  for (auto& l : _ptobstaclesNoHole) {
+    int sx, sy;
+    wallHalo(l.first, sx, sy);
+    splitRects(_tobstacles[l.first], l.second, _bbox, sx, sy);
+    _tobstacles[l.first] = splitRects(_tobstacles[l.first]);
+  }
   for (auto& it: _tobstacles) {
     _ltree.emplace(it.first, Geom::RTree2D(it.second));
   }
-  for (auto& l : _ptobstacles) {
-    if (l.first > _maxLayer) continue;
-    const auto layer = l.first;
-    int sx{0}, sy{0};
-    if (layer < static_cast<int>(_widthx.size())) {
-      sx = spacex(layer) + ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1));
-      sy = spacey(layer) + ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1));
-    }
-    PolySet bloated(l.second);
+  auto ringCoords = [&](const PolySet& ps, const int sx, const int sy) {
+    PolySet bloated(ps);
     if (sx > 0 || sy > 0) bloated.bloat(sx, sx, sy, sy);
     PPolyWHs pwhs;
     bloated.get(pwhs);
@@ -1662,6 +1659,22 @@ void Router::generateHananGrid()
         addRingCoords(ith->begin(), ith->end(), _bbox, _precision, xcoords, ycoords);
       }
     }
+  };
+  for (auto& l : _ptobstacles) {
+    if (l.first > _maxLayer) continue;
+    const auto layer = l.first;
+    int sx{0}, sy{0};
+    if (layer < static_cast<int>(_widthx.size())) {
+      sx = spacex(layer) + ((widthy(layer) % 2 == 0) ? widthy(layer)/2 : (widthy(layer)/2 + 1));
+      sy = spacey(layer) + ((widthx(layer) % 2 == 0) ? widthx(layer)/2 : (widthx(layer)/2 + 1));
+    }
+    ringCoords(l.second, sx, sy);
+  }
+  for (auto& l : _ptobstaclesNoHole) {
+    if (l.first > _maxLayer) continue;
+    int sx, sy;
+    wallHalo(l.first, sx, sy);
+    ringCoords(l.second, sx, sy);
   }
   for (bool src : {true, false}) {
     for (auto& s : (src ? _sources : _targets)) {
@@ -3350,12 +3363,14 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
 }
 
 Geom::Rects intersectPObstacles(const LayerPolySet& pobs, const LayerPolySet& ptobs,
-                                 const int layer, const Geom::Rect& query)
+                                 const int layer, const Geom::Rect& query,
+                                 const LayerPolySet* walls)
 {
   Geom::Rects hit;
   PolySet q;
   q += PRect(query.xmin(), query.ymin(), query.xmax(), query.ymax());
-  for (const LayerPolySet* lps : {&pobs, &ptobs}) {
+  for (const LayerPolySet* lps : {&pobs, &ptobs, walls}) {
+    if (!lps) continue;
     auto it = lps->find(layer);
     if (it == lps->end()) continue;
     PolySet overlap = q & it->second;
@@ -3402,7 +3417,7 @@ std::vector<ViaEscapeAttempt> Router::diagnoseViaEscape(const Node* n, const boo
         if (cutBlocked) {
           ok = false;
           att.blockedLayer = adjLayer;
-          auto obs = intersectPObstacles(_pobstacles, _ptobstacles, adjLayer, c.bloatby(_lf.spacex(adjLayer), _lf.spacey(adjLayer)));
+          auto obs = intersectPObstacles(_pobstacles, _ptobstacles, adjLayer, c.bloatby(_lf.spacex(adjLayer), _lf.spacey(adjLayer)), &_ptobstaclesNoHole);
           att.blockingObs.insert(att.blockingObs.end(), obs.begin(), obs.end());
         }
       }
@@ -3435,7 +3450,7 @@ std::vector<ViaEscapeAttempt> Router::diagnoseViaEscape(const Node* n, const boo
       if (blocked) {
         ok = false;
         att.blockedLayer = l;
-        auto obs = intersectPObstacles(_pobstacles, _ptobstacles, l, p.bloatby(spacex(l), spacey(l)));
+        auto obs = intersectPObstacles(_pobstacles, _ptobstacles, l, p.bloatby(spacex(l), spacey(l)), &_ptobstaclesNoHole);
         att.blockingObs.insert(att.blockingObs.end(), obs.begin(), obs.end());
       }
     }
@@ -3703,9 +3718,9 @@ void Router::writeLEF(const std::string& prefix, const Geom::LayerRects* sol) co
         }
       }
     }
-    if (!_ptobstacles.empty() || !_pobstacles.empty()) {
-      for (auto temp : {true, false}) {
-        for (auto& l : (temp ? _ptobstacles : _pobstacles)) {
+    if (!_ptobstacles.empty() || !_pobstacles.empty() || !_ptobstaclesNoHole.empty()) {
+      for (int which : {0, 1, 2}) {
+        for (auto& l : (which == 0 ? _ptobstacles : which == 1 ? _pobstacles : _ptobstaclesNoHole)) {
           ofs << "      LAYER " << LAYER_NAMES[l.first] << "_p ;\n";
           PRects prects;
           get_rectangles(prects, l.second);
