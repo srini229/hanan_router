@@ -136,6 +136,8 @@ class Net {
     // narrower request still gets the same proportional retries a wider
     // one would.
     int _corridorPitch{0};
+    // NDR "corridor_guide_weight": pull toward the drawn line, 0 = walls only
+    double _corridorGuideWeight{0};
     mutable long _rsmtlen{-1};      // Steiner tree length over the pin centres
     mutable long _mstlen{-1};       // the MST Borah started from, for comparison
     long _wirelen{0};               // routed metal centreline length
@@ -249,6 +251,8 @@ class Net {
     void addCorridorTopology(const std::vector<std::pair<int, int>>& pts) { _corridorTopology = pts; }
     void setCorridorPitch(const int p) { _corridorPitch = p; }
     int corridorPitch() const { return _corridorPitch; }
+    void setCorridorGuideWeight(const double w) { _corridorGuideWeight = w; }
+    double corridorGuideWeight() const { return _corridorGuideWeight; }
     void clearPrefLayer() { _preflayers.clear(); }
     void exclude() { _exclude = 1; }
     void allowDetour() { _detour = 1; }
@@ -501,6 +505,11 @@ class Module {
     {
       auto n = net(netName);
       if (n) n->setCorridorPitch(p);
+    }
+    void setCorridorGuideWeight(const std::string& netName, const double w)
+    {
+      auto n = net(netName);
+      if (n) n->setCorridorGuideWeight(w);
     }
 
     void addNetToOrder(const std::string& netName)

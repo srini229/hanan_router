@@ -540,6 +540,10 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
               if (itpitch != netiter.end() && itpitch->is_number()) {
                 modit->second->setCorridorPitch(*itnetname, static_cast<int>(*itpitch));
               }
+              auto itgw = netiter.find("corridor_guide_weight");
+              if (itgw != netiter.end() && itgw->is_number()) {
+                modit->second->setCorridorGuideWeight(*itnetname, static_cast<double>(*itgw));
+              }
             }
           }
           it = m.find("do_not_route");

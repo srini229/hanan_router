@@ -402,6 +402,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     return;
   }
   COUT << "net : " << _name << " num pins : " << _pins.size() << '\n';
+  bool corridorGuided = false;
   if (_pins.size() > 1) {
     COUT << "routing net : " << _name << ' ' << halfpm() << '\n';
     /*for (int i : {0, 1}) {
@@ -502,6 +503,32 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
     const int corridorPitchBase = (_corridorPitch > 0) ? _corridorPitch : RSMT_CORRIDOR_PITCHES;
     if (router.rsmtCorridor() || !_corridorTopology.empty()) {
       keepoutWalls = buildKeepout(corridorPitchBase, &_corridor, &_corridorEdges);
+    }
+    // NDR "corridor_guide_weight": install the drawn polyline as the router's
+    // guide (per unit length). Symmetry's guide, if any, takes precedence.
+    if (_corridorGuideWeight > 0 && _corridorTopology.size() >= 2) {
+      if (router.hasGuide()) {
+        COUT << "corridor guide for net " << _name << " skipped : a symmetry guide is already installed\n";
+      } else {
+        Geom::LayerRects g;
+        for (size_t i = 0; i + 1 < _corridorTopology.size(); ++i) {
+          const auto& a = _corridorTopology[i];
+          const auto& b = _corridorTopology[i + 1];
+          const Geom::Rect seg(std::min(a.first, b.first), std::min(a.second, b.second),
+                               std::max(a.first, b.first), std::max(a.second, b.second));
+          for (int z = router.minLayer(); z <= router.maxLayer(); ++z) g[z].push_back(seg);
+        }
+        int pitch = 0;
+        for (int z = router.minLayer(); z <= router.maxLayer(); ++z) {
+          pitch = std::max(pitch, std::max(router.baseWidthX(z), router.baseWidthY(z))
+                                + std::max(router.baseSpaceX(z), router.baseSpaceY(z)));
+        }
+        router.setGuide(g, _corridorGuideWeight * router.baseUnitCost(), std::max(pitch, 1));
+        corridorGuided = true;
+        COUT << "corridor guide for net " << _name << " : weight " << _corridorGuideWeight
+             << " x " << router.baseUnitCost() << " per unit length per pitch (" << pitch
+             << ") of deviation from the drawn line\n";
+      }
     }
 
     for (auto& pp : ppairs) {
@@ -721,6 +748,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       router.clearObstacles(true);
     }
   }
+  if (corridorGuided) router.clearGuide();
   // Final-pass diagnostics: if this net was left open, dump a debug LEF holding
   // its pins (the sources/targets) and the three obstacle sets the A* search
   // faced (routed nets, unrouted-net pins, module obstacles) so the blockage can

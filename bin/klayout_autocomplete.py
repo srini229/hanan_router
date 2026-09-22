@@ -238,7 +238,8 @@ def island_anchor(per_layer, widths):
 
 def build_router_inputs(work_dir, net_name, islands, obstacles_by_layer,
                          layout_dbu, uu, bbox_um, widths, virtual_pins_um=None,
-                         corridor_topology_um=None, corridor_pitch=None):
+                         corridor_topology_um=None, corridor_pitch=None,
+                         corridor_guide_weight=None):
     """placement.json + LEF: one trivial one-pin leaf macro per island,
     instantiated exactly over that island's own anchor rect (see
     `island_anchor`) and fa_map'd to `net_name` -- this is what actually
@@ -331,7 +332,7 @@ def build_router_inputs(work_dir, net_name, islands, obstacles_by_layer,
         "module": "TOP_CONC_0",
         "obstacles": [{"shapes": obstacle_shapes}] if obstacle_shapes else [],
     }]
-    if virtual_pins_um or corridor_topology_um or corridor_pitch:
+    if virtual_pins_um or corridor_topology_um or corridor_pitch or corridor_guide_weight:
         net_entry = {"name": net_name}
         if virtual_pins_um:
             net_entry["virtual_pins"] = [{lname: [list(r) for r in rects]}
@@ -340,6 +341,8 @@ def build_router_inputs(work_dir, net_name, islands, obstacles_by_layer,
             net_entry["corridor_topology"] = [list(p) for p in corridor_topology_um]
         if corridor_pitch:
             net_entry["corridor_pitch"] = corridor_pitch
+        if corridor_guide_weight:
+            net_entry["corridor_guide_weight"] = corridor_guide_weight
         ndr[0]["nets"] = [net_entry]
 
     placement_path = os.path.join(work_dir, "autocomplete.placement_verilog.json")
@@ -355,7 +358,8 @@ def build_router_inputs(work_dir, net_name, islands, obstacles_by_layer,
 
 
 def build_router_inputs_multi(work_dir, nets, obstacles_by_layer, layout_dbu,
-                               uu, bbox_um, widths, corridor_pitch=None):
+                               uu, bbox_um, widths, corridor_pitch=None,
+                               corridor_guide_weight=None):
     """Like `build_router_inputs`, but for several nets sharing one router
     pass instead of one net per call -- the actual entry point for "route
     these nets together, each optionally on its own drawn corridor".
@@ -406,12 +410,14 @@ def build_router_inputs_multi(work_dir, nets, obstacles_by_layer, layout_dbu,
                                     "oY": to_router_units(box.bottom) - margin,
                                     "sX": 1, "sY": 1},
             })
-        if corridor_topology_um or corridor_pitch:
+        if corridor_topology_um or corridor_pitch or corridor_guide_weight:
             net_entry = {"name": net_name}
             if corridor_topology_um:
                 net_entry["corridor_topology"] = [list(p) for p in corridor_topology_um]
             if corridor_pitch:
                 net_entry["corridor_pitch"] = corridor_pitch
+            if corridor_guide_weight:
+                net_entry["corridor_guide_weight"] = corridor_guide_weight
             ndr_nets.append(net_entry)
 
     placement = {
@@ -732,7 +738,8 @@ def complete_net_on_layout(layout, cell, layers_json, net_name, router_bin,
                             work_dir, uu=1000, margin_um=5.0, rsmt=True,
                             show_corridor=True, show_obstacles=True,
                             corridor_layer_spec=None, corridor_margin_um=0.0,
-                            waypoints_layer_spec=None, corridor_pitch=None):
+                            waypoints_layer_spec=None, corridor_pitch=None,
+                            corridor_guide_weight=None):
     """The reusable core: find islands, route if broken, paint back into
     `cell` in place. Takes an already-open `db.Layout`/`pya.Layout` and
     `cell` directly -- this is what a GUI macro calls on the live, currently
@@ -777,6 +784,11 @@ def complete_net_on_layout(layout, cell, layers_json, net_name, router_bin,
     kept for a filled-region sketch, but prefer this for a clicked path).
     Fewer than 2 waypoints (nothing drawn, or a single click) is passed
     through unused, falling back to the net's normal routing.
+
+    `corridor_guide_weight`, when given (>0), is written as this net's NDR
+    "corridor_guide_weight": a pull toward the drawn corridor line, per
+    unit length, in multiples of the wire's own cost per pitch of
+    deviation. 0/None leaves the corridor walls-only.
 
     `corridor_pitch`, when given, is written as this net's own NDR
     "corridor_pitch" -- how many multiples of the routing layer's pitch
@@ -900,7 +912,8 @@ def complete_net_on_layout(layout, cell, layers_json, net_name, router_bin,
 
     placement_path, ndr_path, lef_path = build_router_inputs(
         work_dir, net_name, islands, obstacles_by_layer, dbu_um, uu, bbox_um,
-        widths, virtual_pins_um, corridor_topology_um, corridor_pitch)
+        widths, virtual_pins_um, corridor_topology_um, corridor_pitch,
+        corridor_guide_weight)
     rc, log, routed_def, debug_lef = run_router(
         router_bin, layers_json, placement_path, lef_path, ndr_path,
         work_dir, uu, net_name, rsmt)
@@ -929,7 +942,7 @@ def complete_net_from_points(layout, cell, layers_json, points, router_bin,
                               work_dir, uu=1000, margin_um=5.0, rsmt=True,
                               show_corridor=True, show_obstacles=True,
                               waypoints_layer_spec=WAYPOINT_LAYER,
-                              corridor_pitch=None):
+                              corridor_pitch=None, corridor_guide_weight=None):
     """Like `complete_net_on_layout`, but the net is derived from a set of
     world-space points -- typically one per shape the user selected in the
     GUI -- instead of being typed in: "select the pin shape and get the
@@ -967,7 +980,8 @@ def complete_net_from_points(layout, cell, layers_json, points, router_bin,
                                      router_bin, work_dir, uu, margin_um, rsmt,
                                      show_corridor, show_obstacles,
                                      waypoints_layer_spec=waypoints_layer_spec,
-                                     corridor_pitch=corridor_pitch)
+                                     corridor_pitch=corridor_pitch,
+                                     corridor_guide_weight=corridor_guide_weight)
     result["resolved_from_selection"] = True
     if unresolved:
         result["unresolved_points"] = unresolved
@@ -991,7 +1005,7 @@ def complete_nets_on_layout(layout, cell, layers_json, net_names, router_bin,
                              work_dir, uu=1000, margin_um=5.0, rsmt=True,
                              show_corridor=True,
                              waypoints_layer_spec=WAYPOINT_LAYER,
-                             corridor_pitch=None):
+                             corridor_pitch=None, corridor_guide_weight=None):
     """Route several nets in one router pass, each optionally following
     its own drawn corridor -- draw one Path per net you want to guide, all
     on `waypoints_layer_spec`; each net is matched to whichever path sits
@@ -1099,7 +1113,7 @@ def complete_nets_on_layout(layout, cell, layers_json, net_names, router_bin,
                         for net_name, islands in per_net_islands.items()]
     placement_path, ndr_path, lef_path = build_router_inputs_multi(
         work_dir, nets_for_router, obstacles_by_layer, dbu_um, uu, bbox_um,
-        widths, corridor_pitch)
+        widths, corridor_pitch, corridor_guide_weight)
 
     # "1", not a single net's name -- HANAN_DEBUG_NET=1 dumps a debug LEF
     # for every net in this run, matching what routing them one at a time

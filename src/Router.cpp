@@ -280,6 +280,30 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
 // obstacle) even after every existing fallback. This function exists so the
 // wider, more accurate lower bound benefits pair selection without touching
 // any of that.
+CostType CostFn::admissibleBound(const Node& n1, const Node& n2) const
+{
+  const int dx = std::abs(n1.x() - n2.x());
+  const int dy = std::abs(n1.y() - n2.y());
+  CostType minH = COST_MAX, minV = COST_MAX;
+  for (int i = 0; i <= _topRoutingLayer; ++i) {
+    minH = std::min(minH, _layerHCost[i]);
+    minV = std::min(minV, _layerVCost[i]);
+  }
+  if (minH >= COST_MAX) minH = _minMetalCost;
+  if (minV >= COST_MAX) minV = _minMetalCost;
+  CostType dc = minH * dx + minV * dy;
+  const int lo = std::min(n1.z(), n2.z()), hi = std::max(n1.z(), n2.z());
+  for (int i = lo; i < hi; ++i) dc += _layerPairCost[i][i + 1];
+  if (dx && dy && lo == hi && (_layerHCost[lo] >= COST_MAX || _layerVCost[lo] >= COST_MAX)) {
+    // both directions needed on a layer that forbids one: a layer change is forced
+    CostType v = CostTypeMax;
+    if (lo < _topRoutingLayer) v = std::min(v, _layerPairCost[lo][lo + 1]);
+    if (lo > 0) v = std::min(v, _layerPairCost[lo][lo - 1]);
+    if (v < CostTypeMax) dc += v;
+  }
+  return dc;
+}
+
 CostType CostFn::patternLowerBound(const Node& n1, const Node& n2) const
 {
   CostType dc{0};
@@ -468,8 +492,9 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
   constructVias();
 }
 
-void Router::setGuide(const Geom::LayerRects& g, const CostType weight)
+void Router::setGuide(const Geom::LayerRects& g, const CostType weight, const int pitch)
 {
+  _guidePitch = pitch;
   _guide = g;
   _guideByLayer.clear();
   _guideAll.clear();

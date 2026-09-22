@@ -197,6 +197,8 @@ class CostFn {
     // pairs -- see the definition for why it needs a wider layer window than
     // deltaCost's real per-move cost accounting can safely use everywhere.
     CostType patternLowerBound(const Node& n1, const Node& n2) const;
+    // Admissible A* bound (deltaCost() and patternLowerBound() are not).
+    CostType admissibleBound(const Node& n1, const Node& n2) const;
     void markCostTablesDirty() { _widenedWindowDirty = true; }
     CostFn(const DRC::LayerInfo& lf);
     void setRelaxFloor(const CostType c) { if (c > 0 && c < COST_MAX) _minMetalCost = c; }
@@ -613,6 +615,7 @@ class Router {
     std::map<int, Geom::Rects> _guideByLayer;
     Geom::Rects _guideAll;
     CostType _guideWeight{0};
+    int _guidePitch{0};   // >0: per-unit-length mode, deviation measured in these units
     bool _hasGuide{false};
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
@@ -637,11 +640,23 @@ class Router {
           }
         }
       }
-      // Bias toward the symmetry guide: penalise this node's planar distance from
-      // the guide. The term depends only on n's position, so it accumulates along
-      // the path (via parent->fcost()) without changing parent selection.
+      // Guide bias: per node (symmetry guide, _guidePitch == 0) or integrated
+      // per unit length along the edge (corridor guide, _guidePitch > 0).
       if (_hasGuide) {
-        fcost += _guideWeight * guideDeviation(n->x(), n->y(), n->z());
+        if (_guidePitch > 0) {
+          if (n->parent() && n->parent()->z() == n->z()) {
+            const Node* p = n->parent();
+            const long len = std::abs(n->x() - p->x()) + std::abs(n->y() - p->y());
+            if (len > 0) {
+              const CostType d0 = guideDeviation(p->x(), p->y(), n->z());
+              const CostType dm = guideDeviation((p->x() + n->x()) / 2, (p->y() + n->y()) / 2, n->z());
+              const CostType d1 = guideDeviation(n->x(), n->y(), n->z());
+              fcost += _guideWeight * ((d0 + 4 * dm + d1) / 6) * len / _guidePitch;
+            }
+          }
+        } else {
+          fcost += _guideWeight * guideDeviation(n->x(), n->y(), n->z());
+        }
       }
       n->setFCost(fcost);
       /*CostType bends{0};
@@ -680,6 +695,12 @@ class Router {
     void evalTCost(Node* n)
     {
       CostType tcost = CostTypeMax;
+      // admissible bound under a corridor guide; deltaCost() elsewhere for speed
+      if (_hasGuide && _guidePitch > 0) {
+        for (auto& t : _targets) tcost = std::min(tcost, _cf.admissibleBound(*n, *t));
+        n->setTCost(tcost);
+        return;
+      }
       for (auto& t : _targets) {
         tcost = std::min(tcost, _cf.deltaCost(*n, *t));
       }
@@ -1080,8 +1101,9 @@ class Router {
     // returns the Manhattan distance from (x,y,z) to the nearest guide shape on the
     // same layer (falling back to any layer). baseUnitCost is the cheapest per-DBU
     // wire cost, used by the caller to scale the weight into cost units.
-    void setGuide(const Geom::LayerRects& g, const CostType weight);
-    void clearGuide() { _guide.clear(); _guideByLayer.clear(); _guideAll.clear(); _guideWeight = 0; _hasGuide = false; }
+    // pitch > 0 switches evalFCost's guide term to per-unit-length mode (see there).
+    void setGuide(const Geom::LayerRects& g, const CostType weight, const int pitch = 0);
+    void clearGuide() { _guide.clear(); _guideByLayer.clear(); _guideAll.clear(); _guideWeight = 0; _guidePitch = 0; _hasGuide = false; }
     bool hasGuide() const { return _hasGuide; }
     CostType guideDeviation(const int x, const int y, const int z) const;
     CostType baseUnitCost() const;
