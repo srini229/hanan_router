@@ -118,23 +118,9 @@ class Net {
     std::map<int, DRC::ViaArray> _ndrvias;
     std::vector<std::pair<Port*, Geom::LayerRects>> _pinSnapshot;
     Geom::Rects _corridor, _corridorEdges;
-    // ordered waypoints (router-uu units) a person clicked on the canvas,
-    // read from NDR's per-net "corridor_topology" -- when at least 2 are
-    // given, the corridor follows just this path (consecutive points
-    // joined by Manhattan L-segments) instead of the auto Borah-Owens
-    // tree; see rsmtCorridor(). Works for any pin count: every pin gets
-    // its own bloated bubble regardless of topology source, so the path
-    // only needs to pass near enough each pin to reach it, not touch it
-    // exactly or include it as an explicit endpoint.
+    // drawn corridor waypoints (NDR corridor_topology), router units
     std::vector<std::pair<int, int>> _corridorTopology;
-    // Corridor margin, in multiples of the routing layer's own pitch --
-    // read from NDR's per-net "corridor_pitch". <=0 means "use the
-    // router's own default" (Net.cpp's RSMT_CORRIDOR_PITCHES); a person
-    // widening or narrowing a drawn corridor from the GUI sets this
-    // instead of that constant. Feeds both the corridor's initial margin
-    // and the base the margin-widening retry ladder scales from, so a
-    // narrower request still gets the same proportional retries a wider
-    // one would.
+    // corridor margin in layer pitches (NDR corridor_pitch); <=0 uses the default
     int _corridorPitch{0};
     // NDR "corridor_guide_weight": pull toward the drawn line, 0 = walls only
     double _corridorGuideWeight{0};

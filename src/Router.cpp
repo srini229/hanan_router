@@ -265,21 +265,7 @@ CostType CostFn::deltaCost(const Node& n1, const Node& n2) const
   return dc;
 }
 
-// A copy of deltaCost's active logic (the large commented-out block deltaCost
-// carries is dead code, not duplicated here), except the layer-window search
-// below can widen past one adjacent layer. patternRoute() uses this only to
-// *rank and prune* candidate (source, target) pairs before doing real pattern
-// construction -- lb here never becomes an actual routed cost, so widening it
-// can't change what a real path costs, only which candidates patternRoute()
-// bothers to try first. deltaCost() itself keeps the original single-hop
-// window: it is also the A* search's real per-move edge cost and target-
-// distance heuristic, and other net-ordering machinery (e.g. the M1-pin-as-
-// M2-obstacle projection in Module::route) turned out to implicitly depend on
-// the narrower, more local layer choices that window produces -- widening it
-// there caused a real net to go unrouted (test/run_smoke.sh, m1_pin_adj_
-// obstacle) even after every existing fallback. This function exists so the
-// wider, more accurate lower bound benefits pair selection without touching
-// any of that.
+// lower bound that never exceeds a route cost: min rates + via stack
 CostType CostFn::admissibleBound(const Node& n1, const Node& n2) const
 {
   const int dx = std::abs(n1.x() - n2.x());
@@ -304,6 +290,7 @@ CostType CostFn::admissibleBound(const Node& n1, const Node& n2) const
   return dc;
 }
 
+// deltaCost with a layer window that widens past one adjacent layer; ranks patternRoute() pairs only
 CostType CostFn::patternLowerBound(const Node& n1, const Node& n2) const
 {
   CostType dc{0};
@@ -334,9 +321,6 @@ CostType CostFn::patternLowerBound(const Node& n1, const Node& n2) const
   const int dy = std::abs(n1.y() - n2.y());
   const int minz0 = std::min(n1.z(), n2.z());
   const int maxz0 = std::max(n1.z(), n2.z());
-  // The widened window depends only on minz0/maxz0 and the layer cost
-  // tables, never on n1/n2's actual position -- see buildWidenedWindowCache
-  // for why this is precomputed rather than re-walked here.
   if (_widenedWindowDirty) buildWidenedWindowCache();
   const auto& widened = _widenedWindowCache[minz0][maxz0];
   int minz = widened.first, maxz = widened.second;
@@ -1612,9 +1596,7 @@ void Router::generateHananGrid()
     coverHoles(l.second, ((its != _psources.end()) ? its->second : PolySet()),
         ((ith != _ptargets.end()) ? ith->second : PolySet()));
   }
-  // Keepout walls (_ptobstaclesNoHole) are folded in separately below: after
-  // coverHoles (a closed ring would read as a void to fill), and with a
-  // width/2 halo only, never spacing. See docs/ROUTING_NOTES.md.
+  // corridor walls are added below: after coverHoles, width/2 halo only
   for (auto& l : _ptobstacles) {
     auto its = _psources.find(l.first);
     auto ith = _ptargets.find(l.first);
@@ -1712,9 +1694,7 @@ void Router::generateHananGrid()
     ycoords.insert(_seedYCoords.begin(), _seedYCoords.end());
   }
   if (_padHaloLines) {
-    // Lines where a via *pad* clears each obstacle. A pad is wider than the
-    // wire, so the wire-halo line next to an obstacle can be a place where
-    // no via is legal; the pad-halo line is where one is.
+    // -padhalo: grid lines where a via pad, not just a wire, clears an obstacle
     for (auto z = _minLayer; z <= _maxLayer; ++z) {
       int px = 0, py = 0;
       auto pads = [&](const Vias& vs, const bool lower) {
@@ -2134,16 +2114,7 @@ bool Router::patternRoute()
         }
         if (c < bestcost) {
           bestcost = c; best = w; bests = s; bestt = t;
-          // The "is this provably optimal" check below needs a bound this
-          // pair can actually achieve, not patternLowerBound's optimistic
-          // one -- that bound can assume a cheap layer several via-hops
-          // away that real via/obstacle legality then can't reach, and
-          // comparing bestcost against it made patternRoute() distrust
-          // perfectly good results far more often, falling through to full
-          // A* search on ~4x as many nets on the sky130-benchmarks suite
-          // (mos_bandgap_fb: pattern-routed nets 37->14, full-A* 36->59)
-          // for no quality gain on those nets -- deltaCost's single-hop
-          // bound is what the old, already-validated threshold used.
+          // threshold uses deltaCost: patternLowerBound may be unreachable
           bestlb = _cf.deltaCost(*s, *t);
         }
       };
@@ -2211,19 +2182,7 @@ bool Router::patternRoute()
 }
 
 namespace {
-// The keepout walls a corridor (auto -rsmt or a person's own
-// corridor_topology) adds are a real, physical bound on how far the route
-// may legally roam -- but findSol()'s own search box, below, historically
-// only ever grew from *pin* positions (tripled), then got AND'd down to
-// whatever the caller's mbox allows. AND only ever shrinks, so a keepout
-// wall genuinely far from the pins (any corridor detour bigger than about
-// 1.5x the pin spread) sat entirely outside the search box the grid gets
-// built from -- not "too sparse a grid there", the search never looked
-// there at all. Verified directly: a corridor built correctly, walls and
-// all, whose own detour leg sat outside this box, came back "no target is
-// reachable from any source" on every single attempt including
-// unconstrained, on a case with plenty of real obstacle-edge coordinates
-// everywhere the search box *did* cover.
+// extent of the corridor walls; the search box must cover them
 Geom::Rect keepoutExtent(const LayerPolySet& ptobstaclesNoHole)
 {
   Geom::Rect r;
@@ -3065,13 +3024,7 @@ bool Router::escapesConnected() const
     if (b >= 0) out.push_back(b);
   };
 
-  // HANAN_DEBUG_ESCAPE=1 traces this function's own reachability walk to
-  // stderr (err.log, once redirected) -- source/target grid hits, every
-  // segment popped, every crossing candidate checked and whether segAt()
-  // resolved it. Added to localize a real bug (2026-09-20: an RSMT keepout
-  // wall making escapesConnected() report a trivially-open pin pair as
-  // unreachable) and kept permanently since reproducing that kind of failure
-  // by hand from first principles is slow and this makes it immediate.
+  // HANAN_DEBUG_ESCAPE=1 traces this reachability walk to stderr
   const bool debugEscape = getenv("HANAN_DEBUG_ESCAPE") != nullptr;
 
   std::vector<char> seen(segs.size(), 0);
@@ -3130,10 +3083,7 @@ bool Router::escapesConnected() const
         if (debugEscape) {
           CERR << "DEBUGESCAPE  dz=" << dz << " z=" << z << " cross_line=" << it->first << " segidx=" << segidx;
           if (segidx < 0) {
-            // Why this candidate line didn't cover s.line: dump its actual
-            // free intervals (or note it has none at all) instead of just
-            // the miss, so a blocked crossing is diagnosable from the log
-            // alone rather than needing another debug pass.
+            // log the candidate line free intervals
             auto bl = byLine.find(std::make_tuple(z, !s.vert ? 1 : 0, it->first));
             if (bl == byLine.end()) {
               CERR << " (no line at " << it->first << " on layer " << z << ")";

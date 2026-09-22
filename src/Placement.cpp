@@ -281,13 +281,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
     router.setModName(_name);
     COUT << "setting module name : " << _name << '\n';
     router.setusepinwidth((_usepinwidth == 1) ? true : false);
-    // patternRoute()'s wider layer-cost bound (CostFn::patternLowerBound)
-    // measured as a real net win for a small module -- little competition
-    // for the layer it wants -- but a net loss (worse average wirelength,
-    // more full-A* fallback) on whole-chip blocks with many nets pulling
-    // toward the same cheap layers at once. Gate it on this module's own
-    // net count, not globally, so small hierarchies benefit without
-    // risking larger ones.
+    // wide pattern bound only for small modules
     static const size_t SMALL_HIERARCHY_NETS = 10;
     router.setWidePatternBound(nets.size() < SMALL_HIERARCHY_NETS);
     static std::set<std::string> debugnet(splitString((getenv("HANAN_DEBUG_NET") ? std::string(getenv("HANAN_DEBUG_NET")) : std::string("")), ','));

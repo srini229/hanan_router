@@ -148,19 +148,7 @@ class CostFn {
       while (uf[a] != a) a = uf[a];
       return a;
     }
-    // patternLowerBound()'s widened (minz,maxz) search result, keyed by the
-    // *un*-widened (minz,maxz) pair it started from -- that result depends
-    // only on the layer cost tables, never on which nodes are being
-    // compared, so it is the same for every pair patternRoute() ranks with
-    // the same starting layers. Computed once per _layerHCost/_layerVCost
-    // state (there are at most a handful of distinct (minz,maxz) pairs to
-    // begin with -- (topRoutingLayer+1)^2), instead of re-walked by every
-    // one of the thousands of pair evaluations a single net's pattern
-    // routing can do -- that re-walk, not the O(layers) cost of any single
-    // widen, is what showed up as a real wall-clock slowdown on the
-    // sky130-benchmarks suite (mfb_biquad +18%, mos_bandgap_fb +105%).
-    // Invalidated wherever _layerHCost/_layerVCost themselves change
-    // (updatendr(), resetdirs()), never elsewhere.
+    // patternLowerBound() window per (minz,maxz); reset in updatendr()/resetdirs()
     mutable std::vector<std::vector<std::pair<int, int>>> _widenedWindowCache;
     mutable bool _widenedWindowDirty{true};
     void buildWidenedWindowCache() const
@@ -192,10 +180,7 @@ class CostFn {
     }
   public:
     CostType deltaCost(const Node& n1, const Node& n2) const;
-    // Same shape as deltaCost's general (non-adjacent, non-same-layer) case,
-    // used only to pre-rank patternRoute()'s candidate (source, target)
-    // pairs -- see the definition for why it needs a wider layer window than
-    // deltaCost's real per-move cost accounting can safely use everywhere.
+    // pair pre-ranking for patternRoute() only; wider layer window than deltaCost
     CostType patternLowerBound(const Node& n1, const Node& n2) const;
     // Admissible A* bound (deltaCost() and patternLowerBound() are not).
     CostType admissibleBound(const Node& n1, const Node& n2) const;
@@ -497,14 +482,7 @@ class Router {
 #endif
     Geom::LayerRects _obstacles, _tobstacles;
     LayerPolySet _pobstacles, _ptobstacles;
-    // Obstacles added via addObstacles(..., true, /*noCoverHoles=*/true):
-    // merged into _ptobstacles in generateHananGrid() *after* coverHoles()
-    // runs, so they never contribute a "hole" for it to see and fill in --
-    // for a keepout ring (RSMT corridor wall) whose whole interior is
-    // legitimate open routing space, not a small void worth paving over.
-    // Kept separate rather than a per-rect flag so real obstacles' own
-    // coverHoles behaviour (correct for genuine obstacle geometry) is
-    // completely untouched.
+    // corridor walls: merged after coverHoles() so their interior is not filled
     LayerPolySet _ptobstaclesNoHole;
     LayerPolySet _psources, _ptargets;
     // Extra grid coordinates (not obstacles, not pins) seeded inside corridor
@@ -885,17 +863,7 @@ class Router {
     void setName(const std::string& n) { _name = n; }
     const std::string& name() const { return _name; }
     void setusepinwidth(const bool u) { _usepinwidth = u; }
-    // patternRoute()'s pair pre-ranking uses CostFn::patternLowerBound (a
-    // wider, more optimistic layer-cost search) instead of deltaCost when
-    // this is set -- validated to improve both wirelength and confinement
-    // for an isolated net with little competition for the layers it wants
-    // (the RSMT-corridor GUI-completion path), but measured as a net
-    // *regression* -- worse average wirelength, more full-A* fallback, real
-    // slowdowns -- on whole-chip multi-net sky130-benchmarks circuits: many
-    // nets chasing the same cheap layer congest it, an effect a single
-    // isolated net's test can't show. Module::route() sets this per module
-    // from its own net count, not globally, so a small hierarchy benefits
-    // without risking the main flow's larger blocks.
+    // use patternLowerBound for patternRoute ranking; set per module by net count
     void setWidePatternBound(const bool b) { _useWidePatternBound = b; }
     bool useWidePatternBound() const { return _useWidePatternBound; }
 

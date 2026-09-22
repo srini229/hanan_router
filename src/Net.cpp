@@ -7,13 +7,7 @@
 using namespace boost::polygon::operators;
 static const int RSMT_CORRIDOR_PITCHES = 4;
 static const int RSMT_EDGE_WIDTH = 5;   // drawn width of the corridor outline
-// How far each wall segment overhangs past its own endpoint, along the edge,
-// on top of the perpendicular RSMT_EDGE_WIDTH/2 every segment already gets at
-// a corner. The wall is a ring of separate per-edge rects, not one polygon;
-// a bare corner-touch is one bad trim (or any future boolean op on the wall)
-// away from cutting the ring into disconnected pieces. A generous overlap
-// here means a local carve-out near one corner still leaves its two
-// neighbouring segments overlapping each other, not just meeting edge-to-edge.
+// wall segments overlap at corners so a trim cannot split the ring
 static const int RSMT_WALL_OVERLAP = RSMT_EDGE_WIDTH * 8;
 
 #include <algorithm>
@@ -240,19 +234,7 @@ Geom::Rects Net::rsmtCorridor(const int margin) const
   };
 
   if (_corridorTopology.size() >= 2) {
-    // A person's own clicked waypoints replace the auto Borah-Owens tree:
-    // just the drawn centreline, bloated by the same pitch margin the
-    // auto path uses -- consecutive waypoints joined by the same
-    // Manhattan-L band(). No pin is spliced into this path or treated as
-    // its start/end: every pin already got its own bloated bubble above,
-    // unconditionally, regardless of how many pins this net has -- so
-    // "does the corridor reach every pin" only requires the drawn path
-    // to pass near enough each one for their bubbles to touch it (the
-    // margin retry ladder in Net::route() widens this same margin a few
-    // times before giving up, which also covers "not quite close
-    // enough"). This is why there's no 2-pin restriction: unlike the
-    // pin1->...->pin2 chain this replaced, nothing here depends on pin
-    // count or which pin is "first".
+    // drawn waypoints replace the Steiner tree; pins already have their own bubbles
     for (size_t i = 0; i + 1 < _corridorTopology.size(); ++i) {
       band(_corridorTopology[i].first, _corridorTopology[i].second,
            _corridorTopology[i + 1].first, _corridorTopology[i + 1].second);
@@ -418,11 +400,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
 
     PortPairs ppairs = (_driver.empty() ? reorderPorts() : clockRouteOrder());
 
-    // Builds the RSMT corridor's boundary-wall obstacles at a given pitch
-    // margin. corridorOut/edgesOut, when non-null, also record the raw
-    // corridor for visualization (only the net-wide base call below does
-    // this -- a later per-pair retry at a wider margin must not overwrite
-    // what the whole net's corridor is reported as).
+    // corridor walls at a pitch margin; corridorOut/edgesOut only for the base call
     auto buildKeepout = [&](const int pitchMul, Geom::Rects* corridorOut, Geom::Rects* edgesOut) -> Geom::LayerRects {
       Geom::LayerRects ko;
       int pitch = 0;
@@ -456,9 +434,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       if (edgesOut) *edgesOut = edges;
       return ko;
     };
-    // Seed grid coordinates inside this attempt's corridor bands (plain
-    // coordinates, not pins) and hand the bands to the router for pruning;
-    // re-run after every clearObstacles(true). See docs/ROUTING_NOTES.md.
+    // seed grid lines in the corridor bands; re-run after clearObstacles(true)
     auto seedCorridorGrid = [&](const Geom::Rects& bands) {
       router.setCorridorBands(bands);
       if (bands.empty() || !router.seedCorridor()) return;
@@ -488,18 +464,10 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         router.addSeedY((r.ymin() + r.ymax()) / 2);
       }
     };
-    // dropSameNetObstacles is re-run against the *current* keepout walls at
-    // each call site below, rather than baked in once here: _routeshapeswithpins
-    // grows as each port pair routes, so a wire this net lays for an earlier
-    // pair -- which can legitimately run right along the corridor boundary --
-    // must not be walled off from a later pair's escape.
+    // dropSameNetObstacles runs per pair: this net grows as pairs route
 
     Geom::LayerRects keepoutWalls;
-    // a person's own clicked corridor (_corridorTopology, read via NDR's
-    // "corridor_topology") builds and applies a keepout the same way the
-    // auto -rsmt corridor does, whether or not -rsmt itself was passed --
-    // it's a distinct, user-driven source for the same mechanism, not
-    // conditional on the global auto-corridor flag.
+    // a drawn corridor applies with or without -rsmt
     const int corridorPitchBase = (_corridorPitch > 0) ? _corridorPitch : RSMT_CORRIDOR_PITCHES;
     if (router.rsmtCorridor() || !_corridorTopology.empty()) {
       keepoutWalls = buildKeepout(corridorPitchBase, &_corridor, &_corridorEdges);
@@ -630,24 +598,12 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       seedCorridorGrid(_corridor);
       auto sol = router.findSol();
       if (!router.lastSolutionFound() && !keepout.empty()) {
-        // A blocked pair does not immediately mean the whole net-wide
-        // corridor is wrong for it -- it usually means a real obstacle
-        // sits inside the corridor near this particular pair. Widen the
-        // margin around the same RSMT topology a few times before giving
-        // up on staying confined at all; only the last resort drops the
-        // corridor entirely, so a genuinely unconstrained route stays rare
-        // and is logged loudly rather than being the routine outcome.
+        // widen the corridor a few times before dropping it
         auto retryAttempt = [&](const Geom::LayerRects& ko, const std::string& stage,
                                 const Geom::Rects& bands) -> Geom::LayerRects {
           router.clearObstacles(true);
           router.clearSourceTargets();
-          // Each stage gets its own debug-dump name -- the base attempt above
-          // already claimed the plain pair name, so every retry here would
-          // otherwise overwrite the same ATTEMPT_*.lef file as the *next*
-          // retry, leaving only the very last stage's obstacle set on disk
-          // (usually the empty-keepout unconstrained one) and making it look
-          // like the corridor was never applied at all for a pair that
-          // needed retries -- it was, just not visible after the fact.
+          // distinct debug-dump name per retry stage
           router.setName(_name + "__" + port1->name() + "__" + port2->name() + "__" + stage);
           router.setMBox(bbox);
           addSrcTgtShapes();
@@ -662,9 +618,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           seedCorridorGrid(bands);
           return router.findSol();
         };
-        // not `static`: corridorPitchBase is per-net (a person's own
-        // corridor_pitch override, when set), so this can't be computed
-        // once and reused across nets with different overrides.
+        // per net: corridor_pitch may override the base
         const int RETRY_PITCH_MULS[] = {
           corridorPitchBase * 2, corridorPitchBase * 4, corridorPitchBase * 8};
         bool widened = false;

@@ -509,12 +509,7 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                   }
                 }
               }
-              // "corridor_topology": [[x,y], ...] in microns -- an ordered
-              // list of waypoints a person clicked on the canvas. Builds
-              // the same keepout an auto -rsmt corridor would, just over
-              // this path instead of the Borah-Owens tree
-              // (Net::rsmtCorridor()); works whether or not -rsmt itself
-              // was passed, and for any number of this net's pins.
+              // corridor_topology: [[x,y],...] in microns, overrides the Steiner tree
               auto ittopo = netiter.find("corridor_topology");
               if (ittopo != netiter.end()) {
                 std::vector<std::pair<int, int>> pts;
@@ -528,14 +523,7 @@ void Netlist::readNDR(const std::string& ndrfile, const DRC::LayerInfo& lf)
                   modit->second->addCorridorTopology(*itnetname, pts);
                 }
               }
-              // "corridor_pitch": N -- multiples of the routing layer's
-              // pitch the corridor (auto or corridor_topology alike)
-              // bloats by, replacing Net.cpp's own RSMT_CORRIDOR_PITCHES
-              // default for this net only. Also rescales the retry ladder
-              // that widens the corridor a few times before giving up on
-              // staying confined at all, so a narrower request still
-              // gets proportional retries, not the default's absolute
-              // widths.
+              // corridor_pitch: margin in layer pitches, this net only
               auto itpitch = netiter.find("corridor_pitch");
               if (itpitch != netiter.end() && itpitch->is_number()) {
                 modit->second->setCorridorPitch(*itnetname, static_cast<int>(*itpitch));

@@ -1,20 +1,5 @@
 #!/usr/bin/env python3
-"""Autocomplete a broken net directly on a loaded KLayout design.
-
-A net whose drawn metal (across the whole cell hierarchy, any depth) forms
-more than one physically-connected island is "broken". This finds those
-islands from the design's own net-name labels (no netlist needed), gives
-each island its own trivial one-pin leaf device so the router has something
-real to connect, declares every *other* net's metal in the working area an
-obstacle, runs `hanan_router`, and paints the routed result back.
-
-Written against `klayout.db` (the standalone, pip-installed binding) so it
-is testable headlessly. `klayout.db` and `pya` (the binding available
-*inside* the running KLayout application) expose the same classes with the
-same API, so the GUI macro that drives this can just call straight into the
-functions here -- the connectivity/routing logic itself never changes
-between the two contexts.
-"""
+"""Complete broken nets in a KLayout layout with hanan_router (headless klayout.db, or pya inside KLayout)."""
 import argparse
 import json
 import os
@@ -25,30 +10,11 @@ import tempfile
 
 import klayout.db as db
 
-EPS = 1  # dbu; a probe box this much larger than a point still reliably
-         # registers as "interacting" with a zero-width touch (verified: a
-         # truly zero-size probe box does not count as interacting with
-         # anything in klayout, even a polygon it sits inside)
+EPS = 1  # dbu; a zero-size probe box never counts as interacting in klayout
 
 
 def load_layers(path):
-    """From a sky130.layers.json-style file:
-    metals: {name: (gds_layer, draw_datatype)} -- routable metal, virtual_pins
-            and obstacles are always expressed on these
-    labels: {name: (gds_layer, label_texttype)}  -- keyed by the *metal*
-            layer name a label belongs to, same convention gds2placement.py
-            uses (a layer's own "Label" datatype, not a separate layer)
-    vias:   [(via_layer_name, gds_layer, via_datatype, layer_a_name, layer_b_name)]
-    draw_by_name: {name: (gds_layer, datatype)} for *every* Draw-purpose
-            layer, metal or via -- what a routed DEF's own RECT lines are
-            named after, so painting the result back needs this, not just
-            `metals`.
-    widths: {name: nominal wire width, in the layers.json's own router-native
-            units (matching its Pitch/Width fields directly, not microns)}
-            for each metal layer -- a fragment's own pin needs to be sized to
-            this, not to the fragment's full (possibly much larger) extent;
-            see `island_anchor`.
-    """
+    """(metals, labels, vias, draw_by_name, widths) from a layers.json."""
     metals, labels, vias, draw_by_name, widths = {}, {}, [], {}, {}
     with open(path) as f:
         data = json.load(f)
@@ -104,10 +70,7 @@ def label_hits(layout, cell, layer_spec, text):
 
 
 def which_polygon(polygons, x, y):
-    """Index into `polygons` (a list of db.Polygon) containing (x, y), or
-    None. A truly zero-size probe box does not register as "interacting"
-    with anything in klayout, even a polygon it sits inside -- verified --
-    so the probe is enlarged by EPS on each side."""
+    """Index of the polygon in `polygons` containing (x, y), or None."""
     probe = db.Region(db.Box(x - EPS, y - EPS, x + EPS, y + EPS))
     for i, poly in enumerate(polygons):
         if not db.Region(poly).interacting(probe).is_empty():
@@ -116,10 +79,7 @@ def which_polygon(polygons, x, y):
 
 
 def _merged_islands(layout, cell, metals, vias):
-    """(list of db.Polygon, {layer_name: db.Region}) -- every physically
-    connected group of metal+via shapes anywhere in the hierarchy
-    (independent of net identity), and each metal layer's own flattened
-    geometry, reused by callers so they don't rescan the hierarchy."""
+    """(merged conductor polygons, {layer: layer index}) for the whole hierarchy."""
     all_by_layer = {name: metal_region(layout, cell, spec)
                      for name, spec in metals.items()}
     combined = db.Region()
@@ -144,11 +104,7 @@ def _island_per_layer(islands_all, all_by_layer, idx):
 
 
 def net_islands(layout, cell, metals, labels, vias, net_name):
-    """{layer_name: db.Region} per physically-disjoint island of `net_name`,
-    found from every label reading `net_name` across the whole hierarchy.
-    A net with exactly one island is complete; more than one is broken.
-    Also returns `all_by_layer`, the full per-layer flattened metal (reused
-    by the caller to build obstacles without re-scanning the hierarchy)."""
+    """Conductor islands carrying a label equal to `net`."""
     islands_all, all_by_layer = _merged_islands(layout, cell, metals, vias)
 
     hit_islands = set()
@@ -164,14 +120,7 @@ def net_islands(layout, cell, metals, labels, vias, net_name):
 
 
 def net_name_for_point(layout, cell, metals, labels, vias, x, y):
-    """The net-name label reachable from the physically-connected island
-    containing world point (x, y) -- the reverse of net_islands: "what net
-    is this shape part of", for driving completion from a GUI selection
-    instead of a typed name. None if the point isn't on any metal, or its
-    island reaches no label at all (a genuinely bare, unlabeled fragment --
-    which net it belongs to can't be recovered this way; the plan's own
-    fallback, geometric union-find, still finds *that* it's broken, just
-    not what to call it)."""
+    """Net label reachable from the island containing (x, y), or None."""
     islands_all, _all_by_layer = _merged_islands(layout, cell, metals, vias)
     idx = which_polygon(islands_all, x, y)
     if idx is None:
@@ -186,44 +135,13 @@ def net_name_for_point(layout, cell, metals, labels, vias, x, y):
 
 
 def region_to_um_rects(region, dbu):
-    """[[x0,y0,x1,y1], ...] um, one per RECT a LEF OBS block can hold --
-    LEF has no polygon-with-hole primitive, so a merged polygon that has a
-    hole (a region built as "everything except some enclosed area", e.g. a
-    corridor's own U-shaped keep-in -- see `complete_net_on_layout`'s
-    `corridor_layer_spec`) cannot go through `each_merged()` and `.bbox()`
-    directly: a hole's bbox is the same as its surrounding polygon's, so
-    that path silently reports the *whole* bbox as solid obstacle,
-    including the hole -- verified: it turns a correctly-computed
-    corridor-shaped keep-in region into one obstacle rectangle covering
-    the corridor's own path along with everything outside it, walling the
-    route in completely. `decompose_trapezoids_to_region()` splits any
-    region, holes included, into plain non-overlapping rectangles/
-    trapezoids first, so this always reports the true shape, not just an
-    outer bbox -- verified against the same hole case."""
+    """Region as [[x0,y0,x1,y1], ...] in microns; holes are split into rectangles."""
     return [[b.left * dbu, b.bottom * dbu, b.right * dbu, b.top * dbu]
             for p in region.decompose_trapezoids_to_region().each() for b in [p.bbox()]]
 
 
 def island_anchor(per_layer, widths):
-    """(layer_name, db.Box) -- one small, wire-scale representative rect for
-    an island, on whichever layer carries the most area in it. A router pin
-    only needs *somewhere* real to escape from that's part of the fragment;
-    the island is already internally connected by definition (that's what
-    makes it one island, not several), so unlike `virtual_pins` -- which the
-    router requires an *already-existing* multi-pin net to attach to
-    (`Netlist.cpp`, `Module::addVirtualPin` looks the net up by name and
-    silently no-ops otherwise) -- a single real pin per island, wired
-    through an ordinary one-pin leaf instance, is both
-    sufficient and is what actually makes the net exist in the first place.
-
-    The returned rect is deliberately *not* the fragment's own full extent:
-    a pin exactly as large as a whole (possibly big, blob-shaped) fragment
-    gives the router's escape-point search nowhere to stand -- verified
-    empirically, "pruned N blocked escape point(s)" and a failed search
-    every time, on a fragment as small as a single 1x1um box. A pin sized to
-    the layer's own nominal wire width, centered on the fragment and clamped
-    to fit inside it, behaves exactly like every other pin the router
-    already routes to correctly."""
+    """(layer, box): a wire-width rectangle inside an island, on its largest layer."""
     lname, region = max(per_layer.items(), key=lambda kv: kv[1].area())
     box = None
     for p in region.each_merged():
@@ -240,38 +158,9 @@ def build_router_inputs(work_dir, net_name, islands, obstacles_by_layer,
                          layout_dbu, uu, bbox_um, widths, virtual_pins_um=None,
                          corridor_topology_um=None, corridor_pitch=None,
                          corridor_guide_weight=None):
-    """placement.json + LEF: one trivial one-pin leaf macro per island,
-    instantiated exactly over that island's own anchor rect (see
-    `island_anchor`) and fa_map'd to `net_name` -- this is what actually
-    creates the net (`Netlist.cpp` only ever creates a net from an
-    instance's `fa_map`, or from `global_signals`, which turned out to add
-    an unwanted phantom module-boundary pin with no location and made the
-    router treat the net as already trivially satisfied). NDR carries
-    obstacles (everything else in the working area) and, when given,
-    `virtual_pins_um` -- extra `{layer: [(x0,y0,x1,y1), ...]}` fragments in
-    microns that `net_name` must also route through (`Netlist.cpp`'s
-    `addVirtualPin`; requires the net already have a real pin, which the
-    per-island leaves above always supply). A real per-island pin is
-    normally all a caller needs; `complete_net_on_layout`'s
-    `corridor_layer_spec` uses this for a second reason beyond "must touch
-    this point": a solid corridor-confinement obstacle can leave the
-    Hanan grid with no coordinate strictly inside a narrow corridor band
-    (verified: every track candidate comes from an obstacle or pin edge,
-    so a bare band between two obstacle walls with nothing else in it is
-    literally unroutable, "no target is reachable from any source", even
-    though the space is geometrically wide open) -- a virtual pin's own
-    rectangle inside that band supplies the missing edge, the same way a
-    device pin would.
-    `bbox_um` is the module's die area in microns -- the router clips
-    everything to it, so it must cover the working area, not be a
-    placeholder. `layout_dbu` (microns/unit) and `uu` (the router's own
-    units-per-micron, i.e. its `-uu`) may differ -- LEF/placement
-    coordinates are in the router's own scaled units, converted here, not
-    assumed equal to the layout's. Returns (placement_path, ndr_path, lef_path)."""
+    """Write placement.json, LEF and NDR that make one net's islands pins of one net."""
     to_router_units = lambda v: round(v * layout_dbu * uu)
-    # `widths` is in the layers.json's own router-native units (matches its
-    # Pitch/Width fields, i.e. microns * uu) -- convert to the layout's own
-    # dbu so island_anchor can compare it directly against fragment extents.
+    # widths are in layers.json units (microns * uu); convert to layout dbu
     widths_layout_units = {name: w / uu / layout_dbu for name, w in widths.items()}
 
     leaves, instances, lef_macros = [], [], []
@@ -280,12 +169,7 @@ def build_router_inputs(work_dir, net_name, islands, obstacles_by_layer,
         macro = f"FRAG{i}"
         w = to_router_units(box.width())
         h = to_router_units(box.height())
-        # A pin exactly filling its macro (no margin at all) leaves the
-        # router no room to generate an escape point off its boundary --
-        # verified: the router reports "pruned N blocked escape point(s)"
-        # and fails to route at all when tried without this. Centering the
-        # pin in a macro margin.max(w, h) larger on every side gives it the
-        # same generous clearance the working sky130-scale fixtures used.
+        # pad the macro so the router has room for an escape point off the pin
         margin = max(w, h, 1)
         mw, mh = w + 2 * margin, h + 2 * margin
         lef_macros.append(
@@ -317,11 +201,7 @@ def build_router_inputs(work_dir, net_name, islands, obstacles_by_layer,
         "leaves": leaves,
         "modules": [{
             "abstract_name": "TOP", "concrete_name": "TOP_CONC_0",
-            "bbox": [round(v * uu) for v in bbox_um],  # bbox_um is already
-                                                        # microns, not raw
-                                                        # layout dbu -- do
-                                                        # not also multiply
-                                                        # by layout_dbu here
+            "bbox": [round(v * uu) for v in bbox_um],  # bbox_um is already microns
             "instances": instances, "parameters": [],
         }],
     }
@@ -360,21 +240,7 @@ def build_router_inputs(work_dir, net_name, islands, obstacles_by_layer,
 def build_router_inputs_multi(work_dir, nets, obstacles_by_layer, layout_dbu,
                                uu, bbox_um, widths, corridor_pitch=None,
                                corridor_guide_weight=None):
-    """Like `build_router_inputs`, but for several nets sharing one router
-    pass instead of one net per call -- the actual entry point for "route
-    these nets together, each optionally on its own drawn corridor".
-    `nets` is `[(net_name, islands, corridor_topology_um_or_None), ...]`.
-    Kept as a separate function rather than folding multi-net support into
-    `build_router_inputs` itself: that function is exercised directly by
-    the existing test suite and other callers, and a net-count-dependent
-    branch inside it risks a regression there for no benefit -- the
-    per-island leaf/instance/LEF-writing logic below is copied, not
-    shared, on purpose. `corridor_pitch` is one value applied to every net
-    in this batch that has a drawn corridor (the GUI dialog asks for one
-    number per routing run, not one per net); the NDR schema itself
-    supports a different pitch per net if a future caller ever needs
-    that, this one just doesn't expose it.
-    Returns (placement_path, ndr_path, lef_path)."""
+    """build_router_inputs for several nets in one router pass."""
     to_router_units = lambda v: round(v * layout_dbu * uu)
     widths_layout_units = {name: w / uu / layout_dbu for name, w in widths.items()}
 
@@ -453,32 +319,7 @@ def build_router_inputs_multi(work_dir, nets, obstacles_by_layer, layout_dbu,
 
 def run_router(router_bin, layers_json, placement_path, lef_path, ndr_path,
                work_dir, uu, net_name, rsmt=True):
-    """`rsmt` confines the router's search to a corridor around the true
-    rectilinear Steiner minimal tree over the net's own pins
-    (`hanan_router -rsmt`). For the handful of pins a GUI completion ever
-    deals with, the raw wirelength difference this makes is small -- both
-    modes land within about 1% of the true RSMT length on the fixtures
-    this was checked against -- but *without* it the router's default
-    net-ordering can still pick a technically-tied-cost path that climbs
-    an extra metal layer and back down for no reason a straight run on the
-    layer the pins are already on would have served just as well: a plain
-    two-pin connection with nothing in the way came back as a single flat
-    M1 wire with `-rsmt` and an M1->M2->M3->M2->M1 detour (4 unneeded vias)
-    without it, on the exact same pins. On a whole-chip multi-net run
-    `-rsmt` is a real search-space restriction with its own tradeoffs, but
-    for one net's worth of pins at GUI-interactive scale it costs nothing
-    and removes a real, observed defect, so it defaults on here.
-
-    `HANAN_DEBUG_NET=net_name` makes the router dump `net_TOP_CONC_0_
-    <net_name>.lef` -- a LEF holding exactly the pins and the obstacles it
-    saw for this net *before* routing (see `Net::route`/`Placement.cpp`'s
-    `applyDebug`) -- always on, since it's one small file and it is the
-    only direct way to confirm the obstacles a caller declared actually
-    reached the router unchanged (`net_debug_obstacles`/
-    `paint_net_obstacles` below read it back). Runs with `cwd=work_dir` so
-    that file (and the router's own `route.log`/`err.log`, which it always
-    writes by bare relative name) land somewhere the caller controls
-    instead of wherever the calling process's cwd happened to be."""
+    """Run hanan_router on the inputs in `work`; return the routed DEF path."""
     out_dir = os.path.join(work_dir, "route_out")
     os.makedirs(out_dir, exist_ok=True)
     cmd = [router_bin, "-d", layers_json, "-p", placement_path,
@@ -516,29 +357,13 @@ def def_net_rects(def_path, net_name):
     return out
 
 
-USER_CORRIDOR_LAYER = (997, 0)  # scratch layer a person draws a routing
-                                 # corridor on, by hand, in the KLayout GUI --
-                                 # distinct from CORRIDOR_LAYER (999) and
-                                 # CORRIDOR_WALL_LAYER (998), which are the
-                                 # router's *own* -rsmt corridor, painted back
-                                 # for inspection, never drawn by a person.
+USER_CORRIDOR_LAYER = (997, 0)  # hand-drawn corridor; 998/999 are the router's own
 
-WAYPOINT_LAYER = (996, 0)  # scratch layer a person draws an ordered path
-                            # (KLayout's own multi-point Path shape) on, to
-                            # mark a routing topology by clicking points --
-                            # see `read_waypoints`. Distinct from
-                            # USER_CORRIDOR_LAYER (997), which is a filled
-                            # region, not an ordered point sequence.
+WAYPOINT_LAYER = (996, 0)  # hand-drawn ordered path of waypoints
 
 
 def read_all_waypoint_paths(layout, cell, layer_spec=WAYPOINT_LAYER):
-    """[[(x,y), ...], ...] world coordinates, one list per Path shape drawn
-    on `layer_spec` in `cell`, each in click order (see `read_waypoints`
-    for the single-path case this generalizes). Draw one path per net you
-    want to guide when routing several nets together -- `complete_nets_on_
-    layout` matches each net to whichever path is nearest it, so paths
-    don't need to be labelled or otherwise tied to a specific net by
-    anything other than proximity."""
+    """Every Path on `layer_spec` in `cell`, as lists of world points in click order."""
     idx = layout.find_layer(*layer_spec)
     if idx is None:
         return []
@@ -552,10 +377,7 @@ def read_all_waypoint_paths(layout, cell, layer_spec=WAYPOINT_LAYER):
 
 
 def nearest_waypoint_path(layout, cell, islands, layer_spec=WAYPOINT_LAYER):
-    """The drawn Path on `layer_spec` nearest to `islands` (Manhattan distance
-    from any of its vertices to any island's bbox centre), or [] if none is
-    drawn. With several corridors drawn for several nets, this is how a
-    single-net route picks its own instead of whichever shape comes first."""
+    """The drawn Path nearest to `islands`, or [] if none."""
     paths = read_all_waypoint_paths(layout, cell, layer_spec)
     if not paths:
         return []
@@ -572,23 +394,13 @@ def nearest_waypoint_path(layout, cell, islands, layer_spec=WAYPOINT_LAYER):
 
 
 def read_waypoints(layout, cell, layer_spec=WAYPOINT_LAYER):
-    """[(x,y), ...] world coordinates, in the order a person clicked them,
-    from the first Path shape found on `layer_spec` in `cell` -- KLayout's
-    own multi-point path/ruler shape already carries point order, so no
-    separate click-sequence capture is needed: draw a path with the Path
-    tool, each vertex is a waypoint in order drawn. Empty, not an error,
-    if nothing's drawn there. Only the first path shape found is used --
-    draw exactly one path per corridor (`read_all_waypoint_paths` reads
-    every path, for routing several nets at once)."""
+    """The first Path on `layer_spec` in `cell`, as world points in click order."""
     paths = read_all_waypoint_paths(layout, cell, layer_spec)
     return paths[0] if paths else []
 
 
 def user_corridor_region(layout, cell, layer_spec=USER_CORRIDOR_LAYER):
-    """Whatever a person drew on `layer_spec` (any depth -- normally just
-    the top cell, but a corridor sketched inside a sub-cell still counts),
-    merged into one Region. Empty, not an error, if nothing's drawn there;
-    callers treat that as "no corridor given", not a failure."""
+    """Everything drawn on `layer_spec`, merged, as a Region."""
     idx = layout.find_layer(*layer_spec)
     if idx is None:
         return db.Region()
@@ -600,22 +412,11 @@ def user_corridor_region(layout, cell, layer_spec=USER_CORRIDOR_LAYER):
 CORRIDOR_LAYER = (999, 0)  # not used by any real sky130 (or other) layers.json
                             # layer number seen so far -- purely a debug
                             # visualization layer, never a routable one.
-CORRIDOR_WALL_LAYER = (998, 0)  # the corridor's own boundary-wall obstacles
-                                 # (what `-rsmt` actually adds to the router as
-                                 # a keepout, not just the band area) -- a
-                                 # route can stay inside CORRIDOR_LAYER's
-                                 # bands and still be blocked by one of these
-                                 # walls; distinct from CORRIDOR_LAYER so the
-                                 # two can be toggled independently.
+CORRIDOR_WALL_LAYER = (998, 0)  # -rsmt corridor wall keepouts
 
 
 def lef_obs_layer_rects(lef_path, layer_name):
-    """[(x0, y0, x1, y1) microns] for one named OBS layer in a router-written
-    LEF (`Module::writeLEF`'s hierarchical interim LEF, `TOP_CONC_0_interim_
-    hier.lef` -- distinct from `Net::writeLEF`'s per-net debug dump that
-    `net_debug_obstacles` reads). Empty, not an error, if the file or that
-    layer isn't present -- e.g. routed without `-rsmt`, or the router
-    predates this OBS layer."""
+    """[(x0, y0, x1, y1)] in microns for one OBS layer of a router-written LEF."""
     if not os.path.exists(lef_path):
         return []
     with open(lef_path, errors="ignore") as f:
@@ -637,16 +438,7 @@ def lef_obs_layer_rects(lef_path, layer_name):
 
 def paint_corridor_walls(layout, cell, hier_lef_path, net_name, dbu,
                           layer_spec=CORRIDOR_WALL_LAYER):
-    """Paint the `-rsmt` corridor's actual boundary-wall obstacles -- what
-    `Net::route()` adds to the router as a keepout around `CORRIDOR_LAYER`'s
-    bands -- onto their own scratch layer. These walls are what can block a
-    port pair even while every routed shape still ends up inside the
-    corridor's own area: the wall is a real obstacle in its own right, not
-    just an outline of where the bands are. Reads `net_TOP_CONC_0_<net>`'s
-    sibling `TOP_CONC_0_interim_hier.lef` (written unconditionally by
-    `Module::writeLEF`, not gated behind `HANAN_DEBUG_NET` -- that env var
-    only controls the *per-net pre-route snapshot* `net_debug_obstacles`
-    reads, a different file entirely)."""
+    """Paint the -rsmt corridor walls the router used onto a debug layer."""
     idx = layout.layer(*layer_spec)
     inserted = 0
     for x0, y0, x1, y1 in lef_obs_layer_rects(hier_lef_path, f"RSMT_{net_name}"):
@@ -659,14 +451,7 @@ def paint_corridor_walls(layout, cell, hier_lef_path, net_name, dbu,
 
 def paint_rsmt_corridor(layout, cell, def_path, net_name, dbu,
                          layer_spec=CORRIDOR_LAYER):
-    """Paint the `-rsmt` search corridor the router actually confined
-    `net_name` to (a `<net>_RSMT_CORRIDOR` pseudo-net the DEF carries
-    whenever `-rsmt` was used) onto a scratch layer, so it's visible
-    alongside the routed wires -- e.g. to see whether a suboptimal topology
-    genuinely had no better path inside the corridor, or whether the
-    corridor itself already covered a shorter one the port-pairing missed.
-    A DEF without that pseudo-net (routed without `-rsmt`) paints nothing
-    and returns 0, not an error."""
+    """Paint the -rsmt corridor bands for `net_name` onto a debug layer."""
     idx = layout.layer(*layer_spec)
     scale = (1.0 / dbu) / layout.dbu
     inserted = 0
@@ -679,12 +464,7 @@ def paint_rsmt_corridor(layout, cell, def_path, net_name, dbu,
 
 
 def paint_routed_def(layout, cell, def_path, net_name, draw_by_name, dbu):
-    """Insert the router's new geometry for `net_name` directly into `cell`
-    (metal *and* via-cut layers -- `draw_by_name` covers both, keyed exactly
-    as the DEF's own RECT lines name them, since a via's layers.json "Layer"
-    entry is what the router echoes there). `dbu` is the router's own
-    micron-per-unit (matches -uu); the layout's own dbu may differ, so
-    coordinates are rescaled, not assumed equal."""
+    """Insert the routed geometry for `net_name` from a DEF into `cell`."""
     scale = (1.0 / dbu) / layout.dbu
     inserted = 0
     for layer_name, x0, y0, x1, y1 in def_net_rects(def_path, net_name):
@@ -700,11 +480,7 @@ def paint_routed_def(layout, cell, def_path, net_name, draw_by_name, dbu):
 
 
 def net_debug_obstacles(lef_path):
-    """{layer_name: [(x0, y0, x1, y1) microns]} from a `net_TOP_CONC_0_
-    <net>.lef` debug dump (see `run_router`) -- the OBS block only, "BBOX"
-    (the net's own bounding box, not a real obstacle) excluded. Empty dict,
-    not an error, if the file doesn't exist (`HANAN_DEBUG_NET` unsupported
-    by an older router, or the OBS block came back empty)."""
+    """{layer: [rects]} the router saw for a net, from its HANAN_DEBUG_NET dump."""
     if not os.path.exists(lef_path):
         return {}
     with open(lef_path, errors="ignore") as f:
@@ -724,22 +500,12 @@ def net_debug_obstacles(lef_path):
     return out
 
 
-OBSTACLE_DATATYPE = 98  # paired with each metal's own GDS layer number (not
-                         # CORRIDOR_LAYER's dummy number) so toggling one
-                         # metal's obstacle overlay in the Layers panel sits
-                         # right next to that metal's own routed geometry.
+OBSTACLE_DATATYPE = 98  # on each metal's own layer number
 
 
 def paint_net_obstacles(layout, cell, lef_path, draw_by_name, dbu,
                          datatype=OBSTACLE_DATATYPE):
-    """Paint exactly the obstacles `run_router`'s `HANAN_DEBUG_NET` dump
-    says the router saw for this net -- before any routing happened -- onto
-    each obstacle metal's own GDS layer number at `datatype`, so "did my
-    obstacle actually reach the router" is a direct visual diff against the
-    real drawn shape on the same layer, not a guess. A layer name the debug
-    LEF mentions that isn't in `draw_by_name` (shouldn't happen -- the
-    router only ever echoes layer names from `layers.json`) is skipped
-    rather than raising, consistent with `paint_routed_def`."""
+    """Paint net_debug_obstacles() onto debug layers."""
     inserted = 0
     for layer_name, rects in net_debug_obstacles(lef_path).items():
         spec = draw_by_name.get(layer_name)
@@ -760,61 +526,7 @@ def complete_net_on_layout(layout, cell, layers_json, net_name, router_bin,
                             corridor_layer_spec=None, corridor_margin_um=0.0,
                             waypoints_layer_spec=None, corridor_pitch=None,
                             corridor_guide_weight=None):
-    """The reusable core: find islands, route if broken, paint back into
-    `cell` in place. Takes an already-open `db.Layout`/`pya.Layout` and
-    `cell` directly -- this is what a GUI macro calls on the live, currently
-    open layout, with no GDS export/reimport round trip; `complete_net`
-    (below) is the thin file-based wrapper CLI/test use goes through.
-    `rsmt` is passed straight to `run_router` -- see there for why it
-    defaults on. `show_corridor` (only meaningful with `rsmt`) additionally
-    paints the RSMT search corridor onto a scratch layer (`CORRIDOR_LAYER`)
-    -- a debug aid, on by default while the router's own MST-vs-Steiner
-    topology gap is still being characterized; a caller happy to trust the
-    routed result without inspecting the corridor can pass `False`. Returns
-    a status dict -- never raises for an ordinary "not broken" or "net not
-    found" outcome, only for a real I/O or router failure.
-
-    `corridor_layer_spec`, when given, confines the route to whatever a
-    person drew on that layer (see `user_corridor_region`) instead of --
-    or, if `rsmt` is also left on, on top of -- the router's own
-    RSMT-derived corridor: read the drawn shape, widen every *other*
-    metal layer's obstacle set to also block everything in the work area
-    outside it, on every layer, not just where real metal already sits
-    (a plain "avoid other nets' metal" obstacle never blocks empty space).
-    An empty drawn layer (nothing sketched) is silently treated as no
-    corridor at all, not an error -- draw nothing, get the router's
-    default behavior. `corridor_margin_um` grows the drawn shape before
-    using it, e.g. to give a von-Neumann pixel-perfect sketch some real
-    clearance to route/via in.
-
-    `waypoints_layer_spec`, when given, reads an ordered click-path (see
-    `read_waypoints`) and routes it via the router's *native*
-    `corridor_topology` NDR field instead: `Net::rsmtCorridor()` builds the
-    keepout from just the clicked path -- consecutive waypoints joined by
-    the same Manhattan-L bands and pitch margin the auto -rsmt tree uses --
-    rather than a Python-side obstacle fill. Every pin (any count) gets its
-    own bloated bubble regardless of topology source, so this works for
-    N-fragment nets too: the path just needs to pass near enough each pin
-    to reach it, not touch it exactly or act as an explicit endpoint. This
-    is the preferred way to hand the router a corridor -- it reuses
-    proven, already-working machinery (same retry-widening ladder, same
-    wall construction) instead of reimplementing confinement here, and
-    doesn't hit the coordinate-sparsity trap a solid "obstacle = everything
-    outside" fill can on a sparse layout (`corridor_layer_spec` above is
-    kept for a filled-region sketch, but prefer this for a clicked path).
-    Fewer than 2 waypoints (nothing drawn, or a single click) is passed
-    through unused, falling back to the net's normal routing.
-
-    `corridor_guide_weight`, when given (>0), is written as this net's NDR
-    "corridor_guide_weight": a pull toward the drawn corridor line, per
-    unit length, in multiples of the wire's own cost per pitch of
-    deviation. 0/None leaves the corridor walls-only.
-
-    `corridor_pitch`, when given, is written as this net's own NDR
-    "corridor_pitch" -- how many multiples of the routing layer's pitch
-    the corridor (auto or drawn alike) bloats by, replacing the router's
-    own default (`Net.cpp`'s `RSMT_CORRIDOR_PITCHES`, 4) for this net
-    only. `None` leaves the router's default in place."""
+    """Route and paint the missing connections of one net; return a result dict."""
     metals, labels, vias, draw_by_name, widths = load_layers(layers_json)
     islands, all_by_layer = net_islands(layout, cell, metals, labels, vias, net_name)
 
@@ -832,26 +544,15 @@ def complete_net_on_layout(layout, cell, layers_json, net_name, router_bin,
                 if corridor_layer_spec else db.Region())
     if not corridor.is_empty():
         if corridor_margin_um:
-            # grown *before* it feeds the work-area bbox below -- sizing
-            # it afterwards let a grown corridor stick out past the very
-            # work area meant to contain it.
+            # grow before it feeds the work-area bbox so the corridor stays inside
             corridor = corridor.sized(round(corridor_margin_um / layout.dbu))
-        # the work area has to cover wherever the corridor actually goes,
-        # not just the islands -- a detour outside the islands' own
-        # bounding box is exactly the point of drawing one.
+        # the work area must cover the corridor, not just the islands
         bbox = bbox + corridor.bbox()
 
     waypoints = (nearest_waypoint_path(layout, cell, islands, waypoints_layer_spec)
                  if waypoints_layer_spec else [])
     if waypoints:
-        # same reasoning as the drawn-region corridor above: the work
-        # area (and so the router's own die box, and so every obstacle
-        # this function clips to it) has to cover wherever the clicked
-        # path actually goes, or a detour past the islands' own bounding
-        # box gets silently cut off before the router ever sees it --
-        # verified: a path drawn well outside the default margin came
-        # back with the corridor's own painted geometry capped at the
-        # old work area's edge, nowhere near the actual clicked point.
+        # the work area must cover the clicked path, or detours get clipped
         wxs = [p[0] for p in waypoints]
         wys = [p[1] for p in waypoints]
         bbox = bbox + db.Box(min(wxs), min(wys), max(wxs), max(wys))
@@ -868,26 +569,10 @@ def complete_net_on_layout(layout, cell, layers_json, net_name, router_bin,
                            for lname, region in all_by_layer.items()}
 
     if not corridor.is_empty():
-        # a pin's own island, *padded* by a fixed escape clearance, is
-        # always allowed -- not just the island's bare footprint. Without
-        # this pad, "outside corridor" starts flush against the pin's own
-        # edge on any side the corridor doesn't happen to extend past,
-        # leaving the escape-point search no legal direction to stand in
-        # at all (verified: an unpadded union here reproduces the
-        # router's "no possible escape" failure on every pin, even for a
-        # corridor that visibly contains both islands).
+        # pad each pin island so the escape-point search has a legal direction
         pin_clearance = max(round(1.0 / layout.dbu), 1)
         allowed = corridor + target_shapes.sized(pin_clearance)
-        # solid confinement: everything in the work area outside the
-        # corridor (+ pin clearance) is a real obstacle, on every layer --
-        # not just a thin wall at the boundary. A thin wall alone (matching
-        # -rsmt's own outlineBoxes()) leaves the far side of it completely
-        # open, so on a design where nothing else already blocks the
-        # direct path, the router just goes straight through and ignores
-        # the drawn detour entirely -- verified on a fixture with no other
-        # obstacle in the way. A real design usually has other nets'
-        # metal doing that blocking already; a hand-drawn corridor can't
-        # assume that, so it has to supply its own.
+        # solid confinement: everything outside the corridor is an obstacle
         outside = work_area - allowed
         for lname in metals:
             obstacles_by_layer[lname] = obstacles_by_layer.get(lname, db.Region()) + outside
@@ -898,19 +583,7 @@ def complete_net_on_layout(layout, cell, layers_json, net_name, router_bin,
 
     virtual_pins_um = None
     if not corridor.is_empty():
-        # Solid confinement alone starves the Hanan grid: the router only
-        # ever places a track on a coordinate some obstacle or pin edge
-        # actually introduces, and a corridor band with nothing but its
-        # own two walls contributes exactly those two coordinates -- a
-        # geometrically wide-open detour still comes back "no target is
-        # reachable from any source" (verified: a 6um-wide corridor with
-        # no other geometry inside it). A device pin fixes this by
-        # existing; a `virtual_pins` fragment (Netlist.cpp's
-        # `addVirtualPin`, the same mechanism a hand-drawn "pretend a wire
-        # is already here" fragment uses) does the same job by design --
-        # small real rectangles the route must also touch, one per
-        # sizable piece of the drawn corridor so grid density exists
-        # along its whole length, not just at its ends.
+        # virtual pins along the corridor give the Hanan grid coordinates inside it
         pin_layer = min(widths, key=widths.get, default=None) if widths else None
         pin_layer = pin_layer if pin_layer in metals else next(iter(metals), None)
         if pin_layer:
@@ -964,18 +637,7 @@ def complete_net_from_points(layout, cell, layers_json, points, router_bin,
                               show_corridor=True, show_obstacles=True,
                               waypoints_layer_spec=WAYPOINT_LAYER,
                               corridor_pitch=None, corridor_guide_weight=None):
-    """Like `complete_net_on_layout`, but the net is derived from a set of
-    world-space points -- typically one per shape the user selected in the
-    GUI -- instead of being typed in: "select the pin shape and get the
-    associated net" (see `net_name_for_point`). Distinguishes the ways this
-    can fail to resolve to exactly one net from the underlying routing
-    failure modes, since a caller (the GUI macro) needs to word them very
-    differently -- "you selected nothing" is not "the net was already
-    connected". `waypoints_layer_spec` defaults to `WAYPOINT_LAYER`, not
-    `None`: this is the GUI entry point, so a path drawn there before
-    "Complete Net" is used automatically, no separate opt-in -- nothing
-    drawn is still the ordinary no-corridor route, exactly as
-    `complete_net_on_layout` already treats an empty layer."""
+    """complete_net_on_layout for the net under the given world points."""
     metals, labels, vias, _draw, _widths = load_layers(layers_json)
     if not points:
         return {"status": "no_selection",
@@ -1010,11 +672,7 @@ def complete_net_from_points(layout, cell, layers_json, points, router_bin,
 
 
 def all_net_names(layout, cell, labels):
-    """Every distinct net-name label text found anywhere in the hierarchy,
-    across every metal layer's own label datatype -- the full set of
-    names `net_islands`/`complete_net_on_layout` could be asked about,
-    for "route everything" without the caller enumerating names by hand.
-    `labels` is `load_layers()`'s own return, not a layers.json path."""
+    """Every net label text in the hierarchy."""
     names = set()
     for lname, lspec in labels.items():
         for (text, x, y) in all_label_hits(layout, cell, lspec):
@@ -1027,29 +685,7 @@ def complete_nets_on_layout(layout, cell, layers_json, net_names, router_bin,
                              show_corridor=True,
                              waypoints_layer_spec=WAYPOINT_LAYER,
                              corridor_pitch=None, corridor_guide_weight=None):
-    """Route several nets in one router pass, each optionally following
-    its own drawn corridor -- draw one Path per net you want to guide, all
-    on `waypoints_layer_spec`; each net is matched to whichever path sits
-    closest to it (`read_all_waypoint_paths`), so paths don't need to be
-    labelled or otherwise tied to a net beyond proximity. A net you don't
-    draw a path for just routes normally, same as any other multi-net run.
-
-    Nets already in one piece, or with no matching label at all, are
-    reported but never sent to the router. Every net actually routed
-    shares one obstacle field -- everything else's real metal in the
-    combined work area, minus every routed net's own islands -- so they
-    can't obstruct each other but still respect a third net's real metal,
-    the same as routing them one at a time would.
-
-    Deliberately simpler than `complete_net_on_layout`: no
-    `corridor_layer_spec` (filled-region) option here, and no
-    `show_obstacles` debug painting -- `corridor_topology` is the
-    preferred corridor mechanism there too (see its own docstring for
-    why), and per-net obstacle-dump painting would need one debug LEF per
-    net tracked separately, not worth the complexity for what this is
-    for. Returns `{net_name: status_dict, ...}` (status dicts shaped like
-    `complete_net_on_layout`'s), plus `"layout"`/`"log"` keys once any net
-    actually reached the router."""
+    """Route several nets in one router pass, each optionally along its own drawn corridor."""
     metals, labels, vias, draw_by_name, widths = load_layers(layers_json)
 
     results = {}
@@ -1136,9 +772,7 @@ def complete_nets_on_layout(layout, cell, layers_json, net_names, router_bin,
         work_dir, nets_for_router, obstacles_by_layer, dbu_um, uu, bbox_um,
         widths, corridor_pitch, corridor_guide_weight)
 
-    # "1", not a single net's name -- HANAN_DEBUG_NET=1 dumps a debug LEF
-    # for every net in this run, matching what routing them one at a time
-    # would each have produced.
+    # HANAN_DEBUG_NET=1 dumps a debug LEF for every net
     rc, log, routed_def, _debug_lef = run_router(
         router_bin, layers_json, placement_path, lef_path, ndr_path,
         work_dir, uu, "1", rsmt)

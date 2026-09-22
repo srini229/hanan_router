@@ -44,10 +44,7 @@ def _n(v):
     return int(v) if v == int(v) else v
 
 def ref_orient(ref):
-    """(sX, sY) matching the router's Geom::Transform convention -- a pure
-    axis-flip model, no arbitrary rotation -- from a gdstk Reference's
-    rotation/x_reflection. Only 0/180 degree rotation is representable;
-    anything else is warned about and treated as 0."""
+    """(sX, sY) for the router's axis-flip transform from a gdstk reference."""
     rot = (ref.rotation or 0.0) % (2 * math.pi)
     is180 = abs(rot - math.pi) < 1e-6
     if not is180 and abs(rot) > 1e-6:
@@ -118,9 +115,7 @@ cell_by_name = {c.name: c for c in lib.cells}
 leaf_names   = {c.name for c in lib.cells if not c.references}
 module_names = {c.name for c in lib.cells if c.references}
 
-# Every direct (parent, ref) occurrence of each cell, anywhere in the
-# library -- used to find a leaf's pin names from a label that lives one
-# level up (see leaf_terminals, below).
+# every (parent, ref) occurrence of each cell, for labels one level up
 parent_occurrences = defaultdict(list)
 for _pcell in lib.cells:
     for _ref in _pcell.references:
@@ -194,19 +189,7 @@ def leaf_geometry(cell):
     return pin_rects, draw_rects
 
 def _ancestor_labels_in_local_frame(cell):
-    """[(text, local_x, local_y, layer, priority)] from every direct parent
-    occurrence of `cell`, transformed into `cell`'s own local frame.
-
-    Every hand-drawn device leaf in the bandgap/OTA hierarchy carries no
-    label of its own and no dedicated "Pin"-datatype geometry either --
-    only plain "Draw" metal -- the design's own tooling labels a net only
-    where it surfaces in the *parent* that instantiates the device.
-    Occurrences are visited in a stable order so that when the same leaf is
-    reused with genuinely different meaning in different places (as opposed
-    to sharing nets, the common case for multi-finger devices), which one
-    "wins" a contested rect is at least deterministic -- see the conflict
-    warning below.
-    """
+    """Labels from every parent of `cell`, transformed into its local frame."""
     hits = []
     occurrences = sorted(parent_occurrences.get(cell.name, []),
                           key=lambda po: (po[0].name, po[1].origin))
@@ -246,12 +229,7 @@ def leaf_terminals(cell):
                       f"both {assigned[k][0]!r} and {text!r} by different "
                       f"placements; keeping {assigned[k][0]!r}", file=sys.stderr)
 
-    # A device with a drawn "Pin"-purpose shape but no label anywhere (local
-    # or ancestor) would otherwise vanish from the placement with zero
-    # terminals. Give it a generic, position-stable name instead. Only
-    # "Pin"-purpose geometry gets this treatment -- falling back to "Draw"
-    # too would turn every via cut's landing-pad polygon into a bogus
-    # synthetic pin, since vias have Draw metal but no Pin datatype either.
+    # unlabelled Pin-purpose shapes get a position-stable synthetic name
     anon = 0
     for llayer in sorted(pin_rects):
         for rect in sorted(pin_rects[llayer]):
@@ -284,21 +262,7 @@ for name in sorted(leaf_names):
     })
 
 def labels_derived_fa_map(parent_cell, ref):
-    """fa_map for one leaf reference, from labels in its *parent* cell.
-
-    Every hand-drawn device leaf in the bandgap/OTA hierarchy carries no
-    label of its own -- the design's own tooling labels a net only where it
-    surfaces in the parent that instantiates the device. For each of the
-    leaf's own terminals (named by
-    leaf_terminals(), above -- a real label if the leaf has one, else a
-    synthetic PIN<n>), transform its local rect into the parent's frame and
-    check whether one of the parent's own labels lands inside it; if so,
-    that label names the *actual* net this specific placement connects to.
-
-    A terminal with no ancestor label landing on it is simply left out of
-    the returned fa_map -- either it is genuinely internal at this level, or
-    its net surfaces even further up the hierarchy, out of scope here.
-    """
+    """fa_map for one leaf reference from labels in its parent cell."""
     terms = leaf_terminal_by.get(ref.cell.name)
     if not terms:
         return []
@@ -338,11 +302,7 @@ for name in sorted(module_names):
             inst_name = f"I_{idx}"
             fa_map    = []
 
-        # No netlist covered this instance -- fall back to whatever
-        # connectivity a label in this module's own frame can tell us about
-        # the leaf it's placing directly (see labels_derived_fa_map). Only
-        # applies to leaves: a module-type reference's ports aren't simple
-        # local rects, so it keeps relying on the netlist path.
+        # no netlist: fall back to labels in this module frame (leaves only)
         if not fa_map and sub_name in leaf_names:
             fa_map = labels_derived_fa_map(cell, ref)
 
