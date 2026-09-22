@@ -115,6 +115,41 @@ def write_ndr(path, entries):
         json.dump(out, f, indent=1)
 
 
+def merge_def(dfl, sigdef, sup, cuts):
+    """Rewrite dfl as pass 1's DEF (sigdef) with each supply net's wires
+    replaced by what pass 2 routed into dfl, plus any stitch cuts."""
+    pwr = def_net_rects(dfl)
+    lines = open(sigdef).read().splitlines(True)
+    out, net, n, sw = [], None, 0, 0
+
+    def flush():
+        # inside the net block, ahead of its ';': a DEF reader that stops at the
+        # terminator drops anything written past it
+        nonlocal n, sw
+        for line in pwr.get(net, []) if net in sup else []:
+            out.append(line)
+            sw += 1
+        for c in cuts.get(net, []):
+            out.append(f'  + RECT {c[0]} ( {c[1]} {c[2]} ) ( {c[3]} {c[4]} )\n')
+            n += 1
+
+    for line in lines:
+        m = re.match(r'\s*- (\S+)', line)
+        if m:
+            net = m.group(1)
+        elif net and line.strip() == ';':
+            flush()
+            net = None
+        elif line.startswith('END NETS'):
+            flush()
+            net = None
+        elif net in sup and re.match(r'\s*\+ RECT ', line):
+            continue          # pass 1 only stubbed the supplies out
+        out.append(line)
+    open(dfl, 'w').writelines(out)
+    return sw, n
+
+
 def run(cmd, cwd, log):
     with open(os.path.join(cwd, log), 'w') as f:
         return subprocess.call(cmd, cwd=cwd, stdout=f, stderr=subprocess.STDOUT)
@@ -178,9 +213,11 @@ def main():
              d, 'sig.out')
     print(f'pass 1 (signals) rc={rc}', flush=True)
     r1 = summarise(os.path.join(d, 'sig.log'), 'signals')
-    # both passes write <top>.def into this directory, so pass 2 would otherwise
-    # take pass 1's signal routing with it and leave every signal net as stubs
+    # keep each module's pass-1 DEF: pass 2 rewrites them all
     shutil.copy(os.path.join(d, f'{top}.def'), os.path.join(d, 'sig.def'))
+    for m in mods:
+        if m != top and os.path.exists(os.path.join(d, f'{m}.def')):
+            shutil.copy(os.path.join(d, f'{m}.def'), os.path.join(d, f'sig_{m}.def'))
 
     # --- grid, carved around what pass 1 committed
     routed = def_shapes(os.path.join(d, f'{top}.def'))
@@ -216,39 +253,16 @@ def main():
     # --- rebuild the routed DEF: signals as pass 1 left them, supplies as
     #     pass 2 routed them, and the grid's own stitch cuts merged in
     cj = os.path.join(d, 'pgrid_cuts.json')
-    dfl = os.path.join(d, f'{top}.def')
     cuts = json.load(open(cj)) if os.path.exists(cj) else {}
-    pwr = def_net_rects(dfl)
-    lines = open(os.path.join(d, 'sig.def')).read().splitlines(True)
-    out, net, n, sw = [], None, 0, 0
-
-    def flush():
-        # inside the net block, ahead of its ';': a DEF reader that stops at the
-        # terminator drops anything written past it
-        nonlocal n, sw
-        for line in pwr.get(net, []) if net in sup else []:
-            out.append(line)
-            sw += 1
-        for c in cuts.get(net, []):
-            out.append(f'  + RECT {c[0]} ( {c[1]} {c[2]} ) ( {c[3]} {c[4]} )\n')
-            n += 1
-
-    for line in lines:
-        m = re.match(r'\s*- (\S+)', line)
-        if m:
-            net = m.group(1)
-        elif net and line.strip() == ';':
-            flush()
-            net = None
-        elif line.startswith('END NETS'):
-            flush()
-            net = None
-        elif net in sup and re.match(r'\s*\+ RECT ', line):
-            continue          # pass 1 only stubbed the supplies out
-        out.append(line)
-    open(dfl, 'w').writelines(out)
-    print(f'  {"def merged":16} {sw} supply wire(s), {n} stitch cut(s) '
-          f'onto pass 1 -> {os.path.basename(dfl)}', flush=True)
+    for m in mods:
+        sig = os.path.join(d, 'sig.def' if m == top else f'sig_{m}.def')
+        if not os.path.exists(sig):
+            continue
+        # the grid and its stitch cuts exist only at the top
+        sw, n = merge_def(os.path.join(d, f'{m}.def'), sig, sup,
+                          cuts if m == top else {})
+        print(f'  {"def merged":16} {sw} supply wire(s), {n} stitch cut(s) '
+              f'onto pass 1 -> {m}.def', flush=True)
 
     print(f'  {"TOTAL":16} opens={r1["opens"] + r2["opens"]:<3} '
           f'wl={r1["wl"] + r2["wl"]:<10} shorts={r1["shorts"] + r2["shorts"]}', flush=True)
