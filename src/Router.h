@@ -505,6 +505,10 @@ class Router {
     // completely untouched.
     LayerPolySet _ptobstaclesNoHole;
     LayerPolySet _psources, _ptargets;
+    // Extra grid coordinates (not obstacles, not pins) seeded inside corridor
+    // bands, and the bands themselves for pruning; see docs/ROUTING_NOTES.md.
+    std::set<int> _seedXCoords, _seedYCoords;
+    Geom::Rects _corridorBands;
 
     CostFn _cf;
     std::vector<std::map<int, IntRangeSet>> _hanangridh, _hanangridv;
@@ -924,6 +928,9 @@ class Router {
           _tobstacles.clear();
           _ptobstacles.clear();
           _ptobstaclesNoHole.clear();
+          _seedXCoords.clear();
+          _seedYCoords.clear();
+          _corridorBands.clear();
       }
       else {
           _obstacles.clear();
@@ -931,6 +938,9 @@ class Router {
       }
     }
     void addObstacles(const Geom::LayerRects& lr, const bool temp = false, const bool noCoverHoles = false);
+    void addSeedX(const int x) { _seedXCoords.insert(x); }
+    void addSeedY(const int y) { _seedYCoords.insert(y); }
+    void setCorridorBands(const Geom::Rects& b) { _corridorBands = b; }
 
     void addSourceTargetShapes(const Geom::Rect& r, const int z, const bool src);
     void addSourceShapes(const Geom::Rect& r, const int z) { addSourceTargetShapes(r, z, true); }

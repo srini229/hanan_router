@@ -455,6 +455,38 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       if (edgesOut) *edgesOut = edges;
       return ko;
     };
+    // Seed grid coordinates inside this attempt's corridor bands (plain
+    // coordinates, not pins) and hand the bands to the router for pruning;
+    // re-run after every clearObstacles(true). See docs/ROUTING_NOTES.md.
+    auto seedCorridorGrid = [&](const Geom::Rects& bands) {
+      router.setCorridorBands(bands);
+      if (bands.empty()) return;
+      int pitch = 0;
+      for (int z = router.minLayer(); z <= router.maxLayer(); ++z) {
+        pitch = std::max(pitch, std::max(router.baseWidthX(z), router.baseWidthY(z))
+                              + std::max(router.baseSpaceX(z), router.baseSpaceY(z)));
+      }
+      if (pitch <= 0) return;
+      const int step = pitch * 4;
+      const int minLen = pitch * 4;
+      const int maxSeedsPerBand = 3;   // a few stops per band is enough; each is a grid line
+      auto seedSpan = [&](const int lo, const int hi, auto addSeed) {
+        const int len = hi - lo;
+        if (len < minLen) return;
+        const int n = std::min(maxSeedsPerBand, len / step);
+        if (n <= 0) return;
+        for (int i = 1; i <= n; ++i) {
+          addSeed(lo + static_cast<int>(static_cast<long long>(len) * i / (n + 1)));
+        }
+      };
+      for (const auto& r : bands) {
+        seedSpan(r.xmin(), r.xmax(), [&](int x) { router.addSeedX(x); });
+        seedSpan(r.ymin(), r.ymax(), [&](int y) { router.addSeedY(y); });
+        // and the centreline (the drawn line itself, for a drawn corridor)
+        router.addSeedX((r.xmin() + r.xmax()) / 2);
+        router.addSeedY((r.ymin() + r.ymax()) / 2);
+      }
+    };
     // dropSameNetObstacles is re-run against the *current* keepout walls at
     // each call site below, rather than baked in once here: _routeshapeswithpins
     // grows as each port pair routes, so a wire this net lays for an earlier
@@ -568,6 +600,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         }
       }
       router.addObstacles(keepout, true, true);
+      seedCorridorGrid(_corridor);
       auto sol = router.findSol();
       if (!router.lastSolutionFound() && !keepout.empty()) {
         // A blocked pair does not immediately mean the whole net-wide
@@ -577,7 +610,8 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
         // up on staying confined at all; only the last resort drops the
         // corridor entirely, so a genuinely unconstrained route stays rare
         // and is logged loudly rather than being the routine outcome.
-        auto retryAttempt = [&](const Geom::LayerRects& ko, const std::string& stage) -> Geom::LayerRects {
+        auto retryAttempt = [&](const Geom::LayerRects& ko, const std::string& stage,
+                                const Geom::Rects& bands) -> Geom::LayerRects {
           router.clearObstacles(true);
           router.clearSourceTargets();
           // Each stage gets its own debug-dump name -- the base attempt above
@@ -598,6 +632,7 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           router.addObstacles(tracing ? obt : _obstacles, true);
           router.addObstacles(samenetobst, true);
           if (!ko.empty()) router.addObstacles(ko, true, true);
+          seedCorridorGrid(bands);
           return router.findSol();
         };
         // not `static`: corridorPitchBase is per-net (a person's own
@@ -607,16 +642,17 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
           corridorPitchBase * 2, corridorPitchBase * 4, corridorPitchBase * 8};
         bool widened = false;
         for (const int mul : RETRY_PITCH_MULS) {
-          const Geom::LayerRects wider = trimWallToOwnMetal(buildKeepout(mul, nullptr, nullptr));
+          Geom::Rects widerBands;
+          const Geom::LayerRects wider = trimWallToOwnMetal(buildKeepout(mul, &widerBands, nullptr));
           COUT << "RSMT corridor blocked " << port1->name() << " -> " << port2->name()
                << " ; retrying with a wider corridor (" << mul << " pitch margin)\n";
-          sol = retryAttempt(wider, "margin" + std::to_string(mul));
+          sol = retryAttempt(wider, "margin" + std::to_string(mul), widerBands);
           if (router.lastSolutionFound()) { widened = true; break; }
         }
         if (!widened) {
           COUT << "RSMT corridor still blocks " << port1->name() << " -> " << port2->name()
                << " at " << RETRY_PITCH_MULS[2] << " pitch margin; routing this pair unconstrained\n";
-          sol = retryAttempt(Geom::LayerRects(), "unconstrained");
+          sol = retryAttempt(Geom::LayerRects(), "unconstrained", Geom::Rects());
         }
       }
       // Not sol.empty(): a source and target that already coincide need zero

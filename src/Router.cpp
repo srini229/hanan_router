@@ -1682,6 +1682,38 @@ void Router::generateHananGrid()
       ycoords.insert(s->y());
     }
   }
+  xcoords.insert(_seedXCoords.begin(), _seedXCoords.end());
+  ycoords.insert(_seedYCoords.begin(), _seedYCoords.end());
+  // drop coordinates whose grid line never crosses the corridor (pins kept)
+  if (!_corridorBands.empty()) {
+    int slack = 0;
+    for (auto l = _minLayer; l <= _maxLayer; ++l) {
+      slack = std::max(slack, std::max(widthx(l), widthy(l)) / 2 + 1);
+    }
+    std::set<int> pinx, piny;
+    for (bool src : {true, false}) {
+      for (auto& s : (src ? _sources : _targets)) { pinx.insert(s->x()); piny.insert(s->y()); }
+    }
+    auto crosses = [&](const int c, const bool xaxis) {
+      for (const auto& b : _corridorBands) {
+        if (xaxis ? (c >= b.xmin() - slack && c <= b.xmax() + slack)
+                  : (c >= b.ymin() - slack && c <= b.ymax() + slack)) return true;
+      }
+      return false;
+    };
+    size_t droppedx = 0, droppedy = 0;
+    for (auto it = xcoords.begin(); it != xcoords.end(); ) {
+      if (!pinx.count(*it) && !crosses(*it, true)) { it = xcoords.erase(it); ++droppedx; } else ++it;
+    }
+    for (auto it = ycoords.begin(); it != ycoords.end(); ) {
+      if (!piny.count(*it) && !crosses(*it, false)) { it = ycoords.erase(it); ++droppedy; } else ++it;
+    }
+    if (verboseAt(LogLevel::ELEMENT) && (droppedx || droppedy)) {
+      COUT << "corridor prune : dropped " << droppedx << " x and " << droppedy
+           << " y coordinate(s) whose grid line never crosses the corridor; "
+           << xcoords.size() << " x, " << ycoords.size() << " y remain\n";
+    }
+  }
   // Dense device arrays put obstacle corners a few nanometres apart, and a wire
   // cannot use two tracks closer together than its own width plus spacing. Those
   // extra coordinates cost a grid line each -- and a grid line costs on every
