@@ -988,6 +988,20 @@ Node* Router::popPQ()
   return best;
 }
 
+namespace {
+// HANAN_DEBUG_XY="x0,y0,x1,y1" (router units): trace search decisions in that box
+bool inDebugXYBox(const int x, const int y) {
+  static const char* box = std::getenv("HANAN_DEBUG_XY");
+  static int x0 = 0, y0 = 0, x1 = -1, y1 = -1;
+  static bool parsed = false;
+  if (!parsed) {
+    parsed = true;
+    if (box) sscanf(box, "%d,%d,%d,%d", &x0, &y0, &x1, &y1);
+  }
+  return box && x >= x0 && x <= x1 && y >= y0 && y <= y1;
+}
+}
+
 void Router::setexpand(Node* newn, const Node* parent) const
 {
   if (parent) {
@@ -1018,7 +1032,13 @@ void Router::setexpand(Node* newn, const Node* parent) const
         }
       }
     }
-    if (newn->z() > parent->z() || newn->z() <= _minLayer || newn->z() > _maxLayer) newn->expand(DOWN, false);
+    if (newn->z() > parent->z() || newn->z() <= _minLayer || newn->z() > _maxLayer) {
+      newn->expand(DOWN, false);
+      if (inDebugXYBox(newn->x(), newn->y())) {
+        COUT << "XYDBG setexpand DOWN-off(no-backtrack) newn(" << newn->x() << ',' << newn->y() << ',' << newn->z()
+             << ") parent(" << parent->x() << ',' << parent->y() << ',' << parent->z() << ")\n";
+      }
+    }
     else {
       if (newn->dnVia() == nullptr) {
         auto v = isViaValid(newn, false);
@@ -1027,6 +1047,13 @@ void Router::setexpand(Node* newn, const Node* parent) const
         } else {
           newn->expand(DOWN, false);
         }
+        if (inDebugXYBox(newn->x(), newn->y())) {
+          COUT << "XYDBG setexpand DOWN isViaValid=" << (v ? "ok" : "NULL") << " newn(" << newn->x() << ',' << newn->y() << ',' << newn->z()
+               << ") parent(" << parent->x() << ',' << parent->y() << ',' << parent->z() << ")\n";
+        }
+      } else if (inDebugXYBox(newn->x(), newn->y())) {
+        COUT << "XYDBG setexpand DOWN cached-via newn(" << newn->x() << ',' << newn->y() << ',' << newn->z()
+             << ") parent(" << parent->x() << ',' << parent->y() << ',' << parent->z() << ")\n";
       }
     }
   } else {
@@ -1086,6 +1113,11 @@ void Router::checkAndInsert(Node* newn, const Node* n)
       } else {
         newn->sethwx(n->hwx());
       }
+    }
+    if (inDebugXYBox(newn->x(), newn->y())) {
+      COUT << "XYDBG first-visit newn(" << newn->x() << ',' << newn->y() << ',' << newn->z()
+           << ") fcost=" << newn->fcost() << " tcost=" << (newn->cost() - newn->fcost())
+           << " from n(" << n->x() << ',' << n->y() << ',' << n->z() << ")\n";
     }
   } else if (newn->parent() != n) {
     auto oldfcost = newn->fcost();
@@ -1199,6 +1231,11 @@ void Router::expandNode(const Node* n1)
 #if DEBUG
   n->print("expanding node :");
 #endif
+  if (inDebugXYBox(n->x(), n->y())) {
+    COUT << "XYDBG expand n(" << n->x() << ',' << n->y() << ',' << n->z() << ") fcost=" << n->fcost()
+         << " viaup=" << n->viaup() << " viadown=" << n->viadown()
+         << " N=" << n->expandnorth() << " S=" << n->expandsouth() << " E=" << n->expandeast() << " W=" << n->expandwest() << "\n";
+  }
 
   Node* newn{nullptr};
   if (n->viadown()) {
@@ -3237,6 +3274,10 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
             for (auto& o : nbrs) {
               for (auto& c : via->cuts()) {
                 if (o.bloatby(_lf.spacex(belowLayer), _lf.spacey(belowLayer)).overlaps(c, false)) {
+                  if (inDebugXYBox(n->x(), n->y())) {
+                    COUT << "XYDBG isViaValid DOWN cut blocked at (" << n->x() << ',' << n->y() << ") z=" << n->z()
+                         << " cutlayer=" << belowLayer << " cut=" << c.str() << " obs=" << o.str() << '\n';
+                  }
                   delete via;
                   via = nullptr;
                   break;
@@ -3273,7 +3314,10 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
                   }
                   //COUT << "  obs_shrunk=" << o.str() << " overlaps=" << o.overlaps(p, true) << '\n';
                   if (padBlocked(o, p, l, n->x(), n->y())) {
-                    //COUT << "obs viapad down : " << o.str() << ' ' << p.str() << ' ' << lower << ' ' << LAYER_NAMES[l] << '\n';
+                    if (inDebugXYBox(n->x(), n->y())) {
+                      COUT << "XYDBG isViaValid DOWN pad blocked at (" << n->x() << ',' << n->y() << ") z=" << n->z()
+                           << " padlayer=" << l << " pad=" << p.str() << " obs(shrunk)=" << o.str() << '\n';
+                    }
                     delete via;
                     via = nullptr;
                     break;
