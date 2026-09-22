@@ -1132,13 +1132,25 @@ void Router::checkAndInsert(Node* newn, const Node* n)
       }
     }
     evalFCost(newn);
-    if (newn->fcost() > oldfcost) {
+    if (inDebugXYBox(newn->x(), newn->y())) {
+      COUT << "XYDBG revisit newn(" << newn->x() << ',' << newn->y() << ',' << newn->z()
+           << ") oldfcost=" << oldfcost << " newfcost=" << newn->fcost()
+           << " queued=" << queued << " from n(" << n->x() << ',' << n->y() << ',' << n->z()
+           << ") oldparent(" << oldparent->x() << ',' << oldparent->y() << ',' << oldparent->z() << ")\n";
+    }
+    if (newn->fcost() >= oldfcost) {
+      // no strict improvement (a tie must not reopen a node)
       newn->setParent(oldparent);
       newn->setFCost(oldfcost);
     } else if (queued) {
       // cost only went down, so the node just moves up from the slot it is in
       setexpand(newn, newn->parent());
       pqImproved(newn);
+    } else {
+      // improved after being closed: reopen only on request (HANAN_REOPEN=1);
+      // measured as pure cost, see docs/ROUTING_NOTES.md
+      static const bool reopen = std::getenv("HANAN_REOPEN") != nullptr;
+      if (reopen) insertToPQ(newn);
     }
   }
 #if DEBUG
