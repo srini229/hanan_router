@@ -551,6 +551,26 @@ def read_all_waypoint_paths(layout, cell, layer_spec=WAYPOINT_LAYER):
     return out
 
 
+def nearest_waypoint_path(layout, cell, islands, layer_spec=WAYPOINT_LAYER):
+    """The drawn Path on `layer_spec` nearest to `islands` (Manhattan distance
+    from any of its vertices to any island's bbox centre), or [] if none is
+    drawn. With several corridors drawn for several nets, this is how a
+    single-net route picks its own instead of whichever shape comes first."""
+    paths = read_all_waypoint_paths(layout, cell, layer_spec)
+    if not paths:
+        return []
+    centers = []
+    for island in islands:
+        for region in island.values():
+            b = region.bbox()
+            centers.append(((b.left + b.right) / 2, (b.bottom + b.top) / 2))
+    if not centers:
+        return paths[0]
+    def dist(path):
+        return min(abs(px - cx) + abs(py - cy) for (px, py) in path for (cx, cy) in centers)
+    return min(paths, key=dist)
+
+
 def read_waypoints(layout, cell, layer_spec=WAYPOINT_LAYER):
     """[(x,y), ...] world coordinates, in the order a person clicked them,
     from the first Path shape found on `layer_spec` in `cell` -- KLayout's
@@ -821,7 +841,8 @@ def complete_net_on_layout(layout, cell, layers_json, net_name, router_bin,
         # bounding box is exactly the point of drawing one.
         bbox = bbox + corridor.bbox()
 
-    waypoints = read_waypoints(layout, cell, waypoints_layer_spec) if waypoints_layer_spec else []
+    waypoints = (nearest_waypoint_path(layout, cell, islands, waypoints_layer_spec)
+                 if waypoints_layer_spec else [])
     if waypoints:
         # same reasoning as the drawn-region corridor above: the work
         # area (and so the router's own die box, and so every obstacle

@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<klayout-macro>
+ <description>Route Net</description>
+ <version/>
+ <category>pymacros</category>
+ <prolog/>
+ <epilog/>
+ <doc/>
+ <autorun>false</autorun>
+ <autorun-early>false</autorun-early>
+ <shortcut>Ctrl+Shift+M</shortcut>
+ <show-in-menu>true</show-in-menu>
+ <group-name>Sky130</group-name>
+ <menu-path>Sky130>end("Sky130").end</menu-path>
+ <interpreter>python</interpreter>
+ <dsl-interpreter-name/>
+ <text><![CDATA[
+
+# Complete a broken net on the currently open layout with hanan_router.
+#
+# Select one or more shapes belonging to the net you want finished (any
+# fragment works -- doesn't have to be labelled itself, as long as its own
+# physically-connected island reaches a net-name label somewhere) and run
+# this. It resolves the net from your selection, finds every
+# physically-disjoint island of that net anywhere in the cell hierarchy --
+# see hanan_router/bin/klayout_autocomplete.py for the actual algorithm --
+# routes between them if there is more than one, and paints the result
+# straight into the live layout. A net already in one piece is reported and
+# left untouched.
+#
+# This macro is deliberately thin: all the real logic lives in
+# klayout_autocomplete.py, which is tested headlessly
+# (hanan_router/test/test_klayout_gui_complete.py) exactly so this file
+# doesn't have to be trusted on its own -- it only wires the GUI (here, just
+# turning a selection into world points) to a function already proven
+# correct.
+
+import os, shutil, sys, tempfile
+import pya
+from pya import Qt, QDialog, QDialogButtonBox, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox, QLineEdit
+
+DEFAULT_CORRIDOR_PITCH = 4  # matches Net.cpp's own RSMT_CORRIDOR_PITCHES default
+DEFAULT_GUIDE_WEIGHT = 0    # >0 pulls the route onto the drawn line (NDR corridor_guide_weight)
+
+def _find_router():
+    """hanan_router from $PATH, else $HANAN_ROUTER_DIR/hanan_router."""
+    exe = shutil.which("hanan_router")
+    if exe:
+        return os.path.realpath(exe)
+    d = os.environ.get("HANAN_ROUTER_DIR")
+    if d:
+        cand = os.path.join(d, "hanan_router")
+        if os.access(cand, os.X_OK):
+            return cand
+    return None
+
+
+def _find_bindir(router_bin):
+    """Directory holding klayout_autocomplete.py: $HANAN_ROUTER_DIR/bin, or next
+    to the router binary (repo root -> bin/, or an install dir)."""
+    cands = []
+    d = os.environ.get("HANAN_ROUTER_DIR")
+    if d:
+        cands += [os.path.join(d, "bin"), d]
+    if router_bin:
+        rd = os.path.dirname(router_bin)
+        cands += [os.path.join(rd, "bin"), rd]
+    for c in cands:
+        if os.path.isfile(os.path.join(c, "klayout_autocomplete.py")):
+            return c
+    return None
+
+
+router_bin = _find_router()
+bindir = _find_bindir(router_bin)
+if bindir and bindir not in sys.path:
+    sys.path.append(bindir)
+try:
+    import klayout_autocomplete as ka
+except ImportError:
+    ka = None
+
+LAYERS_JSON = os.environ.get("HANAN_LAYERS_JSON",
+    "/data1/scratch/sky130-benchmarks/bench/primitives/lib/sky130.layers.json")
+
+
+class CorridorOptionDialog(QDialog):
+    """One checkbox, asked before routing runs -- same QDialog/QCheckBox/
+    QDialogButtonBox pattern as run_lvs.lym's LVSDialog, for a consistent
+    look with the other macros in this environment. Works for any
+    fragment count: Net::rsmtCorridor()'s corridor_topology bloats the
+    drawn path's own centreline, and every fragment already gets its own
+    bloated bubble unconditionally regardless of topology source -- so
+    the path just needs to pass near enough each fragment to reach it,
+    not touch it exactly or act as an explicit endpoint."""
+
+    def __init__(self, parent, net_name, n_fragments, has_waypoints):
+        QDialog.__init__(self)
+        self.parent = parent
+        self.setWindowTitle("Complete Net")
+        if parent is not None:
+            self.move(parent.geometry.center())
+
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel(f"Net: {net_name}  ({n_fragments} fragment(s))"))
+
+        self.checkbox = QCheckBox("Use corridor drawn on layer 996/0")
+        self.checkbox.setCheckState(Qt.Checked if has_waypoints else Qt.Unchecked)
+        self.checkbox.setEnabled(has_waypoints)
+        layout.addWidget(self.checkbox)
+
+        if not has_waypoints:
+            note = QLabel("Nothing is drawn on layer 996/0 -- routes normally.")
+            note.setWordWrap(True)
+            layout.addWidget(note)
+
+        # Corridor pitch: how many multiples of the routing layer's own
+        # pitch the corridor bloats by (NDR's per-net "corridor_pitch",
+        # Net.cpp's RSMT_CORRIDOR_PITCHES otherwise) -- wider finds more
+        # room to route in but confines the net less tightly to what was
+        # drawn/computed; narrower is the reverse. Left enabled even with
+        # nothing drawn: it also widens the auto -rsmt corridor when no
+        # corridor_topology is used at all, not just a clicked one.
+        pitch_row = QHBoxLayout()
+        pitch_row.addWidget(QLabel("Corridor pitch (x layer pitch):"))
+        self.pitch_edit = QLineEdit(str(DEFAULT_CORRIDOR_PITCH))
+        pitch_row.addWidget(self.pitch_edit)
+        layout.addLayout(pitch_row)
+
+        # Pull toward the drawn line, per unit length, in multiples of the
+        # wire's own cost per pitch of deviation. 0 = walls only. This is
+        # how a corridor tighter than one pitch is asked for.
+        guide_row = QHBoxLayout()
+        guide_row.addWidget(QLabel("Guide weight (0 = walls only):"))
+        self.guide_edit = QLineEdit(str(DEFAULT_GUIDE_WEIGHT))
+        guide_row.addWidget(self.guide_edit)
+        layout.addLayout(guide_row)
+
+        self.buttonBox = QDialogButtonBox(self)
+        self.ok = self.buttonBox.addButton(QDialogButtonBox.Ok)
+        self.cancel = self.buttonBox.addButton(QDialogButtonBox.Cancel)
+        self.ok.clicked(lambda button: self.accept())
+        self.cancel.clicked(lambda button: self.reject())
+        layout.addWidget(self.buttonBox)
+        self.setLayout(layout)
+
+    def use_corridor(self):
+        return self.checkbox.isEnabled() and self.checkbox.checkState == Qt.Checked
+
+    def corridor_guide_weight(self):
+        try:
+            w = float(self.guide_edit.text.strip())
+        except (ValueError, AttributeError):
+            return None
+        return w if w > 0 else None
+
+    def corridor_pitch(self):
+        """int > 0, or None (router's own default) for anything that
+        doesn't parse -- an invalid/empty entry is treated as "leave it
+        alone", not an error worth blocking routing over."""
+        try:
+            p = int(self.pitch_edit.text.strip())
+        except (ValueError, AttributeError):
+            return None
+        return p if p > 0 else None
+
+mw = pya.Application.instance().main_window()
+view = pya.LayoutView.current()
+if view is None:
+    pya.MessageBox.warning("Complete Net", "No layout is open.", pya.MessageBox.Ok)
+    sys.exit(0)
+
+cv = view.active_cellview()
+if cv is None or not cv.is_valid():
+    pya.MessageBox.warning("Complete Net", "No active cell view.", pya.MessageBox.Ok)
+    sys.exit(0)
+
+# KLayout opens a layout non-editable ("viewer mode") by default when it's
+# loaded from the command line or File > Open -- cell.shapes().insert() then
+# raises "No undo/redo support on non-editable shape lists", confirmed
+# directly. Editable mode is a per-application, not per-view, setting.
+if not pya.Application.instance().is_editable():
+    pya.MessageBox.warning("Complete Net",
+        "This layout is open in viewer (read-only) mode, so nothing can be "
+        "painted back into it.\n\nSwitch to editor mode (the button at the "
+        "left of the toolbar, or restart klayout with -e) and try again.",
+        pya.MessageBox.Ok)
+    sys.exit(0)
+
+layout = cv.layout()
+cell = cv.cell
+
+if router_bin is None:
+    pya.MessageBox.warning("Complete Net",
+        "hanan_router not found: put it on $PATH, or set $HANAN_ROUTER_DIR to "
+        "the directory that contains it (the repo root, or an install dir), "
+        "in the environment KLayout is launched from.",
+        pya.MessageBox.Ok)
+    sys.exit(0)
+if ka is None:
+    pya.MessageBox.warning("Complete Net",
+        "klayout_autocomplete.py not found: expected in $HANAN_ROUTER_DIR/bin, "
+        f"or next to the router binary ({os.path.dirname(router_bin)}[/bin]).",
+        pya.MessageBox.Ok)
+    sys.exit(0)
+if not os.path.isfile(LAYERS_JSON):
+    pya.MessageBox.warning("Complete Net",
+        f"layers.json not found at {LAYERS_JSON} -- set $HANAN_LAYERS_JSON to the "
+        "one for this design's technology.",
+        pya.MessageBox.Ok)
+    sys.exit(0)
+
+# Turn the current selection into one world-space point per shape -- the
+# same (obj.trans() * shape.bbox()) pattern quick_via.py already uses in
+# this environment for exactly this purpose (see ~/.klayout/python/cells/
+# quick_via.py, read before writing this).
+points = []
+for obj in view.each_object_selected():
+    if obj.is_cell_inst() or obj.cv_index != cv.index():
+        continue
+    shape = obj.shape
+    if not (shape.is_box() or shape.is_polygon() or shape.is_path() or shape.is_text()):
+        continue
+    bbox = obj.trans() * shape.bbox()
+    c = bbox.center()
+    points.append((c.x, c.y))
+
+if not points:
+    pya.MessageBox.warning("Complete Net",
+        "Select one or more shapes on the broken net first, then run this again.",
+        pya.MessageBox.Ok)
+    sys.exit(0)
+
+# Resolve the net (and its fragment count) from the selection *before*
+# routing, the same way complete_net_from_points does internally, so the
+# corridor-option dialog below can show something informed -- which net,
+# how many fragments, whether the drawn corridor will actually apply --
+# instead of asking blind.
+metals, labels, vias, _draw, _widths = ka.load_layers(LAYERS_JSON)
+names, unresolved = set(), 0
+for (x, y) in points:
+    n = ka.net_name_for_point(layout, cell, metals, labels, vias, x, y)
+    if n is None:
+        unresolved += 1
+    else:
+        names.add(n)
+if not names:
+    pya.MessageBox.warning("Complete Net",
+        "None of the selected shapes reach a net-name label anywhere in "
+        "their own connected metal -- select a shape closer to (or on) a "
+        "labelled fragment of the net.",
+        pya.MessageBox.Ok)
+    sys.exit(0)
+if len(names) > 1:
+    pya.MessageBox.warning("Complete Net",
+        f"Selection spans more than one net: {', '.join(sorted(names))}. "
+        "Select shapes from just one net and try again.",
+        pya.MessageBox.Ok)
+    sys.exit(0)
+net_name = next(iter(names))
+islands, _all_by_layer = ka.net_islands(layout, cell, metals, labels, vias, net_name)
+has_waypoints = bool(ka.read_waypoints(layout, cell))
+
+dialog = CorridorOptionDialog(mw, net_name, len(islands), has_waypoints)
+if not dialog.exec_():
+    sys.exit(0)
+use_corridor = dialog.use_corridor()
+corridor_pitch = dialog.corridor_pitch()
+corridor_guide_weight = dialog.corridor_guide_weight()
+
+# Opened before calling in, not just around the zoom: complete_net_on_layout
+# paints new shapes straight into `cell` internally, and that edit needs to
+# be inside the transaction to be one atomic, undoable action.
+view.transaction("complete net")
+try:
+    with tempfile.TemporaryDirectory() as work_dir:
+        result = ka.complete_net_on_layout(
+            layout, cell, LAYERS_JSON, net_name, router_bin, work_dir,
+            waypoints_layer_spec=ka.WAYPOINT_LAYER if use_corridor else None,
+            corridor_pitch=corridor_pitch,
+            corridor_guide_weight=corridor_guide_weight)
+        result["resolved_from_selection"] = True
+        if unresolved:
+            result["unresolved_points"] = unresolved
+finally:
+    view.commit()
+
+status = result["status"]
+net_name = result.get("net")
+# "no_net_found"/"ambiguous_selection" (complete_net_from_points' own
+# statuses) can't happen here any more -- net_name is already resolved,
+# and reported, before this point.
+if status == "already_connected":
+    mw.message(f"'{net_name}' is already one connected piece -- nothing to do.", 5000)
+elif status == "route_failed":
+    pya.MessageBox.warning("Complete Net",
+        f"hanan_router failed to complete '{net_name}'.\n\n{result.get('log', '')[-2000:]}",
+        pya.MessageBox.Ok)
+elif status == "completed":
+    view.zoom_fit()
+    mw.message(
+        f"'{net_name}' completed: {result['islands_before']} pieces -> 1, "
+        f"{result['shapes_inserted']} shape(s) added.", 8000)
+else:  # still_broken -- routed something, but the net isn't one piece yet
+    pya.MessageBox.warning("Complete Net",
+        f"'{net_name}' was {result['islands_before']} pieces; routing left it "
+        f"in {result['islands_after']} -- check for a spacing conflict or an "
+        "obstacle the router couldn't route around, and see route.log / "
+        "err.log in the working directory the router was run from.",
+        pya.MessageBox.Ok)
+
+ ]]></text>
+</klayout-macro>
