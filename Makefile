@@ -43,7 +43,7 @@ else
     LLVM_COV = xcrun llvm-cov
 endif
 
-.PHONY: depend clean test coverage
+.PHONY: depend clean test test-klayout coverage
 
 $(MAIN): $(OBJS) 
 	$(CPP) $(CCFLAGS) $(OPTFLAGS) $(INCDIRS) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
@@ -52,8 +52,17 @@ $(BIN)/%.o: $(SRC)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CPP) $(CCFLAGS) $(OPTFLAGS) $(INCDIRS) -DDEBUG=$(DEBUG) $(DEPFLAGS) -c $< -o $@
 
+# KLayout-side tests (headless, need `pip install klayout`): opt in with
+# `make test KLAYOUT=1`, or run them alone with `make test-klayout`.
+KLAYOUT_TESTS = test/test_klayout_autocomplete.py test/test_klayout_gui_complete.py \
+                test/test_klayout_corridor.py
+
 test: $(MAIN)
 	cd test && ./run_smoke.sh ../$(MAIN)
+	$(if $(KLAYOUT),$(MAKE) test-klayout,@echo "klayout tests skipped (make test KLAYOUT=1)")
+
+test-klayout: $(MAIN)
+	python3 -m pytest -q $(KLAYOUT_TESTS)
 
 $(COVMAIN): $(COVOBJS)
 	$(CPP) $(CCFLAGS) $(COVFLAGS) $(INCDIRS) -o $(COVMAIN) $(COVOBJS) $(LFLAGS) $(LIBS)

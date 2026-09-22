@@ -1,8 +1,8 @@
 name: CI
 
-# Build the router and run the smoke-test suite on every commit to master
-# (and on pull requests targeting master). The job status becomes the commit's
-# status check.
+# Build the router and run the smoke-test suite plus the headless KLayout
+# tests on every commit to master (and on pull requests targeting master).
+# The job status becomes the commit's status check.
 on:
   push:
     branches: [ master ]
@@ -23,15 +23,15 @@ jobs:
       - name: Build hanan_router
         run: make -j"$(nproc)"
 
-      - name: Install gdstk and shapely
-        run: python3 -m pip install gdstk shapely
+      - name: Install gdstk, shapely, klayout and pytest
+        run: python3 -m pip install gdstk shapely klayout pytest
 
       - name: Run smoke tests
         id: smoke
         run: |
           chmod +x test/run_smoke.sh
           set -o pipefail
-          make test 2>&1 | tee smoke.log
+          make test KLAYOUT=1 2>&1 | tee smoke.log
 
       # Publish the pass/fail status of the smoke suite as a check summary so the
       # result (and any failing cases) is visible on the run page, regardless of
