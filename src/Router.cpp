@@ -2353,9 +2353,10 @@ Geom::LayerRects Router::findSol()
       if (patterned) {
         COUT << "sol found with pattern! cost " << _sol->fcost() << " for " << _name << std::endl;
       }
+      bool exhausted = false;   // queue ran dry (vs. the expansion budget)
       while (!patterned) {
         Node* t = popPQ();
-        if (!t) break;
+        if (!t) { exhausted = true; break; }
         if (_targets.find(t) != _targets.end()) {
           _sol = t;
           COUT << "sol found with " << _expansions << " expansions! cost " << t->fcost() << " for " << _name << std::endl;
@@ -2390,11 +2391,17 @@ Geom::LayerRects Router::findSol()
           writeLEF("ATTEMPT_" + std::to_string(_attemptno) + (attempt ? "_1" : "_0"));
       }
       minExpansions = std::min(minExpansions, _expansions);
+      const bool sourceBoxedIn = !_sol && !patterned && exhausted && attempt == 0;
       clearPQ();
       _hanangridv.clear();
       _hanangridh.clear();
       _expansions = 0;
       if (_sol) break;
+      // undirected grid: a drained forward pass proves the reverse pass futile
+      if (sourceBoxedIn) {
+        COUT << "search skipped for " << _name << " in pass 1 : pass 0 exhausted its region without reaching a target; the reverse pass cannot differ\n";
+        break;
+      }
     }
     if (!_sol && _usepinwidth && minExpansions < 1000) {
       _bbox.expand(_bbox.width(), _bbox.height());
