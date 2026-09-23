@@ -580,6 +580,12 @@ LOGMUST="net : VDD num pins"
 run_case global_net "GLOB_CONC_0.def" \
   -d $IN/layers.json -p $IN/global_net.placement_verilog.json -l $IN/m1adj_escape.lef
 
+# 29a. global_hier: a sub-module uses global VDD but its instance's fa_map omits
+#      it, as ALIGN writes it; the top must still route its VDD to the sub-module.
+LOGMUST="routing : VDD__X_SUB/VDD_port_0__I_T/P_port_0"
+run_case global_hier "GH_CONC_0.def" \
+  -d $IN/layers.json -p $IN/global_hier.placement_verilog.json -l $IN/m1adj_escape.lef
+
 # 29b. symmetric_nets: two diagonal nets (INP, INM) placed as mirror images about
 #      x=1000, with a routing obstacle ON THE INP SIDE ONLY. Unguided, INP must
 #      detour around the obstacle while INM (clear side) routes straight -- so the

@@ -41,12 +41,22 @@ def module_nets(placement):
     """{module: [nets]} for every module, not just the top: a sub-block left
     routable in pass 2 is re-routed from scratch and undoes pass 1."""
     d = json.load(open(placement))
-    out = {}
+    glob = {g['actual'] for g in d.get('global_signals', []) if g.get('actual')}
+    nets, kids = {}, {}
     for m in d['modules']:
-        nets = {fa['actual'] for i in m.get('instances', [])
-                for fa in i.get('fa_map', []) if fa.get('actual')}
-        out[m['concrete_name']] = sorted(nets)
-    return out
+        nets[m['concrete_name']] = {fa['actual'] for i in m.get('instances', [])
+                                    for fa in i.get('fa_map', []) if fa.get('actual')}
+        kids[m['concrete_name']] = {i['concrete_template_name'] for i in m.get('instances', [])}
+    # a supply a sub-module uses reaches its parent too, though no fa_map says so
+    grew = True
+    while grew:
+        grew = False
+        for m, ks in kids.items():
+            add = {g for k in ks if k in nets for g in nets[k] & glob} - nets[m]
+            if add:
+                nets[m] |= add
+                grew = True
+    return {m: sorted(n) for m, n in nets.items()}
 
 
 def def_shapes(path):
@@ -94,6 +104,74 @@ def def_net_rects(path):
             net = m.group(1)
         elif net and re.match(r'\s*\+ RECT ', line):
             out.setdefault(net, []).append(line)
+    return out
+
+
+def lef_pin_shapes(path):
+    """Pin rectangles per layer out of a LEF, in microns."""
+    out, layer, units = {}, None, 1000.0
+    for line in open(path, errors='ignore'):
+        t = line.split()
+        if len(t) >= 4 and t[:3] == ['DATABASE', 'MICRONS', 'UNITS']:
+            units = float(t[3].rstrip(';'))
+        elif t[:1] == ['LAYER']:
+            layer = t[1]
+        elif t[:1] == ['RECT'] and layer and SIG_LAYERS.match(layer):
+            out.setdefault(layer, []).append([float(v) / units for v in t[1:5]])
+    return out
+
+
+def module_frames(placement):
+    """{module: [(transform, bbox)]}: every placed copy of each module, in top coordinates, microns."""
+    d = json.load(open(placement))
+    mods = {m['concrete_name']: m for m in d['modules']}
+    out = {}
+
+    def walk(name, t):
+        for i in mods[name].get('instances', []):
+            c = i['concrete_template_name']
+            if c not in mods:
+                continue
+            s = i['transformation']
+            tt = (t[0] + t[2] * s['oX'] / 1000.0, t[1] + t[3] * s['oY'] / 1000.0,
+                  t[2] * s['sX'], t[3] * s['sY'])
+            out.setdefault(c, []).append((tt, [v / 1000.0 for v in mods[c]['bbox']]))
+            walk(c, tt)
+
+    walk(d['modules'][0]['concrete_name'], (0.0, 0.0, 1, 1))
+    return out
+
+
+def into_frame(shapes, frames):
+    """Top-level shapes mapped into a module's own frame, kept where they overlap it."""
+    out = {}
+    for (ox, oy, sx, sy), (bx0, by0, bx1, by1) in frames:
+        for layer, rects in shapes.items():
+            for x0, y0, x1, y1 in rects:
+                a, b = sorted((sx * (x0 - ox), sx * (x1 - ox)))
+                c, e = sorted((sy * (y0 - oy), sy * (y1 - oy)))
+                if a < bx1 and b > bx0 and c < by1 and e > by0:
+                    out.setdefault(layer, []).append([a, c, b, e])
+    return out
+
+
+def out_of_frame(shapes, frames):
+    """A module's own shapes placed into top coordinates, once per copy."""
+    out = {}
+    for (ox, oy, sx, sy), _ in frames:
+        for layer, rects in shapes.items():
+            for x0, y0, x1, y1 in rects:
+                a, b = sorted((ox + sx * x0, ox + sx * x1))
+                c, e = sorted((oy + sy * y0, oy + sy * y1))
+                out.setdefault(layer, []).append([a, c, b, e])
+    return out
+
+
+def merge_shapes(*shape_sets):
+    out = {}
+    for s in shape_sets:
+        for layer, rects in (s or {}).items():
+            out.setdefault(layer, []).extend(rects)
     return out
 
 
@@ -239,9 +317,17 @@ def main():
     with open(os.path.join(d, 'all.lef'), 'w') as f:
         f.write(open(lef).read())
         f.write(open(os.path.join(d, 'pgrid.lef')).read())
+    # pass 2 re-routes each module alone: give it all pass-1 metal over it, and the straps
+    straps = lef_pin_shapes(os.path.join(d, 'pgrid.lef'))
+    frames = module_frames(place)
+    committed = merge_shapes(routed, *(
+        out_of_frame(def_shapes(os.path.join(d, f'sig_{m}.def')), frames.get(m, []))
+        for m in mods if m != top and os.path.exists(os.path.join(d, f'sig_{m}.def'))))
+    obs = {m: committed if m == top else into_frame(merge_shapes(committed, straps), frames.get(m, []))
+           for m in mods}
     write_ndr(os.path.join(d, 'ndr_pwr.json'),
               [(m, [n for n in nets if n not in sup],
-                routed if m == top else None,
+                obs[m] or None,
                 {n: f'X_PGRID/{n}' for n in nets if n in sup} if m == top else None)
                for m, nets in mods.items()])
     rc = run([a.router, '-d', layers, '-p', 'pg_place.json', '-l', 'all.lef',

@@ -84,6 +84,35 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
     }
   }
   it = oj.find("modules");
+  // ALIGN leaves global supplies out of a sub-module instance's fa_map: find which modules use each one
+  std::map<std::string, std::set<std::string>> globalUse;
+  if (it != oj.end() && !globalNets.empty()) {
+    const std::set<std::string> gset(globalNets.begin(), globalNets.end());
+    std::map<std::string, std::set<std::string>> children;
+    for (auto& m : *it) {
+      if (!m.contains("concrete_name") || !m.contains("instances")) continue;
+      const std::string mn = m["concrete_name"];
+      auto& use = globalUse[mn];
+      for (auto& inst : m["instances"]) {
+        if (inst.contains("concrete_template_name")) children[mn].insert(inst["concrete_template_name"].get<std::string>());
+        if (!inst.contains("fa_map")) continue;
+        for (auto& pm : inst["fa_map"]) {
+          if (pm.contains("actual") && gset.count(pm["actual"].get<std::string>())) use.insert(pm["actual"].get<std::string>());
+        }
+      }
+    }
+    for (bool grew = true; grew; ) {
+      grew = false;
+      for (auto& c : children) {
+        auto& use = globalUse[c.first];
+        for (auto& ch : c.second) {
+          auto u = globalUse.find(ch);
+          if (u == globalUse.end()) continue;
+          for (auto& g : u->second) grew |= use.insert(g).second;
+        }
+      }
+    }
+  }
   if (it != oj.end()) {
     for (auto& m : *it) {
       auto mname = m.find("concrete_name");
@@ -136,6 +165,18 @@ Netlist::Netlist(const std::string& plfile, const::std::string& leffile, const D
                   COUT << "net : " << *itact << '\n';
                   COUT << "pin : " << *itform << '\n';
                   modu->addTmpPin(n, instptr, *itform);
+                }
+              }
+              auto gu = globalUse.find(*mname);
+              if (gu != globalUse.end()) {
+                for (auto& g : gu->second) {
+                  bool mapped = false;
+                  if (famap != inst.end()) {
+                    for (auto& pm : *famap) mapped |= (pm.value("formal", "") == g);
+                  }
+                  if (mapped) continue;
+                  const Net* n = &(modu->addNet(g));
+                  modu->addTmpPin(n, instptr, g);
                 }
               }
             } else {

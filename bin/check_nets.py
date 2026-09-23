@@ -23,6 +23,7 @@ Two details decide whether the trace means anything:
 import argparse
 import collections
 import json
+import os
 import re
 import sys
 
@@ -75,6 +76,42 @@ def def_nets(path, dbu=1000.0):
     return names, rects
 
 
+def hier_nets(deffile, placement, defdir, dbu=1000.0):
+    """def_nets over the top DEF plus every sub-module's DEF placed into top
+    coordinates; a sub-module net takes its parent's name through the pin map."""
+    names, rects = def_nets(deffile, dbu)
+    d = json.load(open(placement))
+    mods = {m['concrete_name']: m for m in d['modules']}
+    glob = {g['actual'] for g in d.get('global_signals', []) if g.get('actual')}
+
+    def walk(name, t, rename, path):
+        for i in mods[name].get('instances', []):
+            c = i['concrete_template_name']
+            f = os.path.join(defdir, f'{c}.def')
+            if c not in mods or not os.path.exists(f):
+                continue
+            s = i['transformation']
+            ox, oy = t[0] + t[2] * s['oX'] / dbu, t[1] + t[3] * s['oY'] / dbu
+            sx, sy = t[2] * s['sX'], t[3] * s['sY']
+            here = path + i['instance_name'] + '/'
+            fa = {x['formal']: rename(x['actual'], path) for x in i.get('fa_map', [])}
+            sub = lambda n, p, fa=fa, here=here: n if n in glob else fa.get(n, here + n) if p == here else here + n
+            _, rr = def_nets(f, dbu)
+            for net, layer, g in rr:
+                x0, y0, x1, y1 = g.bounds
+                a, b = sorted((ox + sx * x0, ox + sx * x1))
+                c0, c1 = sorted((oy + sy * y0, oy + sy * y1))
+                n = sub(net, here)
+                rects.append((n, layer, box(a, c0, b, c1)))
+                if n not in names:
+                    names.append(n)
+            walk(c, (ox, oy, sx, sy), sub, here)
+
+    top = d['modules'][0]['concrete_name']
+    walk(top, (0.0, 0.0, 1, 1), lambda n, p: n, '')
+    return names, rects
+
+
 def trace(gds, top, layers, stack='', layer_source=None):
     """(shapes, DEF-net tags, union-find root) for the flattened cell's conductors."""
     want = {x.strip() for x in stack.split(',') if x.strip()} if stack else None
@@ -92,8 +129,15 @@ def trace(gds, top, layers, stack='', layer_source=None):
     cell.flatten()
     k = lib.unit / 1e-6
 
+    capm = [e.get('GdsLayerNo') for e in (json.load(open(layers)).get('Abstraction', []) if layers else [])
+            if e.get('Layer') == 'CapMIMLayer']
+    capm = {(capm[0], d) for d in (44,)} if capm and capm[0] is not None else set()
+    plates = []
     shapes, tags = [], []
     for p in cell.polygons:
+        if (p.layer, p.datatype) in capm:
+            (x0, y0), (x1, y1) = p.bounding_box()
+            plates.append(box(x0 * lib.unit / 1e-6, y0 * lib.unit / 1e-6, x1 * lib.unit / 1e-6, y1 * lib.unit / 1e-6))
         name = draw.get((p.layer, p.datatype))
         if not name:
             continue
@@ -126,6 +170,8 @@ def trace(gds, top, layers, stack='', layer_source=None):
             for m in tree.query(shapes[i]):
                 if idx[m] != i and shapes[i].intersects(shapes[idx[m]]):
                     union(i, idx[m])
+    ptree = STRtree(plates) if plates else None
+    on_plate = lambda g: ptree is not None and any(plates[m].intersects(g) for m in ptree.query(g))
     for cut, (lo, hi) in ((draw[k2], v) for k2, v in via.items()):
         cuts = by.get(cut, [])
         for lname in (lo, hi):                   # a cut joins the metals it sits between
@@ -134,6 +180,8 @@ def trace(gds, top, layers, stack='', layer_source=None):
                 continue
             tree = STRtree([shapes[i] for i in idx])
             for ci in cuts:
+                if lname == lo and on_plate(shapes[ci]):
+                    continue                     # a MIM contact joins the top plate to the metal above, not below
                 for m in tree.query(shapes[ci]):
                     if shapes[ci].intersects(shapes[idx[m]]):
                         union(ci, idx[m])
@@ -150,11 +198,13 @@ def main():
     ap.add_argument('--stack', default='',
                     help='comma list of layers to trace; default is every drawn layer')
     ap.add_argument('--dbu', type=float, default=1000.0)
+    ap.add_argument('--placement', help='placement JSON: also check every sub-module DEF next to --def')
     ap.add_argument('--quiet', action='store_true')
     a = ap.parse_args()
 
     shapes, tags, find = trace(a.gds, a.top, a.layers, a.stack)
-    names, rects = def_nets(a.deffile, a.dbu)
+    names, rects = (hier_nets(a.deffile, a.placement, os.path.dirname(os.path.abspath(a.deffile)), a.dbu)
+                    if a.placement else def_nets(a.deffile, a.dbu))
 
     tree = STRtree(shapes)
     owner = collections.defaultdict(collections.Counter)
