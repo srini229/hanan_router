@@ -1,0 +1,23 @@
+{
+  "global_signals": [{"actual": "VDD", "formal": "supply1", "prefix": "global_power"}],
+  "leaves": [
+    {"abstract_name": "PINCELL", "concrete_name": "PINCELL", "bbox": [0, 0, 32, 32],
+     "terminals": [{"name": "P", "rect": [0, 0, 32, 32]}]}
+  ],
+  "modules": [
+    {"abstract_name": "GH", "concrete_name": "GH_CONC_0", "bbox": [0, 0, 800, 400], "parameters": [],
+     "instances": [
+       {"abstract_template_name": "SUB", "concrete_template_name": "SUB_CONC_0", "instance_name": "X_SUB",
+        "fa_map": [], "transformation": {"oX": 400, "oY": 250, "sX": 1, "sY": 1}},
+       {"abstract_template_name": "PINCELL", "concrete_template_name": "PINCELL", "instance_name": "I_T",
+        "fa_map": [{"actual": "VDD", "formal": "P"}], "transformation": {"oX": 60, "oY": 80, "sX": 1, "sY": 1}}
+     ]},
+    {"abstract_name": "SUB", "concrete_name": "SUB_CONC_0", "bbox": [0, 0, 300, 100], "parameters": [],
+     "instances": [
+       {"abstract_template_name": "PINCELL", "concrete_template_name": "PINCELL", "instance_name": "I_S0",
+        "fa_map": [{"actual": "VDD", "formal": "P"}], "transformation": {"oX": 40, "oY": 40, "sX": 1, "sY": 1}},
+       {"abstract_template_name": "PINCELL", "concrete_template_name": "PINCELL", "instance_name": "I_S1",
+        "fa_map": [{"actual": "VDD", "formal": "P"}], "transformation": {"oX": 220, "oY": 40, "sX": 1, "sY": 1}}
+     ]}
+  ]
+}
