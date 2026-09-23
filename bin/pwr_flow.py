@@ -59,7 +59,7 @@ def module_nets(placement):
     return {m: sorted(n) for m, n in nets.items()}
 
 
-def def_shapes(path):
+def def_shapes(path, skip=()):
     """Routed rectangles per layer out of a DEF's NETS section, in microns.
 
     The router takes NDR obstacle coordinates in microns and scales them itself;
@@ -68,9 +68,13 @@ def def_shapes(path):
     the pass reports no short because as far as it knows there is none.
     """
     out = {}
-    innets = False
+    innets, net = False, None
     dbu = 1000.0
     for line in open(path, errors='ignore'):
+        if innets:
+            m = re.match(r'\s*- (\S+)', line)
+            if m:
+                net = m.group(1)
         if not innets:
             m = re.match(r'\s*UNITS DISTANCE MICRONS (\d+)', line)
             if m:
@@ -83,7 +87,7 @@ def def_shapes(path):
         if not innets:
             continue
         m = re.match(r'\s*\+ RECT (\w+) \( (-?\d+) (-?\d+) \) \( (-?\d+) (-?\d+) \)', line)
-        if m and SIG_LAYERS.match(m.group(1)):
+        if m and SIG_LAYERS.match(m.group(1)) and net not in skip:
             out.setdefault(m.group(1), []).append([int(x) / dbu for x in m.groups()[1:]])
     return out
 
@@ -297,10 +301,21 @@ def main():
         if m != top and os.path.exists(os.path.join(d, f'{m}.def')):
             shutil.copy(os.path.join(d, f'{m}.def'), os.path.join(d, f'sig_{m}.def'))
 
-    # --- grid, carved around what pass 1 committed
+    # --- grid, carved around what pass 1 committed at every level
     routed = def_shapes(os.path.join(d, f'{top}.def'))
+    frames = module_frames(place)
+    committed = merge_shapes(routed, *(
+        out_of_frame(def_shapes(os.path.join(d, f'sig_{m}.def')), frames.get(m, []))
+        for m in mods if m != top and os.path.exists(os.path.join(d, f'sig_{m}.def'))))
+    with open(os.path.join(d, 'committed.def'), 'w') as f:
+        f.write('NETS 1 ;\n- committed\n')
+        for layer, rects in committed.items():
+            for r in rects:
+                v = [round(x * 1000) for x in r]
+                f.write(f'  + RECT {layer} ( {v[0]} {v[1]} ) ( {v[2]} {v[3]} )\n')
+        f.write(';\nEND NETS\n')
     gen = [sys.executable, GEN, '-l', layers, '-p', place,
-           '--avoid', lef, '--avoid-def', os.path.join(d, f'{top}.def'),
+           '--avoid', lef, '--avoid-def', os.path.join(d, 'committed.def'),
            '--stride', str(a.stride), '--cuts-out', 'pgrid_cuts.json',
            '--lef', 'pgrid.lef', '--placement-out', 'pg_place.json']
     if a.bottom:
@@ -319,9 +334,9 @@ def main():
         f.write(open(os.path.join(d, 'pgrid.lef')).read())
     # pass 2 re-routes each module alone: give it all pass-1 metal over it, and the straps
     straps = lef_pin_shapes(os.path.join(d, 'pgrid.lef'))
-    frames = module_frames(place)
-    committed = merge_shapes(routed, *(
-        out_of_frame(def_shapes(os.path.join(d, f'sig_{m}.def')), frames.get(m, []))
+    # pass 1 leaves stubs on the supply pins: those are what pass 2 must reach, not obstacles
+    committed = merge_shapes(def_shapes(os.path.join(d, f'{top}.def'), sup), *(
+        out_of_frame(def_shapes(os.path.join(d, f'sig_{m}.def'), sup), frames.get(m, []))
         for m in mods if m != top and os.path.exists(os.path.join(d, f'sig_{m}.def'))))
     obs = {m: committed if m == top else into_frame(merge_shapes(committed, straps), frames.get(m, []))
            for m in mods}
