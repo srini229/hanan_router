@@ -60,6 +60,10 @@ LayerInfo::LayerInfo(const std::string& ljfile, const int uu) : _sbottom{nullptr
             if (it != l.end() && it->is_number()) mlayer->setWidth(static_cast<int>(*it) * uu);
             it = l.find("MinSpacing");
             if (it != l.end() && it->is_number()) mlayer->setMinSpace(static_cast<int>(*it) * uu);
+            for (const char* key : {"minArea", "min_area", "MinArea"}) {   // um^2
+              it = l.find(key);
+              if (it != l.end() && it->is_number()) mlayer->setMinArea(static_cast<long long>(static_cast<double>(*it) * uu * uu));
+            }
             it = l.find("MinL");
             if (it != l.end() && it->is_number()) mlayer->setMinL(static_cast<int>(*it) * uu);
             it = l.find("MaxL");

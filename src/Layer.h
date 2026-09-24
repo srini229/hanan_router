@@ -45,6 +45,7 @@ class MetalLayer : public Layer {
   private:
     int _pitch, _width, _minL, _maxL;
     int _e2e, _offset, _minSpace;
+    long long _minArea{0};
     Direction _dir;
   public:
     MetalLayer(const std::string& name, const float mur, const float lr, const float ur)
@@ -60,6 +61,8 @@ class MetalLayer : public Layer {
     void setPitch(const int p) {_pitch = p;}
     void setWidth(const int w) {_width = w;}
     void setMinL(const int l) {_minL = l;}
+    long long minArea() const { return _minArea; }
+    void setMinArea(const long long a) {_minArea = a;}
     void setMaxL(const int l) {_maxL = l;}
     void setE2E(const int e) {_e2e = e;}
     void setOffset(const int o) {_offset = o;}

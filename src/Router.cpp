@@ -405,6 +405,48 @@ void CostFn::updatendr(const std::map<int, DRC::Direction>& ndrdir, const std::s
   }
 }
 
+// -viacost: a via costs at least `pitches` wire pitches of the cheaper metal it joins
+void CostFn::setViaPitches(const double pitches, const DRC::LayerInfo& lf)
+{
+  auto& layers = lf.layers();
+  for (unsigned i = 0; i < layers.size(); ++i) {
+    if (!layers[i]->isVia()) continue;
+    auto l = lf.getLayers(static_cast<DRC::ViaLayer*>(layers[i]));
+    if (l.first < 0 || l.second < 0) continue;
+    const int lo = std::min(l.first, l.second);
+    auto ml = static_cast<DRC::MetalLayer*>(layers[lo]);
+    CostType r = COST_MAX;
+    for (int z : {l.first, l.second}) r = std::min(r, std::min(_layerHCost[z], _layerVCost[z]));
+    if (r >= COST_MAX) continue;
+    const CostType c = std::max(_baseLayerPairCost[l.first][l.second], pitches * r * (ml->width() + ml->space()));
+    _layerPairCost[l.first][l.second] = _layerPairCost[l.second][l.first] = c;
+    _baseLayerPairCost[l.first][l.second] = _baseLayerPairCost[l.second][l.first] = c;
+  }
+  markCostTablesDirty();
+}
+
+// UnitR is sheet resistance in mOhm/sq and a wire costs UnitR per unit length, so one ohm of width-W metal costs
+// 1000 W: a via of R ohms is priced as that much of the narrower metal it joins
+void CostFn::setViaFromResistance(const DRC::LayerInfo& lf)
+{
+  auto& layers = lf.layers();
+  for (unsigned i = 0; i < layers.size(); ++i) {
+    if (!layers[i]->isVia()) continue;
+    auto l = lf.getLayers(static_cast<DRC::ViaLayer*>(layers[i]));
+    if (l.first < 0 || l.second < 0) continue;
+    const int w = std::min(static_cast<DRC::MetalLayer*>(layers[l.first])->width(),
+                           static_cast<DRC::MetalLayer*>(layers[l.second])->width());
+    const CostType c = std::max(_baseLayerPairCost[l.first][l.second], 1000. * layers[i]->meanR() * w);
+    _layerPairCost[l.first][l.second] = _layerPairCost[l.second][l.first] = c;
+    _baseLayerPairCost[l.first][l.second] = _baseLayerPairCost[l.second][l.first] = c;
+    const CostType m = std::min(std::min(_layerHCost[l.first], _layerVCost[l.first]),
+                                std::min(_layerHCost[l.second], _layerVCost[l.second]));
+    COUT << "via " << layers[i]->name() << " : " << layers[i]->meanR() << " ohm, cost " << c
+         << (m < COST_MAX ? " = " + std::to_string(static_cast<long long>(c / m)) + " of the cheaper metal" : "") << '\n';
+  }
+  markCostTablesDirty();
+}
+
 Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT_MAX}, _maxLayer{0}, _maxRoutingLayer{0}, _name{}, _lf{lf}
 {
   auto& layers = lf.layers();
@@ -433,7 +475,10 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
              << " and the final DRC check will flag it (pitch should be >= "
              << (mlayer->width() + mlayer->minSpace()) << ")\n";
       }
-      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << " v : " << _cf.isVert(i) << " h : " << _cf.isHor(i) << '\n';
+      _minarea.push_back(mlayer->minArea());
+      COUT << "layer : " << i << " width : " << _widthx.back() << " space : " << _spacex.back() << " v : " << _cf.isVert(i) << " h : " << _cf.isHor(i);
+      if (_minarea.back() > 0) COUT << " minArea : " << _minarea.back();
+      COUT << '\n';
     }
   }
   _aboveViaLayer.resize(_widthx.size(), -1);
@@ -450,6 +495,7 @@ Router::Router(const DRC::LayerInfo& lf) : _cf{lf}, _sol{nullptr}, _minLayer{INT
       if (l.second >= 0) _belowViaLayer[l.second] = i;
       _widthx.push_back(vlayer->widthx());
       _widthy.push_back(vlayer->widthy());
+      _minarea.push_back(0);
       _spacex.push_back(vlayer->spacex());
       _spacey.push_back(vlayer->spacey());
       _drcspacex.push_back(vlayer->spacex());
@@ -1859,6 +1905,105 @@ void Router::generateHananGrid()
   }
 }
 
+bool Router::centrelineClear(const int z, const Geom::Rect& seg) const
+{
+  auto it = _ltree.find(z);
+  if (it == _ltree.end()) return true;
+  Geom::Rects nbrs;
+  it->second.search(nbrs, seg);
+  for (auto& o : nbrs) {
+    if (o.overlaps(seg, true)) return false;
+  }
+  return true;
+}
+
+bool Router::applyMinArea(Geom::Rect& r, const int z, const bool vert) const
+{
+  return extendToLength(r, z, vert, minLength(z, vert));
+}
+
+bool Router::extendToLength(Geom::Rect& r, const int z, const bool vert, const int need) const
+{
+  if (need <= 0) return true;
+  const int len = vert ? r.height() : r.width();
+  if (len >= need) return true;
+  const int deficit = need - len;
+
+  // _ltree obstacles carry spacing plus half a standard wire; a wider shape probes its whole length with the excess
+  const int cross  = vert ? r.width() : r.height();
+  const int stdw   = vert ? widthy(z) : widthx(z);
+  const int margin = std::max(0, (cross - stdw + 1) / 2);
+  const int rlo = vert ? r.ymin() : r.xmin();
+  const int rhi = vert ? r.ymax() : r.xmax();
+  auto legal = [&](const int lo, const int hi) {
+    const Geom::Rect seg = vert
+      ? Geom::Rect(r.xcenter() - margin, lo, r.xcenter() + margin, hi)
+      : Geom::Rect(lo, r.ycenter() - margin, hi, r.ycenter() + margin);
+    return centrelineClear(z, seg);
+  };
+
+  const int half = deficit / 2;
+  const int splits[3][2] = {{half, deficit - half}, {0, deficit}, {deficit, 0}};
+  for (const auto& sp : splits) {
+    if (!legal(rlo - sp[0], rhi + sp[1])) continue;
+    if (vert) r = Geom::Rect(r.xmin(), rlo - sp[0], r.xmax(), rhi + sp[1]);
+    else      r = Geom::Rect(rlo - sp[0], r.ymin(), rhi + sp[1], r.ymax());
+    return true;
+  }
+  return false;
+}
+
+void Router::enforceMinAreaShapes(Geom::LayerRects& sol) const
+{
+  for (auto& l : sol) {
+    const int z = l.first;
+    const long long need = minArea(z);
+    if (need <= 0 || l.second.empty()) continue;
+    PolySet ps;
+    for (const auto& r : l.second) ps.insert(PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax()));
+    PPolys polys;
+    ps.get(polys);
+    Geom::Rects grown;
+    for (const auto& poly : polys) {
+      const long long a = static_cast<long long>(bp::area(poly));
+      if (a >= need) continue;
+      PolySet one;
+      one.insert(poly);
+      PRects prects;
+      get_max_rectangles(prects, one);
+      if (prects.size() != 1) {
+        COUT << "MINAREA " << _name << " layer " << LAYER_NAMES[z]
+             << " : shape area=" << a << " need=" << need
+             << " : not a single rectangle, left alone\n";
+        continue;
+      }
+      const Geom::Rect pad(bp::xl(prects[0]), bp::yl(prects[0]),
+                           bp::xh(prects[0]), bp::yh(prects[0]));
+      bool done = false;
+      for (const bool vert : {_cf.isVert(z), !_cf.isVert(z)}) {
+        const int cross = vert ? pad.width() : pad.height();
+        if (cross <= 0) continue;
+        Geom::Rect g(pad);
+        if (extendToLength(g, z, vert, static_cast<int>((need + cross - 1) / cross))) {
+          COUT << "MINAREA " << _name << " layer " << LAYER_NAMES[z]
+               << " : pad " << pad.str() << " area=" << a
+               << " grown to " << g.str() << " area="
+               << (1LL * g.width() * g.height()) << '\n';
+          grown.push_back(g);
+          done = true;
+          break;
+        }
+      }
+      if (!done) {
+        COUT << "MINAREA " << _name << " layer " << LAYER_NAMES[z]
+             << " : pad " << pad.str() << " area=" << a << " need=" << need
+             << " : no legal extension\n";
+      }
+    }
+    for (auto& g : grown) l.second.push_back(g);
+  }
+}
+
 void Router::buildSol(Geom::LayerRects& sol)
 {
   _sollen = 0;
@@ -1947,7 +2092,10 @@ void Router::buildSol(Geom::LayerRects& sol)
           }
         }
         _sollen += std::abs(n->x() - parent->x()) + std::abs(n->y() - parent->y());
-        sol[n->z()].push_back(Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2));
+        Geom::Rect run = Geom::Rect(n->x(), n->y(), parent->x(), parent->y()).bloatby(extnx1, extny1, extnx2, extny2);
+        if (minArea(n->z()) > 0 && !applyMinArea(run, n->z(), n->x() == parent->x()))
+          COUT << "MINAREA " << _name << " layer " << LAYER_NAMES[n->z()] << " : " << run.str() << " : no legal extension\n";
+        sol[n->z()].push_back(run);
 #if DEBUG
         COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
 #endif
@@ -1973,6 +2121,7 @@ void Router::buildSol(Geom::LayerRects& sol)
     }
     n = parent;
   }
+  enforceMinAreaShapes(sol);
 }
 
 bool Router::patternRun(const int x, const int y, const int z, const bool vert, const int to) const

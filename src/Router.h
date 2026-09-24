@@ -186,6 +186,8 @@ class CostFn {
     CostType admissibleBound(const Node& n1, const Node& n2) const;
     void markCostTablesDirty() { _widenedWindowDirty = true; }
     CostFn(const DRC::LayerInfo& lf);
+    void setViaPitches(const double pitches, const DRC::LayerInfo& lf);
+    void setViaFromResistance(const DRC::LayerInfo& lf);
     void setRelaxFloor(const CostType c) { if (c > 0 && c < COST_MAX) _minMetalCost = c; }
     void clearRelaxZones()
     { _relaxzones.clear(); _relaxuf.clear(); _relaxbbox.clear(); _relaxindex.clear(); _relaxdirty = true; }
@@ -496,6 +498,7 @@ class Router {
     const Node *_sol;
     bool _lastSolFound{false};
     std::vector<std::array<int, 6>> _exploredEdges;
+    std::vector<long long> _minarea;
     std::vector<int> _widthx, _ndrwidthx, _spacex, _ndrspacex;
     std::vector<int> _drcspacex, _drcspacey;
     std::vector<int> _widthy, _ndrwidthy, _spacey, _ndrspacey;
@@ -1015,6 +1018,21 @@ class Router {
     bool satFirst() const { return _satFirst; }
     void setViaAlign(const bool b) { _viaAlign = b; }
     void setPadHaloLines(const bool b) { _padHaloLines = b; }
+    void setViaCostPitches(const double p) { if (p > 0) _cf.setViaPitches(p, _lf); }
+    void setViaCostFromResistance() { _cf.setViaFromResistance(_lf); }
+    long long minArea(const int z) const
+    { return (static_cast<unsigned>(z) < _minarea.size()) ? _minarea[z] : 0; }
+    // the length a run of this layer's width needs to enclose its minimum area
+    int minLength(const int z, const bool vert) const
+    {
+      const long long a = minArea(z);
+      const int w = vert ? widthy(z) : widthx(z);
+      return (a <= 0 || w <= 0) ? 0 : static_cast<int>((a + w - 1) / w);
+    }
+    bool applyMinArea(Geom::Rect& r, const int z, const bool vert) const;
+    bool extendToLength(Geom::Rect& r, const int z, const bool vert, const int need) const;
+    void enforceMinAreaShapes(Geom::LayerRects& sol) const;   // standalone pads grown to the minimum area
+    bool centrelineClear(const int z, const Geom::Rect& seg) const;
     void setAdmissibleBound(const bool b) { _admissibleAlways = b; }
     void setNoPattern(const bool b) { _noPattern = b; }
     void setSatPoint(const bool b) { _satPoint = b; }
