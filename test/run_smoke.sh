@@ -526,12 +526,13 @@ run_case reorder "REORDER_CONC_0.def" \
 # 21. reorder_disabled: the same case with -reorder 0 turns the net-ordering search
 #     off, so the one net the default HPWL order strands stays open. Exercises the
 #     -reorder argument (Router::setReorderPasses) and confirms the search is what
-#     routes it: LOGMUST asserts the ROUTE_SUMMARY still reports one unrouted net.
+#     routes it: LOGMUST asserts the ROUTE_SUMMARY still reports one unrouted net. -viacost 0 keeps the
+#     layer-file via cost the case was built on (priced by resistance, the stranded net finds a way).
 LOGMUST="ROUTE_SUMMARY module=REORDER_CONC_0 nets=5 unrouted=1"
 ALLOW_UNROUTED=1
 run_case reorder_disabled "" \
   -d $IN/layers.json -p $IN/reorder.placement_verilog.json \
-  -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json -reorder 0
+  -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json -reorder 0 -viacost 0
 
 # 22-25. argument-handling / error paths (cover main.cpp CLI parsing and the
 #     std::cerr diagnostics). Each asserts the expected message on stderr/err.log.
@@ -1090,13 +1091,14 @@ run_case via_rotate_off "" -replay $IN/viarotate_tap.lef -d $IN/layers_align_sky
 
 # 55c. halo_fallback: a strong-arm latch whose OUTP/TAIL connections need a grid line where a via pad clears
 #      an obstacle; open after the corner-escape pass, routed by the -padhalo re-route of that hierarchy.
+#      -viacost 0: the layer-file via cost the case was built on; priced by resistance, one net stays boxed in.
 LOGMUST="re-routing with via-pad halo grid lines"
 run_case halo_fallback "STRONG_ARM_LATCH_0.def" -d $IN/layers_sky130_bench.json -p $IN/halofallback.placement_verilog.json \
-  -l $IN/halofallback.lef -ndr $IN/halofallback_ndr.json -uu 1000 -reorder 30
+  -l $IN/halofallback.lef -ndr $IN/halofallback_ndr.json -uu 1000 -reorder 30 -viacost 0
 LOGMUST="unrouted=2"
 ALLOW_UNROUTED=1
 run_case halo_fallback_off "STRONG_ARM_LATCH_0.def" -d $IN/layers_sky130_bench.json -p $IN/halofallback.placement_verilog.json \
-  -l $IN/halofallback.lef -ndr $IN/halofallback_ndr.json -uu 1000 -reorder 30 -nohalofallback
+  -l $IN/halofallback.lef -ndr $IN/halofallback_ndr.json -uu 1000 -reorder 30 -nohalofallback -viacost 0
 
 # 55d. offcentre_target: ota2's PTAIL on MAGICAL's placement joins its routed tree. The tree was the larger set,
 #      so sources and targets swapped, and the off-centre target points kept a source's escape penalty as their

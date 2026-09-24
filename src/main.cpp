@@ -28,7 +28,8 @@ int main(int argc, char* argv[])
       << "\t-detour (with -replay: allow a large detour even without NDR saying so)\n"
       << "\t-rsmt (confine each net to a Borah Steiner corridor over its pins)\n"
       << "\t-padhalo (also put grid lines where a via pad, not just a wire, clears each obstacle; default: wire halo only)\n"
-      << "\t-viacost <P> (a via costs at least P wire pitches of the cheaper metal it joins; default: its layer-file R)\n"
+      << "\t-viacost <r|P|0> (r: a via costs the length of the narrower metal it joins with the same resistance, the\n"
+      << "\t    default; P: at least P wire pitches of the cheaper metal; 0: its bare layer-file R)\n"
       << "\t-nohalofallback (do not re-route still-open hierarchies with -padhalo lines at the end)\n"
       << "\t-admissible (A* uses the admissible distance bound everywhere, not only under a corridor guide)\n"
       << "\t-nopattern (skip L/Z pattern routing; every wire goes to A*)\n"
@@ -135,8 +136,8 @@ int main(int argc, char* argv[])
   if (checkArg(argc, argv, "-reserveexcluded")) hrdb.setReserveExcluded(true);
   if (checkArg(argc, argv, "-noviarotate")) hrdb.setViaRotate(false);
   const std::string viacost = parseArgs(argc, argv, "-viacost");
-  if (viacost == "r") hrdb.setViaCostFromResistance();
-  else if (!viacost.empty()) hrdb.setViaCostPitches(std::stod(viacost));
+  if (viacost.empty() || viacost == "r") hrdb.setViaCostFromResistance();
+  else hrdb.setViaCostPitches(std::stod(viacost));
   if (checkArg(argc, argv, "-noseed")) hrdb.setSeedCorridor(false);
   if (checkArg(argc, argv, "-satfirst")) hrdb.setSatFirst(true);
   if (checkArg(argc, argv, "-abutescape")) hrdb.setAbutEscape(true);
