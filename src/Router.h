@@ -50,6 +50,7 @@ class Via {
     void setLB(const Geom::Rect& r) { _lb = r; _bbox.merge(_lb); }
     void setUB(const Geom::Rect& r) { _ub = r; _bbox.merge(_ub); }
     const Geom::Rects& cuts() const { return _cuts; }
+    Geom::Rects cutRects() const { return _cuts.empty() ? Geom::Rects{_cut} : _cuts; }
     const Geom::Rect& upad() const { return _ub; }
     const Geom::Rect& lpad() const { return _lb; }
     const int u() const { return _u; }
@@ -287,6 +288,7 @@ class Node {
     std::bitset<MAXDIR> _expanddir;
     bool _noVia{false};
     bool _tgt{false};
+    unsigned char _escAxis{0};   // boundary escape: 1 leaves/arrives east-west only, 2 north-south only
     // This node's slot in the priority queue, -1 when not queued. Holding it on
     // the node is what makes re-prioritising O(1) to locate: the queue never has
     // to be searched for the entry.
@@ -337,6 +339,11 @@ class Node {
     int pen() const { return _pen; }
     bool tgt() const { return _tgt; }
     void setTgt(const bool t) { _tgt = t; }
+    int escAxis() const { return _escAxis; }
+    void setEscAxis(const int a) { _escAxis = static_cast<unsigned char>(a); }
+    // a move between this node and (x, y, z) runs along its boundary escape axis
+    bool alongEscAxis(const int x, const int y, const int z) const
+    { return !_escAxis || (z == _z && (_escAxis == 1 ? y == _y : x == _x)); }
     void setexpand() { _expanddir.set(); }
     void resetexpand() { _expanddir.reset(); }
 
@@ -522,6 +529,7 @@ class Router {
     const DRC::LayerInfo& _lf;
     std::map<const Node*, int> _endextnxmin, _endextnymin, _endextnxmax, _endextnymax;
     std::map<int, std::set<Geom::Rect>> _sourceshapes, _targetshapes;
+    Geom::LayerRects _samenet;
     // Cells already covered by an accepted escape point, keyed by (layer, dir).
     // Per net; cleared with the sources and targets.
     std::map<IntPair, std::set<IntPair>> _escapecells;
@@ -900,6 +908,7 @@ class Router {
       _targets.clear();
       _escapecells.clear();
       _sourceshapes.clear();
+      _samenet.clear();
       _cf.clearRelaxZones();
       _psources.clear();
       _targetshapes.clear();
@@ -914,6 +923,8 @@ class Router {
       _preflayers.clear();
     }
     Geom::LayerRects findSol();
+    // every shape of the net being routed, for closing same-net gaps below min spacing
+    void setSameNetShapes(const Geom::LayerRects& s) { _samenet = s; }
     // Whether the most recent findSol() call actually found a solution --
     // check this instead of the returned shape list's emptiness, which is
     // also empty on a legitimate zero-length (already-coincident) solution.
@@ -1036,6 +1047,13 @@ class Router {
       const int w = vert ? widthy(z) : widthx(z);
       return (a <= 0 || w <= 0) ? 0 : static_cast<int>((a + w - 1) / w);
     }
+    bool padClear(const int z, const Geom::Rect& p) const;
+    bool cutsClearOfNet(const Via& v) const;
+    // a via here to zto would sit within cut spacing of one this path already drew on that via layer
+    bool viaCrowdsPath(const Node* n, const int zto) const;
+    static const int PATH_VIA_DEPTH = 6;
+    bool patternViasCrowd(const std::vector<PatWp>& w) const;
+    void fillSameNetGaps(Geom::LayerRects& sol) const;
     bool applyMinArea(Geom::Rect& r, const int z, const bool vert) const;
     bool extendToLength(Geom::Rect& r, const int z, const bool vert, const int need) const;
     void enforceMinAreaShapes(Geom::LayerRects& sol) const;   // standalone pads grown to the minimum area

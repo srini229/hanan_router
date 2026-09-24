@@ -512,6 +512,15 @@ void Net::route(Router::Router& router, const Geom::LayerRects& l1, const Geom::
       Geom::LayerRects samenetobst;
       auto addSrcTgtShapes = [&]() {
       samenetobst.clear();
+      Geom::LayerRects samenet;
+      for (auto* pin : _pins) {
+        for (auto* port : pin->ports()) {
+          for (auto& l : port->shapes()) {
+            samenet[l.first].insert(samenet[l.first].end(), l.second.begin(), l.second.end());
+          }
+        }
+      }
+      router.setSameNetShapes(samenet);
       for (auto src : {true, false}) {
         bool preflayer{false};
         for (auto& l : _preflayers) {

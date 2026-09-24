@@ -971,6 +971,7 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
       auto n = createNode(p.x(), p.y(), z, nullptr, src ? fcost + pen : fcost, tcost, pen);
       if (!src) n->setTgt(true);
       n->setNoVia();
+      n->setEscAxis(dir == EAST ? 1 : 2);
       n->expand(dir, true);
       if (dir == EAST) {
         n->sethwx(pp.second/2);
@@ -1134,12 +1135,60 @@ void Router::setexpand(Node* newn, const Node* parent) const
     newn->expand(UP, false);
     newn->expand(DOWN, false);
   }
+  if (parent && newn->viaup() && viaCrowdsPath(newn, newn->z() + 1)) newn->expand(UP, false);
+  if (parent && newn->viadown() && viaCrowdsPath(newn, newn->z() - 1)) newn->expand(DOWN, false);
+  if (!parent && newn->escAxis() == 1) {
+    newn->expand(NORTH, false);
+    newn->expand(SOUTH, false);
+  } else if (!parent && newn->escAxis() == 2) {
+    newn->expand(EAST, false);
+    newn->expand(WEST, false);
+  }
   if (_cf.hcost(newn->z()) == _cf.vcost(newn->z()) && _cf.hcost(newn->z()) == COST_MAX) {
     newn->expand(NORTH, false);
     newn->expand(SOUTH, false);
     newn->expand(EAST, false);
     newn->expand(WEST, false);
   }
+}
+
+bool Router::patternViasCrowd(const std::vector<PatWp>& w) const
+{
+  for (size_t i = 1; i < w.size(); ++i) {
+    if (w[i].x != w[i - 1].x || w[i].y != w[i - 1].y || w[i].z == w[i - 1].z) continue;
+    const int lo = std::min(w[i].z, w[i - 1].z), c = _aboveViaLayer[lo];
+    if (c < 0) continue;
+    for (size_t j = i + 1; j < w.size(); ++j) {
+      if (w[j].x != w[j - 1].x || w[j].y != w[j - 1].y || std::min(w[j].z, w[j - 1].z) != lo) continue;
+      if (w[j].z == w[j - 1].z || (w[j].x == w[i].x && w[j].y == w[i].y)) continue;
+      if (std::abs(w[j].x - w[i].x) < _widthx[c] + drcSpaceX(c)
+          && std::abs(w[j].y - w[i].y) < _widthy[c] + drcSpaceY(c)) return true;
+    }
+  }
+  return false;
+}
+
+bool Router::viaCrowdsPath(const Node* n, const int zto) const
+{
+  const int c = (zto > n->z()) ? _aboveViaLayer[n->z()] : _belowViaLayer[n->z()];
+  if (c < 0) return false;
+  const int reachx = _widthx[c] + drcSpaceX(c), reachy = _widthy[c] + drcSpaceY(c);
+  const int lo = std::min(n->z(), zto);
+  int walked = 0;
+  const Node* p = n;
+  for (int depth = 0; depth < PATH_VIA_DEPTH && p->parent(); ++depth) {
+    const Node* q = p->parent();
+    if (q->x() == p->x() && q->y() == p->y()) {
+      if (std::min(p->z(), q->z()) == lo && std::abs(p->z() - q->z()) == 1
+          && (p->x() != n->x() || p->y() != n->y())
+          && std::abs(p->x() - n->x()) < reachx && std::abs(p->y() - n->y()) < reachy) return true;
+    } else {
+      walked += std::abs(p->x() - q->x()) + std::abs(p->y() - q->y());
+      if (walked >= std::max(reachx, reachy)) return false;
+    }
+    p = q;
+  }
+  return false;
 }
 
 void Router::checkAndInsert(Node* newn, const Node* n)
@@ -1150,6 +1199,7 @@ void Router::checkAndInsert(Node* newn, const Node* n)
 #endif
     return;
   }
+  if (newn->tgt() && !newn->alongEscAxis(n->x(), n->y(), n->z())) return;
 #if DEBUG
   newn->print("newn bef :");
   if (newn->parent()) {
@@ -1916,6 +1966,63 @@ bool Router::centrelineClear(const int z, const Geom::Rect& seg) const
   return true;
 }
 
+bool Router::padClear(const int z, const Geom::Rect& p) const
+{
+  auto it = _ltree.find(z);
+  if (it == _ltree.end()) return true;
+  Geom::Rects nbrs;
+  it->second.search(nbrs, p.bloatby(spacex(z), spacey(z)));
+  for (auto o : nbrs) {
+    o.expand(-widthy(z)/2, -widthx(z)/2);
+    if (o.overlaps(p, true)) return false;
+  }
+  return true;
+}
+
+void Router::fillSameNetGaps(Geom::LayerRects& sol) const
+{
+  for (auto& l : sol) {
+    const int z = l.first;
+    if (z < _minLayer || z > _maxLayer || l.second.empty()) continue;
+    Geom::Rects net(l.second);
+    for (const auto* shapes : {&_sourceshapes, &_targetshapes}) {
+      auto it = shapes->find(z);
+      if (it != shapes->end()) net.insert(net.end(), it->second.begin(), it->second.end());
+    }
+    auto it = _samenet.find(z);
+    if (it != _samenet.end()) net.insert(net.end(), it->second.begin(), it->second.end());
+    Geom::Rects fill;
+    const size_t nsol = l.second.size();
+    for (size_t i = 0; i < nsol; ++i) {
+      const Geom::Rect a = l.second[i];
+      for (const auto& b : net) {
+        const int x0 = std::max(a.xmin(), b.xmin()), x1 = std::min(a.xmax(), b.xmax());
+        const int y0 = std::max(a.ymin(), b.ymin()), y1 = std::min(a.ymax(), b.ymax());
+        Geom::Rect g;
+        // a bridge must reach a full width into each shape, or it trades the gap for a neck
+        const int w = baseWidthX(z);
+        auto span = [w](const int lo, const int hi, const int outlo, const int outhi) {
+          return std::make_pair(std::max(std::min(lo, hi - w), outlo), std::min(std::max(hi, lo + w), outhi));
+        };
+        if (y1 > y0 && x1 < x0 && x0 - x1 < drcSpaceX(z)) {
+          const auto sy = span(y0, y1, std::min(a.ymin(), b.ymin()), std::max(a.ymax(), b.ymax()));
+          g = Geom::Rect(x1, sy.first, x0, sy.second);
+        } else if (x1 > x0 && y1 < y0 && y0 - y1 < drcSpaceY(z)) {
+          const auto sx = span(x0, x1, std::min(a.xmin(), b.xmin()), std::max(a.xmax(), b.xmax()));
+          g = Geom::Rect(sx.first, y1, sx.second, y0);
+        } else {
+          continue;
+        }
+        if (std::any_of(net.begin(), net.end(), [&g](const Geom::Rect& r) { return r.contains(g); })) continue;
+        if (std::any_of(fill.begin(), fill.end(), [&g](const Geom::Rect& r) { return r.contains(g); })) continue;
+        if (padClear(z, g)) fill.push_back(g);
+        else COUT << "SAMENET_GAP " << _name << " layer " << LAYER_NAMES[z] << " : " << g.str() << " : fill blocked\n";
+      }
+    }
+    l.second.insert(l.second.end(), fill.begin(), fill.end());
+  }
+}
+
 bool Router::applyMinArea(Geom::Rect& r, const int z, const bool vert) const
 {
   return extendToLength(r, z, vert, minLength(z, vert));
@@ -2009,6 +2116,25 @@ void Router::buildSol(Geom::LayerRects& sol)
   if (!_sol) return;
   const Node* n = _sol;
   std::set<const Node*> seen;   // a cycle here would allocate until the OOM killer
+  // the previous via when it ends where this one starts: stacked pads of two sizes form a notched cross
+  const Node* stackAt{nullptr};
+  int stackZ{-1};
+  Geom::Rect stackPad;
+  auto addVia = [&](const Via& v, const Node* at, const int from) {
+    v.addShapes(sol);
+    if (stackAt && stackAt->x() == at->x() && stackAt->y() == at->y() && stackZ == from) {
+      const Geom::Rect& p = (from == v.l()) ? v.lpad() : v.upad();
+      if (!p.contains(stackPad) && !stackPad.contains(p)) {
+        Geom::Rect g(p);
+        g.merge(stackPad);
+        if (padClear(from, g)) sol[from].push_back(g);
+      }
+    }
+    const int to = (from == v.l()) ? v.u() : v.l();
+    stackAt = at;
+    stackZ = to;
+    stackPad = (to == v.l()) ? v.lpad() : v.upad();
+  };
   while (n) {
     if (!seen.insert(n).second) {
       CERR << "ERROR: cycle in the solution path at " << n->x() << ',' << n->y()
@@ -2095,24 +2221,25 @@ void Router::buildSol(Geom::LayerRects& sol)
         if (minArea(n->z()) > 0 && !applyMinArea(run, n->z(), n->x() == parent->x()))
           COUT << "MINAREA " << _name << " layer " << LAYER_NAMES[n->z()] << " : " << run.str() << " : no legal extension\n";
         sol[n->z()].push_back(run);
+        stackAt = nullptr;
 #if DEBUG
         COUT << "sol : " << n->z() << ' ' << sol[n->z()].back().str() << ' ' << n->x() << ' ' << n->y() << ' ' << parent->x() << ' ' << parent->y() << '\n';
 #endif
       } else {
         if (parent->z() > n->z() && parent->dnVia()) {
-          parent->dnVia()->addShapes(sol);
+          addVia(*parent->dnVia(), n, n->z());
         } else if (parent->z() < n->z() && parent->upVia()) {
-          parent->upVia()->addShapes(sol);
+          addVia(*parent->upVia(), n, n->z());
         } else {
           if (parent->z() < n->z()) {
             if (!_dnVias[n->z()].empty()) {
               Via v(*(_dnVias[n->z()][0]), Geom::Point(n->x(), n->y()));
-              v.addShapes(sol);
+              addVia(v, n, n->z());
             }
           } else if (parent->z() > n->z()) {
             if (!_upVias[n->z()].empty()) {
               Via v(*(_upVias[n->z()][0]), Geom::Point(n->x(), n->y()));
-              v.addShapes(sol);
+              addVia(v, n, n->z());
             }
           }
         }
@@ -2121,6 +2248,7 @@ void Router::buildSol(Geom::LayerRects& sol)
     n = parent;
   }
   enforceMinAreaShapes(sol);
+  fillSameNetGaps(sol);
 }
 
 bool Router::patternRun(const int x, const int y, const int z, const bool vert, const int to) const
@@ -2252,6 +2380,9 @@ bool Router::patternRoute()
       const Node* t = pr.second.second;
       if (lb >= bestcost) break;              // sorted: nothing later can win
       auto keep = [&]() {
+        if (w.size() < 2 || !s->alongEscAxis(w[1].x, w[1].y, w[1].z)
+            || !t->alongEscAxis(w[w.size() - 2].x, w[w.size() - 2].y, w[w.size() - 2].z)) return;
+        if (patternViasCrowd(w)) return;
         const CostType c = patternCost(w);
         if (getenv("HANAN_DEBUG_PATTERN")) {
           CERR << "DEBUGPATTERN candidate s=(" << s->x() << ',' << s->y() << ',' << s->z()
@@ -2489,7 +2620,18 @@ Geom::LayerRects Router::findSol()
       // The reachability sweep is far cheaper than letting A* exhaust the space
       // to reach the same answer, and on a congested block it proves a quarter
       // of all searches disconnected on first sight -- so it runs for every one.
-      if (!escapesConnected()) {
+      bool connected = escapesConnected();
+      const int side = std::max(pregridbbox.width(), pregridbbox.height());
+      if (!connected && std::min(pregridbbox.width(), pregridbbox.height()) < side / 2) {
+        // a window squeezed to a strip is walled off by any shape crossing it: widen it to a square once
+        _bbox = pregridbbox;
+        _bbox.expand((side - pregridbbox.width()) / 2, (side - pregridbbox.height()) / 2);
+        generateHananGrid();
+        connected = escapesConnected();
+        COUT << "search window widened to a square for " << _name << " in pass " << attempt
+             << (connected ? " : a target is reachable\n" : " : still no target reachable\n");
+      }
+      if (!connected) {
         ++_memoHits;
         COUT << "search skipped for " << _name << " in pass " << attempt
              << " : no target is reachable from any source"
@@ -3552,7 +3694,24 @@ const Via* Router::isViaValid(const Node* n, const bool up) const
       }
     }
   }
+  if (via && !cutsClearOfNet(*via)) {
+    delete via;
+    via = nullptr;
+  }
   return via;
+}
+
+bool Router::cutsClearOfNet(const Via& v) const
+{
+  auto it = _samenet.find(v.c());
+  if (it == _samenet.end()) return true;
+  for (const auto& c : v.cutRects()) {
+    const Geom::Rect halo = c.bloatby(drcSpaceX(v.c()) - 1, drcSpaceY(v.c()) - 1);
+    for (const auto& o : it->second) {
+      if (!o.contains(c) && halo.overlaps(o, true)) return false;
+    }
+  }
+  return true;
 }
 
 Geom::Rects intersectPObstacles(const LayerPolySet& pobs, const LayerPolySet& ptobs,

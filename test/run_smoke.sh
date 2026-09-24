@@ -149,6 +149,19 @@ same_defs() {
 # log_count_lt <name> <case-fewer> <case-more> <pattern> <field>
 # Asserts a numeric field summed over matching log lines is strictly smaller in
 # the first case than in the second -- e.g. fewer escape points seeded.
+# samenet_clean <name> <case> : test/check_samenet.py finds no same-net violation in the case's DEF
+samenet_clean() {
+  local name=$1 dir="$OUTROOT/$2" out rc
+  out=$(python3 ./check_samenet.py "$(ls "$dir"/*_0.def | head -1)" "$3" "$4" 2>&1)
+  rc=$?
+  out=$(echo "$out" | tail -1)
+  if [ $rc = 0 ] && [ "$out" = "0 same-net violation(s)" ]; then
+    echo "PASS $name"; PASS=$((PASS+1))
+  else
+    echo "FAIL $name :$out;"; FAIL=$((FAIL+1)); ERRS="$ERRS$name:$out;\n"
+  fi
+}
+
 # sol_cuts <name> <case> <n> : the replayed wire's solution draws exactly n via cuts
 sol_cuts() {
   local name=$1 dir="$OUTROOT/$2" n
@@ -1093,6 +1106,17 @@ LOGMUST="REPLAY RESULT routed"
 run_case offcentre_target "" -replay $IN/magical/ptail_offcentre.lef -d $IN/magical/layers.json \
   -ndr $IN/magical/ota2_ndr.json -uu 1000 -viacost 10
 sol_cuts offcentre_target_cuts offcentre_target 4
+
+# 55e. samenet_*: MAGICAL placements (met4 cap, every layer bidirectional, -viacost 10); each design broke a
+#      same-net rule before its fix -- ota1 a stacked via's pad cross, ota3 gaps to its own shapes, leung_nmcnr
+#      boundary escapes left along their edge, leung_dfcfc2 a cut touching the tree's, hoilee_affc a pin pair
+#      walled off inside a strip window (open until the window widens). check_samenet.py must find nothing.
+for d in ota1 ota3 leung_nmcnr leung_dfcfc2 hoilee_affc; do
+  [ $d = hoilee_affc ] && LOGMUST="search window widened to a square"
+  run_case samenet_$d "" -d $IN/magical/layers.json -p $IN/magical/$d/placement.json -l $IN/magical/$d/cell.lef \
+    -ndr $IN/magical/$d/ndr.json -uu 1000 -reorder 30 -viacost 10
+  samenet_clean samenet_${d}_drc samenet_$d magical/$d/cell.lef magical/layers.json
+done
 
 # 56. pwr_grid: bin/gen_pwr_grid.py builds the power grid out of the layer
 #     abstraction and hanan_router makes the connections to it. The unit tests

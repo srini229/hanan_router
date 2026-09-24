@@ -1,0 +1,1149 @@
+{
+ "leaves": [
+  {
+   "abstract_name": "PLACED",
+   "concrete_name": "PLACED",
+   "bbox": [
+    0,
+    0,
+    54000,
+    44400
+   ],
+   "terminals": [
+    {
+     "layer": "M1",
+     "netName": "P0",
+     "rect": [
+      34400,
+      2400,
+      38000,
+      2800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P1",
+     "rect": [
+      26400,
+      2400,
+      30000,
+      2800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P2",
+     "rect": [
+      20800,
+      800,
+      21200,
+      2000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P3",
+     "rect": [
+      26400,
+      28800,
+      30000,
+      29200
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P4",
+     "rect": [
+      22400,
+      42400,
+      26000,
+      42800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P5",
+     "rect": [
+      29600,
+      42400,
+      33200,
+      42800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P6",
+     "rect": [
+      35200,
+      32800,
+      35600,
+      34000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P7",
+     "rect": [
+      26400,
+      34400,
+      30000,
+      34800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P8",
+     "rect": [
+      0,
+      0,
+      54000,
+      400
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P9",
+     "rect": [
+      34400,
+      6400,
+      39600,
+      6800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P10",
+     "rect": [
+      24800,
+      6400,
+      30000,
+      6800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P11",
+     "rect": [
+      16000,
+      6400,
+      21200,
+      6800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P12",
+     "rect": [
+      20800,
+      13600,
+      26000,
+      14000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P13",
+     "rect": [
+      38400,
+      13600,
+      43600,
+      14000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P14",
+     "rect": [
+      29600,
+      13600,
+      34800,
+      14000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P15",
+     "rect": [
+      48000,
+      19200,
+      53200,
+      19600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P16",
+     "rect": [
+      41600,
+      26400,
+      46800,
+      26800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P17",
+     "rect": [
+      41600,
+      33600,
+      46800,
+      34000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P18",
+     "rect": [
+      43200,
+      6400,
+      48400,
+      6800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P19",
+     "rect": [
+      18400,
+      29600,
+      22000,
+      30000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P20",
+     "rect": [
+      18400,
+      36800,
+      22000,
+      37200
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P21",
+     "rect": [
+      36800,
+      7200,
+      37200,
+      8400
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P22",
+     "rect": [
+      36000,
+      800,
+      36400,
+      2000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P23",
+     "rect": [
+      35200,
+      9600,
+      38800,
+      10000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P24",
+     "rect": [
+      25600,
+      9600,
+      29200,
+      10000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P25",
+     "rect": [
+      30400,
+      16800,
+      34000,
+      17200
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P26",
+     "rect": [
+      48800,
+      22400,
+      52400,
+      22800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P27",
+     "rect": [
+      42400,
+      29600,
+      46000,
+      30000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P28",
+     "rect": [
+      42400,
+      36800,
+      46000,
+      37200
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P29",
+     "rect": [
+      44000,
+      9600,
+      47600,
+      10000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P30",
+     "rect": [
+      27200,
+      7200,
+      27600,
+      8400
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P31",
+     "rect": [
+      34400,
+      3200,
+      38000,
+      3600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P32",
+     "rect": [
+      28000,
+      800,
+      28400,
+      2000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P33",
+     "rect": [
+      12000,
+      800,
+      12400,
+      12000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P34",
+     "rect": [
+      18400,
+      7200,
+      18800,
+      8400
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P35",
+     "rect": [
+      26400,
+      3200,
+      30000,
+      3600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P36",
+     "rect": [
+      19200,
+      3200,
+      22800,
+      3600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P37",
+     "rect": [
+      16800,
+      9600,
+      20400,
+      10000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P38",
+     "rect": [
+      23200,
+      14400,
+      23600,
+      15600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P39",
+     "rect": [
+      25600,
+      20800,
+      26000,
+      22000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P40",
+     "rect": [
+      2400,
+      15200,
+      12000,
+      24800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P41",
+     "rect": [
+      21600,
+      16800,
+      25200,
+      17200
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P42",
+     "rect": [
+      39200,
+      16800,
+      42800,
+      17200
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P43",
+     "rect": [
+      38400,
+      20800,
+      38800,
+      22000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P44",
+     "rect": [
+      20000,
+      34400,
+      20400,
+      35600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P45",
+     "rect": [
+      24000,
+      40800,
+      24400,
+      42000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P46",
+     "rect": [
+      24000,
+      22400,
+      27600,
+      22800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P47",
+     "rect": [
+      17600,
+      33600,
+      22800,
+      34000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P48",
+     "rect": [
+      17600,
+      26400,
+      22800,
+      26800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P49",
+     "rect": [
+      32000,
+      14400,
+      32400,
+      15600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P50",
+     "rect": [
+      20000,
+      27200,
+      20400,
+      28400
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P51",
+     "rect": [
+      28000,
+      27200,
+      28400,
+      28400
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P52",
+     "rect": [
+      36800,
+      22400,
+      40400,
+      22800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P53",
+     "rect": [
+      50400,
+      20000,
+      50800,
+      21200
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P54",
+     "rect": [
+      36800,
+      23200,
+      40400,
+      23600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P55",
+     "rect": [
+      24000,
+      23200,
+      27600,
+      23600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P56",
+     "rect": [
+      33600,
+      35200,
+      37200,
+      35600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P57",
+     "rect": [
+      38400,
+      43200,
+      42000,
+      43600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P58",
+     "rect": [
+      34400,
+      29600,
+      38000,
+      30000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P59",
+     "rect": [
+      44000,
+      27200,
+      44400,
+      28400
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P60",
+     "rect": [
+      36000,
+      27200,
+      36400,
+      28400
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P61",
+     "rect": [
+      44000,
+      34400,
+      44400,
+      35600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P62",
+     "rect": [
+      26400,
+      29600,
+      30000,
+      30000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P63",
+     "rect": [
+      22400,
+      43200,
+      26000,
+      43600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P64",
+     "rect": [
+      29600,
+      43200,
+      33200,
+      43600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P65",
+     "rect": [
+      40000,
+      40800,
+      40400,
+      42000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P66",
+     "rect": [
+      26400,
+      35200,
+      30000,
+      35600
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P67",
+     "rect": [
+      31200,
+      40800,
+      31600,
+      42000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P68",
+     "rect": [
+      38400,
+      42400,
+      42000,
+      42800
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P69",
+     "rect": [
+      28000,
+      32800,
+      28400,
+      34000
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M1",
+     "netName": "P70",
+     "rect": [
+      34400,
+      28800,
+      38000,
+      29200
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P71",
+     "rect": [
+      1600,
+      1600,
+      11200,
+      11200
+     ],
+     "netType": "pin"
+    },
+    {
+     "layer": "M4",
+     "netName": "P72",
+     "rect": [
+      12800,
+      14400,
+      13200,
+      25600
+     ],
+     "netType": "pin"
+    }
+   ]
+  }
+ ],
+ "modules": [
+  {
+   "abstract_name": "LEUNG_NMCNR",
+   "concrete_name": "LEUNG_NMCNR_0",
+   "parameters": [
+    "GNDA",
+    "VDDA",
+    "VINN",
+    "VINP",
+    "VOUT",
+    "NET013"
+   ],
+   "constraints": [],
+   "bbox": [
+    0,
+    0,
+    54000,
+    44400
+   ],
+   "global_signals": [],
+   "instances": [
+    {
+     "instance_name": "X0",
+     "abstract_template_name": "PLACED",
+     "concrete_template_name": "PLACED",
+     "transformation": {
+      "oX": 0,
+      "oY": 0,
+      "sX": 1,
+      "sY": 1
+     },
+     "fa_map": [
+      {
+       "formal": "P0",
+       "actual": "GNDA"
+      },
+      {
+       "formal": "P1",
+       "actual": "GNDA"
+      },
+      {
+       "formal": "P2",
+       "actual": "GNDA"
+      },
+      {
+       "formal": "P3",
+       "actual": "GNDA"
+      },
+      {
+       "formal": "P4",
+       "actual": "GNDA"
+      },
+      {
+       "formal": "P5",
+       "actual": "GNDA"
+      },
+      {
+       "formal": "P6",
+       "actual": "GNDA"
+      },
+      {
+       "formal": "P7",
+       "actual": "GNDA"
+      },
+      {
+       "formal": "P8",
+       "actual": "GNDA"
+      },
+      {
+       "formal": "P9",
+       "actual": "VDDA"
+      },
+      {
+       "formal": "P10",
+       "actual": "VDDA"
+      },
+      {
+       "formal": "P11",
+       "actual": "VDDA"
+      },
+      {
+       "formal": "P12",
+       "actual": "VDDA"
+      },
+      {
+       "formal": "P13",
+       "actual": "VDDA"
+      },
+      {
+       "formal": "P14",
+       "actual": "VDDA"
+      },
+      {
+       "formal": "P15",
+       "actual": "VDDA"
+      },
+      {
+       "formal": "P16",
+       "actual": "VDDA"
+      },
+      {
+       "formal": "P17",
+       "actual": "VDDA"
+      },
+      {
+       "formal": "P18",
+       "actual": "VDDA"
+      },
+      {
+       "formal": "P19",
+       "actual": "VINN"
+      },
+      {
+       "formal": "P20",
+       "actual": "VINP"
+      },
+      {
+       "formal": "P21",
+       "actual": "VOUT"
+      },
+      {
+       "formal": "P22",
+       "actual": "VOUT"
+      },
+      {
+       "formal": "P23",
+       "actual": "NET013"
+      },
+      {
+       "formal": "P24",
+       "actual": "NET013"
+      },
+      {
+       "formal": "P25",
+       "actual": "NET013"
+      },
+      {
+       "formal": "P26",
+       "actual": "NET013"
+      },
+      {
+       "formal": "P27",
+       "actual": "NET013"
+      },
+      {
+       "formal": "P28",
+       "actual": "NET013"
+      },
+      {
+       "formal": "P29",
+       "actual": "NET013"
+      },
+      {
+       "formal": "P30",
+       "actual": "NET049"
+      },
+      {
+       "formal": "P31",
+       "actual": "NET049"
+      },
+      {
+       "formal": "P32",
+       "actual": "NET049"
+      },
+      {
+       "formal": "P33",
+       "actual": "NET049"
+      },
+      {
+       "formal": "P34",
+       "actual": "NET043"
+      },
+      {
+       "formal": "P35",
+       "actual": "NET043"
+      },
+      {
+       "formal": "P36",
+       "actual": "NET043"
+      },
+      {
+       "formal": "P37",
+       "actual": "NET050"
+      },
+      {
+       "formal": "P38",
+       "actual": "NET050"
+      },
+      {
+       "formal": "P39",
+       "actual": "NET050"
+      },
+      {
+       "formal": "P40",
+       "actual": "NET050"
+      },
+      {
+       "formal": "P41",
+       "actual": "VOUTN"
+      },
+      {
+       "formal": "P42",
+       "actual": "VOUTN"
+      },
+      {
+       "formal": "P43",
+       "actual": "VOUTN"
+      },
+      {
+       "formal": "P44",
+       "actual": "NET063"
+      },
+      {
+       "formal": "P45",
+       "actual": "NET063"
+      },
+      {
+       "formal": "P46",
+       "actual": "NET063"
+      },
+      {
+       "formal": "P47",
+       "actual": "NET31"
+      },
+      {
+       "formal": "P48",
+       "actual": "NET31"
+      },
+      {
+       "formal": "P49",
+       "actual": "NET31"
+      },
+      {
+       "formal": "P50",
+       "actual": "DM_2"
+      },
+      {
+       "formal": "P51",
+       "actual": "DM_2"
+      },
+      {
+       "formal": "P52",
+       "actual": "DM_2"
+      },
+      {
+       "formal": "P53",
+       "actual": "VB3"
+      },
+      {
+       "formal": "P54",
+       "actual": "VB3"
+      },
+      {
+       "formal": "P55",
+       "actual": "VB3"
+      },
+      {
+       "formal": "P56",
+       "actual": "VB3"
+      },
+      {
+       "formal": "P57",
+       "actual": "VB3"
+      },
+      {
+       "formal": "P58",
+       "actual": "VB3"
+      },
+      {
+       "formal": "P59",
+       "actual": "DM_1"
+      },
+      {
+       "formal": "P60",
+       "actual": "DM_1"
+      },
+      {
+       "formal": "P61",
+       "actual": "VB4"
+      },
+      {
+       "formal": "P62",
+       "actual": "VB4"
+      },
+      {
+       "formal": "P63",
+       "actual": "VB4"
+      },
+      {
+       "formal": "P64",
+       "actual": "VB4"
+      },
+      {
+       "formal": "P65",
+       "actual": "VB4"
+      },
+      {
+       "formal": "P66",
+       "actual": "VB4"
+      },
+      {
+       "formal": "P67",
+       "actual": "NET54"
+      },
+      {
+       "formal": "P68",
+       "actual": "NET54"
+      },
+      {
+       "formal": "P69",
+       "actual": "NET56"
+      },
+      {
+       "formal": "P70",
+       "actual": "NET56"
+      },
+      {
+       "formal": "P71",
+       "actual": "NET044"
+      },
+      {
+       "formal": "P72",
+       "actual": "NET044"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "scale_factor": 1
+}
