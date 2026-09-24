@@ -28,7 +28,7 @@ import re
 import sys
 
 import gdstk
-from shapely.geometry import box
+from shapely.geometry import Polygon, box
 from shapely.strtree import STRtree
 
 
@@ -76,9 +76,31 @@ def def_nets(path, dbu=1000.0):
     return names, rects
 
 
-def hier_nets(deffile, placement, defdir, dbu=1000.0):
+def lef_pins(path):
+    """{macro: [(pin, layer, (x0, y0, x1, y1))]} in the LEF's database units."""
+    pins, macro, pin, layer = collections.defaultdict(list), None, None, None
+    for line in open(path, errors='ignore'):
+        w = line.split()
+        if not w:
+            continue
+        if w[0] == 'MACRO':
+            macro = w[1]
+        elif w[0] == 'PIN':
+            pin = w[1]
+        elif w[0] == 'END' and len(w) > 1 and w[1] == pin:
+            pin = None
+        elif w[0] == 'LAYER':
+            layer = w[1]
+        elif w[0] == 'RECT' and pin:
+            pins[macro].append((pin, layer, tuple(float(v) for v in w[1:5])))
+    return pins
+
+
+def hier_nets(deffile, placement, defdir, dbu=1000.0, pins=None):
     """def_nets over the top DEF plus every sub-module's DEF placed into top
-    coordinates; a sub-module net takes its parent's name through the pin map."""
+    coordinates; a sub-module net takes its parent's name through the pin map.
+    With pins (lef_pins of the leaf cells), every leaf pin is tagged with its net too, so a pin no wire reached
+    is a piece of its net of its own."""
     names, rects = def_nets(deffile, dbu)
     d = json.load(open(placement))
     mods = {m['concrete_name']: m for m in d['modules']}
@@ -88,13 +110,19 @@ def hier_nets(deffile, placement, defdir, dbu=1000.0):
         for i in mods[name].get('instances', []):
             c = i['concrete_template_name']
             f = os.path.join(defdir, f'{c}.def')
-            if c not in mods or not os.path.exists(f):
-                continue
             s = i['transformation']
             ox, oy = t[0] + t[2] * s['oX'] / dbu, t[1] + t[3] * s['oY'] / dbu
             sx, sy = t[2] * s['sX'], t[3] * s['sY']
             here = path + i['instance_name'] + '/'
             fa = {x['formal']: rename(x['actual'], path) for x in i.get('fa_map', [])}
+            if c not in mods:
+                for pin, layer, (x0, y0, x1, y1) in (pins or {}).get(c, []):
+                    a, b = sorted((ox + sx * x0 / dbu, ox + sx * x1 / dbu))
+                    c0, c1 = sorted((oy + sy * y0 / dbu, oy + sy * y1 / dbu))
+                    rects.append((fa.get(pin, here + pin), layer, box(a, c0, b, c1)))
+                continue
+            if not os.path.exists(f):
+                continue
             sub = lambda n, p, fa=fa, here=here: n if n in glob else fa.get(n, here + n) if p == here else here + n
             _, rr = def_nets(f, dbu)
             for net, layer, g in rr:
@@ -112,7 +140,7 @@ def hier_nets(deffile, placement, defdir, dbu=1000.0):
     return names, rects
 
 
-def trace(gds, top, layers, stack='', layer_source=None):
+def trace(gds, top, layers, stack='', layer_source=None, capm_layer=None, capm_cut=None):
     """(shapes, DEF-net tags, union-find root) for the flattened cell's conductors."""
     want = {x.strip() for x in stack.split(',') if x.strip()} if stack else None
     draw, via = layer_source if layer_source is not None else layer_map(layers, want)
@@ -129,20 +157,24 @@ def trace(gds, top, layers, stack='', layer_source=None):
     cell.flatten()
     k = lib.unit / 1e-6
 
-    capm = [e.get('GdsLayerNo') for e in (json.load(open(layers)).get('Abstraction', []) if layers else [])
-            if e.get('Layer') == 'CapMIMLayer']
-    capm = {(capm[0], d) for d in (44,)} if capm and capm[0] is not None else set()
+    abst = json.load(open(layers)).get('Abstraction', []) if layers else []
+    gds_of = lambda name: next(((e.get('GdsLayerNo'), (e.get('GdsDatatype') or {}).get('Draw'))
+                                for e in abst if e.get('Layer') == name and e.get('GdsLayerNo') is not None), None)
+    capm = {tuple(int(v) for v in capm_layer.split('/'))} if capm_layer else {gds_of('CapMIMLayer')} - {None}
+    mimcut = tuple(int(v) for v in capm_cut.split('/')) if capm_cut else gds_of('CapMIMContact')
     plates = []
     shapes, tags = [], []
     for p in cell.polygons:
         if (p.layer, p.datatype) in capm:
-            (x0, y0), (x1, y1) = p.bounding_box()
-            plates.append(box(x0 * lib.unit / 1e-6, y0 * lib.unit / 1e-6, x1 * lib.unit / 1e-6, y1 * lib.unit / 1e-6))
+            plates.append(Polygon([(x * k, y * k) for x, y in p.points]).buffer(0))
         name = draw.get((p.layer, p.datatype))
         if not name:
             continue
-        (x0, y0), (x1, y1) = p.bounding_box()
-        g = box(x0 * k, y0 * k, x1 * k, y1 * k)
+        if len(p.points) == 4:
+            (x0, y0), (x1, y1) = p.bounding_box()
+            g = box(x0 * k, y0 * k, x1 * k, y1 * k)
+        else:                 # a merged polygon's bounding box would swallow its neighbours
+            g = Polygon([(x * k, y * k) for x, y in p.points]).buffer(0)
         if g.is_empty or g.area == 0:
             continue          # some writers emit degenerate polygons at the origin
         shapes.append(g)
@@ -171,17 +203,24 @@ def trace(gds, top, layers, stack='', layer_source=None):
                 if idx[m] != i and shapes[i].intersects(shapes[idx[m]]):
                     union(i, idx[m])
     ptree = STRtree(plates) if plates else None
-    on_plate = lambda g: ptree is not None and any(plates[m].intersects(g) for m in ptree.query(g))
-    for cut, (lo, hi) in ((draw[k2], v) for k2, v in via.items()):
+    on_plate = lambda g: ptree is not None and any(plates[m].contains(g) for m in ptree.query(g))
+    base = len(parent)
+    parent.extend(range(base, base + len(plates)))   # each MIM top plate is a conductor node
+    for key, (lo, hi) in via.items():
+        cut = draw[key]
         cuts = by.get(cut, [])
+        plate_cut = key == mimcut                # only the MIM contact layer can land on a plate
         for lname in (lo, hi):                   # a cut joins the metals it sits between
             idx = by.get(lname, [])
             if not idx or not cuts:
                 continue
             tree = STRtree([shapes[i] for i in idx])
             for ci in cuts:
-                if lname == lo and on_plate(shapes[ci]):
-                    continue                     # a MIM contact joins the top plate to the metal above, not below
+                if plate_cut and lname == lo and on_plate(shapes[ci]):
+                    for m in ptree.query(shapes[ci]):   # the contact joins the plate, not the metal below
+                        if plates[m].contains(shapes[ci]):
+                            union(ci, base + m)
+                    continue
                 for m in tree.query(shapes[ci]):
                     if shapes[ci].intersects(shapes[idx[m]]):
                         union(ci, idx[m])
@@ -199,11 +238,15 @@ def main():
                     help='comma list of layers to trace; default is every drawn layer')
     ap.add_argument('--dbu', type=float, default=1000.0)
     ap.add_argument('--placement', help='placement JSON: also check every sub-module DEF next to --def')
+    ap.add_argument('--lef', help='leaf-cell LEF (with --placement): tag every leaf pin with its net')
+    ap.add_argument('--capm', help='MIM top-plate GDS layer/datatype, e.g. 89/44, when layers.json has no CapMIMLayer')
+    ap.add_argument('--capm-cut', help='MIM contact GDS layer/datatype, e.g. 70/44, when layers.json has no CapMIMContact')
     ap.add_argument('--quiet', action='store_true')
     a = ap.parse_args()
 
-    shapes, tags, find = trace(a.gds, a.top, a.layers, a.stack)
-    names, rects = (hier_nets(a.deffile, a.placement, os.path.dirname(os.path.abspath(a.deffile)), a.dbu)
+    shapes, tags, find = trace(a.gds, a.top, a.layers, a.stack, capm_layer=a.capm, capm_cut=a.capm_cut)
+    names, rects = (hier_nets(a.deffile, a.placement, os.path.dirname(os.path.abspath(a.deffile)), a.dbu,
+                              lef_pins(a.lef) if a.lef else None)
                     if a.placement else def_nets(a.deffile, a.dbu))
 
     tree = STRtree(shapes)

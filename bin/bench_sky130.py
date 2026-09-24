@@ -140,9 +140,10 @@ def main():
     ap.add_argument("--workdir", help="where per-circuit route.log/DEF go (default: temp dir)")
     ap.add_argument("--out", default="bench_sky130.md", help="Markdown table path")
     ap.add_argument("--html", help="also write an HTML table here")
+    ap.add_argument("--layers", help="layer file (default: the benchmark's sky130.layers.json)")
     a = ap.parse_args()
 
-    layers = os.path.join(a.bench, "bench", "primitives", "lib", "sky130.layers.json")
+    layers = a.layers or os.path.join(a.bench, "bench", "primitives", "lib", "sky130.layers.json")
     for p, what in ((a.router, "router"), (layers, "layers.json")):
         if not os.path.exists(p):
             sys.exit(f"{what} not found: {p}")

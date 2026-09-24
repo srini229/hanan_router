@@ -258,6 +258,17 @@ def summarise(logpath, label):
     return dict(nets=nets, opens=opens, wl=wl, shorts=shorts, drc=drc)
 
 
+def bidir_layers(path, d):
+    """A copy of the layer file with every H/V metal routable both ways ("O"), for the router passes only."""
+    js = json.load(open(path))
+    for e in js.get('Abstraction', []):
+        if e.get('Direction') in ('H', 'V') and e.get('Layer') not in ('Poly', 'Fin'):
+            e['Direction'] = 'O'
+    out = os.path.join(d, 'layers_bidir.json')
+    json.dump(js, open(out, 'w'), indent=1)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('-d', '--layers', required=True)
@@ -267,6 +278,12 @@ def main():
     ap.add_argument('--router', default=os.path.join(os.path.dirname(HERE), 'hanan_router'))
     ap.add_argument('--bottom', default='', help='lowest grid layer')
     ap.add_argument('--top', default='', help='highest grid layer')
+    ap.add_argument('--reserve-supply', action='store_true',
+                    help='pass 1 keeps one escape clear at every supply pin for pass 2')
+    ap.add_argument('--supply-tree', action='store_true',
+                    help='route supplies as a spanning tree over their pins and the grid, not a star from the grid')
+    ap.add_argument('--bidir', action='store_true',
+                    help='route every metal in both directions; the supply grid keeps its H/V straps')
     ap.add_argument('--stride', default='1',
                     help='strap every Nth track; a comma list gives one value per '
                          'grid layer, bottom-up (7,8 matches ALIGN on sky130)')
@@ -277,6 +294,7 @@ def main():
     d = os.path.abspath(a.outdir)
     os.makedirs(d, exist_ok=True)
     layers = os.path.abspath(a.layers)
+    route_layers = bidir_layers(layers, d) if a.bidir else layers
     place = os.path.abspath(a.placement)
     lef = os.path.abspath(a.lef)
     extra = a.args.split()
@@ -290,8 +308,9 @@ def main():
     write_ndr(os.path.join(d, 'ndr_sig.json'),
               [(m, [n for n in nets if n in sup], None, None)
                for m, nets in mods.items()])
-    rc = run([a.router, '-d', layers, '-p', place, '-l', lef,
-              '-ndr', 'ndr_sig.json', '-o', './', '-log', 'sig.log'] + extra,
+    rc = run([a.router, '-d', route_layers, '-p', place, '-l', lef,
+              '-ndr', 'ndr_sig.json', '-o', './', '-log', 'sig.log'] + extra
+             + (['-reserveexcluded'] if a.reserve_supply else []),
              d, 'sig.out')
     print(f'pass 1 (signals) rc={rc}', flush=True)
     r1 = summarise(os.path.join(d, 'sig.log'), 'signals')
@@ -343,9 +362,9 @@ def main():
     write_ndr(os.path.join(d, 'ndr_pwr.json'),
               [(m, [n for n in nets if n not in sup],
                 obs[m] or None,
-                {n: f'X_PGRID/{n}' for n in nets if n in sup} if m == top else None)
+                {n: f'X_PGRID/{n}' for n in nets if n in sup} if m == top and not a.supply_tree else None)
                for m, nets in mods.items()])
-    rc = run([a.router, '-d', layers, '-p', 'pg_place.json', '-l', 'all.lef',
+    rc = run([a.router, '-d', route_layers, '-p', 'pg_place.json', '-l', 'all.lef',
               '-ndr', 'ndr_pwr.json', '-o', './', '-log', 'pwr.log'] + extra,
              d, 'pwr.out')
     print(f'pass 2 (supplies) rc={rc}', flush=True)
