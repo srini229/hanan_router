@@ -37,7 +37,7 @@ run_case() {
   mkdir -p "$dir"
   ( cd "$dir" && "$ROUTER" "$@" -o ./ >/dev/null 2>stderr.log )
   local rc=$?
-  [ $rc -eq 0 ] || errs="$errs exit=$rc;"
+  [ $rc -eq "${EXPECT_EXIT:-0}" ] || errs="$errs exit=$rc;"   # EXPECT_EXIT: a replay left open exits 1
   local log="$dir/route.log"
   if [ ! -f "$log" ]; then
     errs="$errs no-route.log;"
@@ -124,6 +124,7 @@ run_case() {
   LOGNOT=""
   NETROUTED=""
   ALLOW_UNROUTED=""
+  EXPECT_EXIT=""
 }
 
 # same_defs <name> <case-a> <case-b> <defs (comma separated)>
@@ -440,6 +441,14 @@ run_case sat_pin_escape "" \
   -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
   -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
 
+# 19a. sat_pin_escape_point: the same boxed pin under -satpoint; a pin with no escape
+#      point at all is flagged by the point model too.
+LOGMUST="model=point|no escape for pin : BOXEDPIN_CONC_0/I_A0/P net "
+ALLOW_UNROUTED=1
+run_case sat_pin_escape_point "" \
+  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json -satpoint
+
 # 19b. sat_spacing_gap: same boxed-pin layout as above, but the M2 obstacle
 #      over I_A0's via-up candidate is offset 20 units away (M2 space=24) --
 #      close enough to violate minimum spacing, but not literally overlapping.
@@ -585,6 +594,13 @@ run_case global_net "GLOB_CONC_0.def" \
 LOGMUST="routing : VDD__X_SUB/VDD_port_0__I_T/P_port_0"
 run_case global_hier "GH_CONC_0.def" \
   -d $IN/layers.json -p $IN/global_hier.placement_verilog.json -l $IN/m1adj_escape.lef
+
+# 29a2. -nopattern: every wire goes to A*, none is accepted as an L/Z pattern,
+#       and the pre-route escape check reports its instance size and outcome.
+LOGMUST="pin escape SAT stats (pre-route) : module=GH_CONC_0 model=whole pins="
+LOGNOT="sol found with pattern"
+run_case nopattern "GH_CONC_0.def" \
+  -d $IN/layers.json -p $IN/global_hier.placement_verilog.json -l $IN/m1adj_escape.lef -nopattern
 
 # 29b. symmetric_nets: two diagonal nets (INP, INM) placed as mirror images about
 #      x=1000, with a routing obstacle ON THE INP SIDE ONLY. Unguided, INP must
@@ -1036,6 +1052,26 @@ LOGMUST="pattern path revisits a node|REPLAY RESULT routed"
 LOGNOT="cycle in the solution path"
 run_case pattern_cycle "" -replay $IN/patterncycle.lef \
   -d $IN/layers_sky130.json -uu 1000 -v 2
+
+# 55b. via_rotate: a supply tap on a 280-wide vertical M3 pin whose neighbours
+#      sit at minimum spacing; the M3/M4 via's 370-wide pad overhangs it, so the
+#      tap routes only with the via turned 90 degrees (the wire is replayed).
+LOGMUST="REPLAY RESULT routed"
+run_case via_rotate "" -replay $IN/viarotate_tap.lef -d $IN/layers_align_sky130.json -uu 1000 -v 2
+LOGMUST="REPLAY RESULT open"
+ALLOW_UNROUTED=1
+EXPECT_EXIT=1
+run_case via_rotate_off "" -replay $IN/viarotate_tap.lef -d $IN/layers_align_sky130.json -uu 1000 -v 2 -noviarotate
+
+# 55c. halo_fallback: a strong-arm latch whose OUTP/TAIL connections need a grid line where a via pad clears
+#      an obstacle; open after the corner-escape pass, routed by the -padhalo re-route of that hierarchy.
+LOGMUST="re-routing with via-pad halo grid lines"
+run_case halo_fallback "STRONG_ARM_LATCH_0.def" -d $IN/layers_sky130_bench.json -p $IN/halofallback.placement_verilog.json \
+  -l $IN/halofallback.lef -ndr $IN/halofallback_ndr.json -uu 1000 -reorder 30
+LOGMUST="unrouted=2"
+ALLOW_UNROUTED=1
+run_case halo_fallback_off "STRONG_ARM_LATCH_0.def" -d $IN/layers_sky130_bench.json -p $IN/halofallback.placement_verilog.json \
+  -l $IN/halofallback.lef -ndr $IN/halofallback_ndr.json -uu 1000 -reorder 30 -nohalofallback
 
 # 56. pwr_grid: bin/gen_pwr_grid.py builds the power grid out of the layer
 #     abstraction and hanan_router makes the connections to it. The unit tests

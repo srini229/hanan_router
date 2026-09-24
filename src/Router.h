@@ -539,6 +539,10 @@ class Router {
     bool _viaAlign{false};
     bool _padHaloLines{false};    // -padhalo: grid lines at the via-pad halo too
     bool _admissibleAlways{false}; // -admissible: admissibleBound() in every search
+    bool _noPattern{false};        // -nopattern: skip L/Z pattern routing, A* only
+    bool _satPoint{false};         // -satpoint: escape certificate uses the point model
+    bool _reserveExcluded{false};  // -reserveexcluded: reserve an escape for every pin of an excluded net
+    bool _viaRotate{true};         // -noviarotate: offer each single-cut via only as the layer file draws it
     bool _seedCorridor{true};      // -noseed clears it
     bool _satFirst{false};
     int _gridprune{0};     // collapse grid coordinates closer than this % of pitch
@@ -1012,6 +1016,23 @@ class Router {
     void setViaAlign(const bool b) { _viaAlign = b; }
     void setPadHaloLines(const bool b) { _padHaloLines = b; }
     void setAdmissibleBound(const bool b) { _admissibleAlways = b; }
+    void setNoPattern(const bool b) { _noPattern = b; }
+    void setSatPoint(const bool b) { _satPoint = b; }
+    void setReserveExcluded(const bool b) { _reserveExcluded = b; }
+    void setViaRotate(const bool b) { _viaRotate = b; }
+    bool viaRotate() const { return _viaRotate; }
+    bool reserveExcluded() const { return _reserveExcluded; }
+    bool satPoint() const { return _satPoint; }
+    // (pad on z, pad on the other layer) of every via template leaving z, centred on the origin
+    std::vector<std::pair<Geom::Rect, Geom::Rect>> viaPadPairs(const int z, const bool up) const
+    {
+      std::vector<std::pair<Geom::Rect, Geom::Rect>> out;
+      const auto& vs = up ? _upVias : _dnVias;
+      if (z < 0 || z >= static_cast<int>(vs.size())) return out;
+      for (const auto& v : vs[z]) out.emplace_back(up ? v->lpad() : v->upad(), up ? v->upad() : v->lpad());
+      return out;
+    }
+    bool noPattern() const { return _noPattern; }
     void setSeedCorridor(const bool b) { _seedCorridor = b; }
     bool padHaloLines() const { return _padHaloLines; }
     bool admissibleBound() const { return _admissibleAlways; }

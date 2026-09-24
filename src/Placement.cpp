@@ -381,9 +381,11 @@ void Module::route(Router::Router& router, const std::string& outdir)
       std::vector<Escape::Pin> epins;
       std::vector<char> isPort;
       int netid = 0;
+      const bool reserveEx = router.reserveExcluded();
       for (auto& nv : nets) {
         const bool outwardPort = (nv->pins().size() == 1 && _pins.count(nv->name()) > 0);
-        if (!nv->excluded() && (nv->pins().size() >= 2 || outwardPort)) {
+        const bool keepOut = reserveEx && nv->excluded();   // a net a later pass routes: keep its pins reachable
+        if ((!nv->excluded() && (nv->pins().size() >= 2 || outwardPort)) || keepOut) {
           for (auto& pin : nv->pins()) {
             Escape::Pin ep;
             ep.name = _name + SEPARATOR + pin->name();
@@ -393,7 +395,7 @@ void Module::route(Router::Router& router, const std::string& outdir)
                 for (auto& r : l.second) ep.shapes[l.first].push_back(r);
             if (!ep.shapes.empty()) {
               epins.push_back(std::move(ep));
-              isPort.push_back(outwardPort ? 1 : 0);
+              isPort.push_back((outwardPort || keepOut) ? 1 : 0);
             }
           }
         }
@@ -408,8 +410,13 @@ void Module::route(Router::Router& router, const std::string& outdir)
         lm.canUp   = [&router](int z) { return router.canViaUp(z); };
         lm.canDown = [&router](int z) { return router.canViaDown(z); };
         lm.abutEscape = router.abutEscape();
+        if (router.satPoint() || reserveEx) {
+          lm.viaPads = [&router](int z, bool up) { return router.viaPadPairs(z, up); };
+          lm.step    = [&router](int z) { return std::max(1, router.escapeCellSize(z)); };
+        }
+        lm.greedy = reserveEx;
         std::vector<Escape::Chosen> chosen;
-        if (Escape::feasible(epins, _obstacles, lm, nullptr, nullptr, &chosen)) {
+        if (Escape::feasible(epins, _obstacles, lm, nullptr, nullptr, &chosen) || reserveEx) {
           for (const auto& c : chosen) {
             if (c.pin < isPort.size() && isPort[c.pin]) {
               // Reserve only what one escape actually needs, not the whole pin: a
@@ -420,7 +427,8 @@ void Module::route(Router::Router& router, const std::string& outdir)
               // footprint, keeps exactly one escape alive and frees the rest.
               Geom::Rect fp = c.fp;
               const int wz = std::max(router.baseWidthX(c.layer), router.baseWidthY(c.layer));
-              if (fp.width() > wz || fp.height() > wz) {
+              if (c.srcLayer >= 0) escapeReserve[c.srcLayer].push_back(c.srcFp);   // a via: both pads, full size
+              else if (fp.width() > wz || fp.height() > wz) {
                 const int hx = std::min(fp.width(),  wz) / 2;
                 const int hy = std::min(fp.height(), wz) / 2;
                 const int cx = fp.xcenter(), cy = fp.ycenter();
@@ -776,21 +784,33 @@ void Module::route(Router::Router& router, const std::string& outdir)
         lm.space   = [&router](int z) { return std::max(router.baseSpaceX(z), router.baseSpaceY(z)); };
         lm.canUp   = [&router](int z) { return router.canViaUp(z); };
         lm.canDown = [&router](int z) { return router.canViaDown(z); };
+        if (router.satPoint()) {
+          lm.viaPads = [&router](int z, bool up) { return router.viaPadPairs(z, up); };
+          lm.step    = [&router](int z) { return std::max(1, router.escapeCellSize(z)); };
+        }
         std::vector<std::string> blocked;
         std::string reason;
         Geom::LayerRects obs = _obstacles;
         if (extra) Geom::MergeLayerRects(obs, *extra);
-        if (Escape::feasible(epins, obs, lm, &blocked, &reason)) {
+        Escape::Stats st;
+        const bool ok = Escape::feasible(epins, obs, lm, &blocked, &reason, nullptr, &st);
+        static const char* res[] = {"blocked", "inconclusive", "unsat", "sat"};
+        COUT << "pin escape SAT stats (" << when << ") : module=" << _name << " model="
+             << (router.satPoint() ? "point" : "whole") << " pins=" << st.pins
+             << " vars=" << st.vars << " clauses=" << st.clauses << " blocked_pins=" << st.blockedPins
+             << " result=" << res[st.result + 2] << " seconds=" << st.seconds << '\n';
+        if (ok) {
           COUT << "pin escape SAT (" << when << ") : all " << epins.size() << " pins in "
                << _name << " have a guaranteed escape\n";
         } else {
           COUT << "pin escape SAT (" << when << ") : " << _name << " is infeasible ("
                << reason << ")\n";
           for (auto& b : blocked) {
-            COUT << "  no escape for pin : " << b << '\n';
+            COUT << "  no escape for pin : " << b;
             for (const auto& ep : epins) {
-              if (ep.name == b) { blockedNets.insert(nets[ep.net]); break; }
+              if (ep.name == b) { blockedNets.insert(nets[ep.net]); COUT << " net " << nets[ep.net]->name(); break; }
             }
+            COUT << '\n';
           }
         }
       }

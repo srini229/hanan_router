@@ -28,7 +28,12 @@ int main(int argc, char* argv[])
       << "\t-detour (with -replay: allow a large detour even without NDR saying so)\n"
       << "\t-rsmt (confine each net to a Borah Steiner corridor over its pins)\n"
       << "\t-padhalo (also put grid lines where a via pad, not just a wire, clears each obstacle; default: wire halo only)\n"
+      << "\t-nohalofallback (do not re-route still-open hierarchies with -padhalo lines at the end)\n"
       << "\t-admissible (A* uses the admissible distance bound everywhere, not only under a corridor guide)\n"
+      << "\t-nopattern (skip L/Z pattern routing; every wire goes to A*)\n"
+      << "\t-satpoint (pre-route escape check takes escapes from points along each pin, as the search does)\n"
+      << "\t-reserveexcluded (keep one escape clear for every pin of a do_not_route net, for a later pass)\n"
+      << "\t-noviarotate (offer each single-cut via only as drawn, not also turned 90 degrees)\n"
       << "\t-noseed (do not seed grid lines inside corridor bands)\n"
       << "\t-threads <N> (route non-overlapping nets in parallel using N worker threads; default 1)\n"
       << "\t-relaxvia (in the final pass, for a net that still fails to route, retry its escape via with spacing relaxed to as close as 5 to, but never on, a shape -- source pins first, then also target pins if that alone isn't enough)\n"
@@ -124,6 +129,10 @@ int main(int argc, char* argv[])
   if (checkArg(argc, argv, "-viaalign")) hrdb.setViaAlign(true);
   if (checkArg(argc, argv, "-padhalo")) hrdb.setPadHaloLines(true);
   if (checkArg(argc, argv, "-admissible")) hrdb.setAdmissibleBound(true);
+  if (checkArg(argc, argv, "-nopattern")) hrdb.setNoPattern(true);
+  if (checkArg(argc, argv, "-satpoint")) hrdb.setSatPoint(true);
+  if (checkArg(argc, argv, "-reserveexcluded")) hrdb.setReserveExcluded(true);
+  if (checkArg(argc, argv, "-noviarotate")) hrdb.setViaRotate(false);
   if (checkArg(argc, argv, "-noseed")) hrdb.setSeedCorridor(false);
   if (checkArg(argc, argv, "-satfirst")) hrdb.setSatFirst(true);
   if (checkArg(argc, argv, "-abutescape")) hrdb.setAbutEscape(true);
@@ -182,6 +191,11 @@ int main(int argc, char* argv[])
        << (hrdb.viaAlign() ? " -viaalign" : "")
        << (hrdb.padHaloLines() ? " -padhalo" : "")
        << (hrdb.admissibleBound() ? " -admissible" : "")
+       << (hrdb.noPattern() ? " -nopattern" : "")
+       << (hrdb.satPoint() ? " -satpoint" : "")
+       << (hrdb.reserveExcluded() ? " -reserveexcluded" : "")
+       << (hrdb.viaRotate() ? "" : " -noviarotate")
+       << (checkArg(argc, argv, "-nohalofallback") ? " -nohalofallback" : "")
        << (hrdb.seedCorridor() ? "" : " -noseed")
        << (hrdb.satFirst() ? " -satfirst" : "")
        << (hrdb.gridPrune() ? " -gridprune " + std::to_string(hrdb.gridPrune()) : "")
@@ -208,7 +222,7 @@ int main(int argc, char* argv[])
   if (!plfile.empty() && !leffile.empty()) {
     Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile, interlefdir);
     netlist.route(hrdb, outdir);
-    const int open = netlist.totalUnrouted();
+    int open = netlist.totalUnrouted();
     if (open > 0) {
       COUT << "centre-track pin escape left " << open
            << " net(s) open; re-routing with corner pin-escape points\n";
@@ -222,6 +236,23 @@ int main(int argc, char* argv[])
                                         // source pins first, then target pins too
       }
       netlist.reroute(hrdb, outdir);    // only the hierarchies that are still open
+      open = netlist.totalUnrouted();
+    }
+    if (open > 0 && !hrdb.padHaloLines() && !checkArg(argc, argv, "-nohalofallback")) {
+      COUT << "corner pin escape left " << open << " net(s) open; re-routing with via-pad halo grid lines\n";
+      const int before = open;
+      const bool corner = hrdb.cornerEscape();
+      hrdb.setPadHaloLines(true);       // lines where a via pad clears an obstacle, paid for only where a net is open
+      hrdb.setCornerEscape(false);      // halo lines with centre-track escapes: corner escapes on top lose nets here
+      netlist.reroute(hrdb, outdir);
+      open = netlist.totalUnrouted();
+      if (open > before) {              // the denser grid lost more than it won: the pass before it, again
+        COUT << "via-pad halo grid lines left " << open << " net(s) open against " << before
+             << "; re-routing the open hierarchies as before\n";
+        hrdb.setPadHaloLines(false);
+        hrdb.setCornerEscape(corner);
+        netlist.reroute(hrdb, outdir);
+      }
     }
     netlist.printRouteSummaries();      // one authoritative summary, final state
     netlist.printWirelengths();

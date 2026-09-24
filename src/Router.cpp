@@ -2357,7 +2357,7 @@ Geom::LayerRects Router::findSol()
         continue;
       }
       std::vector<unsigned> layerExpansions(_maxLayer + 1, 0);
-      const bool patterned = patternRoute();
+      const bool patterned = !_noPattern && patternRoute();
       if (patterned) {
         COUT << "sol found with pattern! cost " << _sol->fcost() << " for " << _name << std::endl;
       }
@@ -3550,6 +3550,15 @@ void Router::constructVias(const std::map<int, DRC::ViaArray>* ndrvias)
             _vias.push_back(via);
             _upVias[lp.first->index()].push_back(via);
             _dnVias[lp.second->index()].push_back(via);
+            if (_viaRotate && (lx != ly || ux != uy)) {   // the same via turned 90 degrees: enclosures swap sides
+              auto rot = std::make_shared<Via>(lp.first->index(), lp.second->index(), v->index());
+              rot->setLB(Geom::Rect(-ly/2, -lx/2, ly/2, lx/2));
+              rot->setUB(Geom::Rect(-uy/2, -ux/2, uy/2, ux/2));
+              rot->addCuts(Geom::Point(-wy/2, -wx/2), wy, wx);
+              _vias.push_back(rot);
+              _upVias[lp.first->index()].push_back(rot);
+              _dnVias[lp.second->index()].push_back(rot);
+            }
           } else {
             for (auto& va : vas) {
               auto via = std::make_shared<Via>(lp.first->index(), lp.second->index(), v->index());

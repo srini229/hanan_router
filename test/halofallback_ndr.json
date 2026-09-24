@@ -1,0 +1,16 @@
+[
+  {
+    "module": "STRONG_ARM_LATCH_0",
+    "symmetric_nets": [
+      [
+        "OUTP",
+        "OUTN"
+      ],
+      [
+        "INP",
+        "INN"
+      ]
+    ],
+    "deviation_cost": 40
+  }
+]

@@ -1,0 +1,569 @@
+{
+  "leaves": [
+    {
+      "abstract_name": "NFET_W1_L0P3",
+      "concrete_name": "NFET_W1_L0P3_X2_Y1",
+      "constraints": [],
+      "bbox": [
+        0,
+        0,
+        3170,
+        2870
+      ],
+      "terminals": [
+        {
+          "layer": "M1",
+          "netName": "S",
+          "rect": [
+            740,
+            920,
+            2430,
+            1190
+          ],
+          "netType": "pin"
+        },
+        {
+          "layer": "M1",
+          "netName": "D",
+          "rect": [
+            1390,
+            1340,
+            1780,
+            1610
+          ],
+          "netType": "pin"
+        },
+        {
+          "layer": "M1",
+          "netName": "G",
+          "rect": [
+            960,
+            2015,
+            2210,
+            2245
+          ],
+          "netType": "pin"
+        },
+        {
+          "layer": "M1",
+          "netName": "B",
+          "rect": [
+            1380,
+            95,
+            1790,
+            325
+          ],
+          "netType": "pin"
+        }
+      ],
+      "pin_bbox": {
+        "S": [
+          740,
+          920,
+          2430,
+          1190
+        ],
+        "D": [
+          1390,
+          1340,
+          1780,
+          1610
+        ],
+        "G": [
+          960,
+          2015,
+          2210,
+          2245
+        ],
+        "B": [
+          1380,
+          95,
+          1790,
+          325
+        ]
+      }
+    },
+    {
+      "abstract_name": "PFET_W1_L0P2",
+      "concrete_name": "PFET_W1_L0P2_X1_Y1",
+      "constraints": [],
+      "bbox": [
+        0,
+        0,
+        2660,
+        3250
+      ],
+      "terminals": [
+        {
+          "layer": "M1",
+          "netName": "S",
+          "rect": [
+            840,
+            1110,
+            1230,
+            1800
+          ],
+          "netType": "pin"
+        },
+        {
+          "layer": "M1",
+          "netName": "D",
+          "rect": [
+            1430,
+            1110,
+            1820,
+            1800
+          ],
+          "netType": "pin"
+        },
+        {
+          "layer": "M1",
+          "netName": "G",
+          "rect": [
+            1100,
+            2205,
+            1560,
+            2435
+          ],
+          "netType": "pin"
+        },
+        {
+          "layer": "M1",
+          "netName": "B",
+          "rect": [
+            1130,
+            285,
+            1530,
+            515
+          ],
+          "netType": "pin"
+        }
+      ],
+      "pin_bbox": {
+        "S": [
+          840,
+          1110,
+          1230,
+          1800
+        ],
+        "D": [
+          1430,
+          1110,
+          1820,
+          1800
+        ],
+        "G": [
+          1100,
+          2205,
+          1560,
+          2435
+        ],
+        "B": [
+          1130,
+          285,
+          1530,
+          515
+        ]
+      }
+    }
+  ],
+  "modules": [
+    {
+      "parameters": [
+        "VDD",
+        "VSS",
+        "CLK",
+        "INP",
+        "INN",
+        "OUTP",
+        "OUTN"
+      ],
+      "constraints": [
+        {
+          "constraint": "PowerPorts",
+          "ports": [
+            "VDD"
+          ],
+          "propagate": true
+        },
+        {
+          "constraint": "GroundPorts",
+          "ports": [
+            "VSS"
+          ],
+          "propagate": true
+        },
+        {
+          "constraint": "ClockPorts",
+          "ports": [
+            "CLK"
+          ],
+          "propagate": true
+        },
+        {
+          "constraint": "SymmetricBlocks",
+          "pairs": [
+            [
+              "X_MIN1",
+              "X_MIN2"
+            ],
+            [
+              "X_MNL1",
+              "X_MNL2"
+            ],
+            [
+              "X_MPL1",
+              "X_MPL2"
+            ],
+            [
+              "X_MPR1",
+              "X_MPR2"
+            ],
+            [
+              "X_MTAIL"
+            ]
+          ],
+          "direction": "V"
+        },
+        {
+          "constraint": "SymmetricNets",
+          "direction": "V",
+          "pairs": [
+            [
+              "OUTP",
+              "OUTN"
+            ]
+          ],
+          "net1": "OUTP",
+          "net2": "OUTN"
+        },
+        {
+          "constraint": "SymmetricNets",
+          "direction": "V",
+          "pairs": [
+            [
+              "INP",
+              "INN"
+            ]
+          ],
+          "net1": "INP",
+          "net2": "INN"
+        }
+      ],
+      "instances": [
+        {
+          "instance_name": "X_MTAIL",
+          "abstract_template_name": "NFET_W1_L0P3",
+          "fa_map": [
+            {
+              "formal": "D",
+              "actual": "TAIL"
+            },
+            {
+              "formal": "G",
+              "actual": "CLK"
+            },
+            {
+              "formal": "S",
+              "actual": "VSS"
+            },
+            {
+              "formal": "B",
+              "actual": "VSS"
+            }
+          ],
+          "concrete_template_name": "NFET_W1_L0P3_X2_Y1",
+          "transformation": {
+            "oX": 4755,
+            "oY": 0,
+            "sX": 1,
+            "sY": 1
+          }
+        },
+        {
+          "instance_name": "X_MIN1",
+          "abstract_template_name": "NFET_W1_L0P3",
+          "fa_map": [
+            {
+              "formal": "D",
+              "actual": "OUTN"
+            },
+            {
+              "formal": "G",
+              "actual": "INP"
+            },
+            {
+              "formal": "S",
+              "actual": "TAIL"
+            },
+            {
+              "formal": "B",
+              "actual": "VSS"
+            }
+          ],
+          "concrete_template_name": "NFET_W1_L0P3_X2_Y1",
+          "transformation": {
+            "oX": 0,
+            "oY": 2870,
+            "sX": 1,
+            "sY": 1
+          }
+        },
+        {
+          "instance_name": "X_MIN2",
+          "abstract_template_name": "NFET_W1_L0P3",
+          "fa_map": [
+            {
+              "formal": "D",
+              "actual": "OUTP"
+            },
+            {
+              "formal": "G",
+              "actual": "INN"
+            },
+            {
+              "formal": "S",
+              "actual": "TAIL"
+            },
+            {
+              "formal": "B",
+              "actual": "VSS"
+            }
+          ],
+          "concrete_template_name": "NFET_W1_L0P3_X2_Y1",
+          "transformation": {
+            "oX": 9510,
+            "oY": 2870,
+            "sX": 1,
+            "sY": 1
+          }
+        },
+        {
+          "instance_name": "X_MNL1",
+          "abstract_template_name": "NFET_W1_L0P3",
+          "fa_map": [
+            {
+              "formal": "D",
+              "actual": "OUTN"
+            },
+            {
+              "formal": "G",
+              "actual": "OUTP"
+            },
+            {
+              "formal": "S",
+              "actual": "TAIL"
+            },
+            {
+              "formal": "B",
+              "actual": "VSS"
+            }
+          ],
+          "concrete_template_name": "NFET_W1_L0P3_X2_Y1",
+          "transformation": {
+            "oX": 6340,
+            "oY": 2870,
+            "sX": 1,
+            "sY": 1
+          }
+        },
+        {
+          "instance_name": "X_MNL2",
+          "abstract_template_name": "NFET_W1_L0P3",
+          "fa_map": [
+            {
+              "formal": "D",
+              "actual": "OUTP"
+            },
+            {
+              "formal": "G",
+              "actual": "OUTN"
+            },
+            {
+              "formal": "S",
+              "actual": "TAIL"
+            },
+            {
+              "formal": "B",
+              "actual": "VSS"
+            }
+          ],
+          "concrete_template_name": "NFET_W1_L0P3_X2_Y1",
+          "transformation": {
+            "oX": 3170,
+            "oY": 2870,
+            "sX": 1,
+            "sY": 1
+          }
+        },
+        {
+          "instance_name": "X_MPL1",
+          "abstract_template_name": "PFET_W1_L0P2",
+          "fa_map": [
+            {
+              "formal": "D",
+              "actual": "OUTN"
+            },
+            {
+              "formal": "G",
+              "actual": "OUTP"
+            },
+            {
+              "formal": "S",
+              "actual": "VDD"
+            },
+            {
+              "formal": "B",
+              "actual": "VDD"
+            }
+          ],
+          "concrete_template_name": "PFET_W1_L0P2_X1_Y1",
+          "transformation": {
+            "oX": 510,
+            "oY": 8990,
+            "sX": 1,
+            "sY": -1
+          }
+        },
+        {
+          "instance_name": "X_MPL2",
+          "abstract_template_name": "PFET_W1_L0P2",
+          "fa_map": [
+            {
+              "formal": "D",
+              "actual": "OUTP"
+            },
+            {
+              "formal": "G",
+              "actual": "OUTN"
+            },
+            {
+              "formal": "S",
+              "actual": "VDD"
+            },
+            {
+              "formal": "B",
+              "actual": "VDD"
+            }
+          ],
+          "concrete_template_name": "PFET_W1_L0P2_X1_Y1",
+          "transformation": {
+            "oX": 12170,
+            "oY": 8990,
+            "sX": -1,
+            "sY": -1
+          }
+        },
+        {
+          "instance_name": "X_MPR1",
+          "abstract_template_name": "PFET_W1_L0P2",
+          "fa_map": [
+            {
+              "formal": "D",
+              "actual": "OUTN"
+            },
+            {
+              "formal": "G",
+              "actual": "CLK"
+            },
+            {
+              "formal": "S",
+              "actual": "VDD"
+            },
+            {
+              "formal": "B",
+              "actual": "VDD"
+            }
+          ],
+          "concrete_template_name": "PFET_W1_L0P2_X1_Y1",
+          "transformation": {
+            "oX": 6340,
+            "oY": 8990,
+            "sX": 1,
+            "sY": -1
+          }
+        },
+        {
+          "instance_name": "X_MPR2",
+          "abstract_template_name": "PFET_W1_L0P2",
+          "fa_map": [
+            {
+              "formal": "D",
+              "actual": "OUTP"
+            },
+            {
+              "formal": "G",
+              "actual": "CLK"
+            },
+            {
+              "formal": "S",
+              "actual": "VDD"
+            },
+            {
+              "formal": "B",
+              "actual": "VDD"
+            }
+          ],
+          "concrete_template_name": "PFET_W1_L0P2_X1_Y1",
+          "transformation": {
+            "oX": 3680,
+            "oY": 8990,
+            "sX": 1,
+            "sY": -1
+          }
+        }
+      ],
+      "global_signals": [
+        "VDD",
+        "VSS"
+      ],
+      "bbox": [
+        0,
+        0,
+        12680,
+        8990
+      ],
+      "abstract_name": "STRONG_ARM_LATCH",
+      "concrete_name": "STRONG_ARM_LATCH_0",
+      "pin_bbox": {
+        "TAIL": [
+          740,
+          1340,
+          11940,
+          4060
+        ],
+        "CLK": [
+          4780,
+          2015,
+          7900,
+          6785
+        ],
+        "OUTN": [
+          1390,
+          4210,
+          11070,
+          7880
+        ],
+        "INP": [
+          960,
+          4885,
+          2210,
+          5115
+        ],
+        "OUTP": [
+          1610,
+          4210,
+          11290,
+          7880
+        ],
+        "INN": [
+          10470,
+          4885,
+          11720,
+          5115
+        ]
+      }
+    }
+  ],
+  "scale_factor": 1
+}
