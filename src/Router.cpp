@@ -572,14 +572,14 @@ CostType Router::guideDeviation(const int x, const int y, const int z) const
 }
 
 Node* Router::createNode(const int x, const int y, const int z,
-    const Node* parent, const int fcost, const int tcost)
+    const Node* parent, const int fcost, const int tcost, const int pen)
 {
   const uint64_t coord = nodeKey(x, y);
   auto it = _nodes[z].find(coord);
   Node* n = nullptr;
   if (z < _minLayer || z > _maxLayer) COUT << "ERROR in layer no : " << z << '\n';
   if (it == _nodes[z].end()) {
-    n = allocNode(x, y, z, fcost, tcost, parent);
+    n = allocNode(x, y, z, fcost, tcost, parent, pen);
     auto itr = _nodes[z].emplace(coord, n);
     it = itr.first;
     if (!itr.second) {
@@ -937,9 +937,8 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
         const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
         pen = static_cast<int>(_cf.offCentreEscapeCost(offc));
       }
-      auto n = createNode(p.x(), p.y(), z, nullptr,
-                          src ? fcost + pen : fcost,
-                          src ? tcost : tcost + pen);
+      auto n = createNode(p.x(), p.y(), z, nullptr, src ? fcost + pen : fcost, tcost, pen);
+      if (!src) n->setTgt(true);
       n->expand(dir, true);
       if ((dir == UP && z >= _maxLayer) || (dir == DOWN && z <= _minLayer)) {
         n->expand(dir, false);
@@ -969,9 +968,8 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
       nearestb = false;
       const int offc = std::abs(p.x() - r.xcenter()) + std::abs(p.y() - r.ycenter());
       const int pen = static_cast<int>(_cf.offCentreEscapeCost(offc));
-      auto n = createNode(p.x(), p.y(), z, nullptr,
-                          src ? fcost + pen : fcost,
-                          src ? tcost : tcost + pen);
+      auto n = createNode(p.x(), p.y(), z, nullptr, src ? fcost + pen : fcost, tcost, pen);
+      if (!src) n->setTgt(true);
       n->setNoVia();
       n->expand(dir, true);
       if (dir == EAST) {
@@ -1191,7 +1189,8 @@ void Router::checkAndInsert(Node* newn, const Node* n)
       COUT << "XYDBG revisit newn(" << newn->x() << ',' << newn->y() << ',' << newn->z()
            << ") oldfcost=" << oldfcost << " newfcost=" << newn->fcost()
            << " queued=" << queued << " from n(" << n->x() << ',' << n->y() << ',' << n->z()
-           << ") oldparent(" << oldparent->x() << ',' << oldparent->y() << ',' << oldparent->z() << ")\n";
+           << ") oldparent(" << (oldparent ? oldparent->x() : -1) << ',' << (oldparent ? oldparent->y() : -1)
+           << ',' << (oldparent ? oldparent->z() : -1) << ")\n";
     }
     if (newn->fcost() >= oldfcost) {
       // no strict improvement (a tie must not reopen a node)
@@ -2363,6 +2362,13 @@ Geom::LayerRects Router::findSol()
         std::swap(_sources,_targets);
         std::swap(_sourceshapes,_targetshapes);
         std::swap(_psources,_ptargets);
+        // the moved nodes still carry their old role's costs
+        for (auto* t : _targets) { t->setFCost(-1); t->setTCost(0); t->setTgt(true); }
+        for (auto* s : _sources) {
+          s->setFCost(s->pen());
+          s->setTCost(-1);
+          s->setTgt(_targets.count(s) > 0);
+        }
       }
       if (attempt == 1) {
         // retry in the reverse direction with fresh state : intermediate nodes

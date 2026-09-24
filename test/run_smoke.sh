@@ -149,6 +149,18 @@ same_defs() {
 # log_count_lt <name> <case-fewer> <case-more> <pattern> <field>
 # Asserts a numeric field summed over matching log lines is strictly smaller in
 # the first case than in the second -- e.g. fewer escape points seeded.
+# sol_cuts <name> <case> <n> : the replayed wire's solution draws exactly n via cuts
+sol_cuts() {
+  local name=$1 dir="$OUTROOT/$2" n
+  n=$(awk '/PIN SOL/{p=1} /END SOL/{p=0} p && /LAYER V/{v=1; next} p && /LAYER/{v=0} p && v && /RECT/{c++} END{print c+0}' \
+      "$dir"/REPLAY_SOL_*_sol.lef 2>/dev/null)
+  if [ "$n" = "$3" ]; then
+    echo "PASS $name"; PASS=$((PASS+1))
+  else
+    echo "FAIL $name :$n cuts, expected $3;"; FAIL=$((FAIL+1)); ERRS="$ERRS$name:cuts $n;\n"
+  fi
+}
+
 log_count_lt() {
   local name=$1 a=$2 b=$3 pat=$4 fld=$5
   local va vb
@@ -1072,6 +1084,15 @@ LOGMUST="unrouted=2"
 ALLOW_UNROUTED=1
 run_case halo_fallback_off "STRONG_ARM_LATCH_0.def" -d $IN/layers_sky130_bench.json -p $IN/halofallback.placement_verilog.json \
   -l $IN/halofallback.lef -ndr $IN/halofallback_ndr.json -uu 1000 -reorder 30 -nohalofallback
+
+# 55d. offcentre_target: ota2's PTAIL on MAGICAL's placement joins its routed tree. The tree was the larger set,
+#      so sources and targets swapped, and the off-centre target points kept a source's escape penalty as their
+#      cost -- visited, never entered. The path could not land on the tree's M3 wire and dropped a fifth cut, a
+#      V2 60 nm from the tree's own. A* only: the L/Z pattern router never met the bug.
+LOGMUST="REPLAY RESULT routed"
+run_case offcentre_target "" -replay $IN/magical/ptail_offcentre.lef -d $IN/magical/layers.json \
+  -ndr $IN/magical/ota2_ndr.json -uu 1000 -viacost 10
+sol_cuts offcentre_target_cuts offcentre_target 4
 
 # 56. pwr_grid: bin/gen_pwr_grid.py builds the power grid out of the layer
 #     abstraction and hanan_router makes the connections to it. The unit tests

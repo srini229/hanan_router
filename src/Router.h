@@ -280,18 +280,21 @@ class Node {
     friend class Router;
     int _x, _y, _z;
     int _hwx, _hwy;
+    int _pen{0};         // off-centre escape penalty, charged on arrival while a target
     CostType _fcost, _tcost;
     Node const* _parent;
     const Via *_upVia, *_dnVia;
     std::bitset<MAXDIR> _expanddir;
     bool _noVia{false};
+    bool _tgt{false};
     // This node's slot in the priority queue, -1 when not queued. Holding it on
     // the node is what makes re-prioritising O(1) to locate: the queue never has
     // to be searched for the entry.
     int _pqidx{-1};
     Node(const int x = 0, const int y = 0, const int z = -1,
-        const CostType fcost = -1, const CostType tcost = -1, Node const* parent = nullptr)
-      : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _fcost(fcost), _tcost(tcost),
+        const CostType fcost = -1, const CostType tcost = -1, Node const* parent = nullptr,
+        const int pen = 0)
+      : _x(x), _y(y), _z(z), _hwx{0}, _hwy{0}, _pen(pen), _fcost(fcost), _tcost(tcost),
       _parent(parent), _upVia(nullptr), _dnVia(nullptr)
       {
         _expanddir.reset();
@@ -331,6 +334,9 @@ class Node {
     void setPQIdx(const int i) { _pqidx = i; }
     bool noVia() const { return _noVia; }
     void setNoVia() { _noVia = true; }
+    int pen() const { return _pen; }
+    bool tgt() const { return _tgt; }
+    void setTgt(const bool t) { _tgt = t; }
     void setexpand() { _expanddir.set(); }
     void resetexpand() { _expanddir.reset(); }
 
@@ -460,7 +466,7 @@ class Router {
     size_t _nodechunk{0};      // chunk the next node comes from
     size_t _nodeinchunk{NODE_CHUNK};
     Node* allocNode(const int x, const int y, const int z, const CostType fcost,
-                    const CostType tcost, const Node* parent)
+                    const CostType tcost, const Node* parent, const int pen = 0)
     {
       if (_nodeinchunk == NODE_CHUNK) {       // current chunk full, or none yet
         if (_nodechunk == _nodechunks.size()) {
@@ -470,7 +476,7 @@ class Router {
       }
       void* slot = _nodechunks[_nodechunk] + sizeof(Node) * _nodeinchunk;
       if (++_nodeinchunk == NODE_CHUNK) ++_nodechunk;   // next call takes a fresh chunk
-      return new (slot) Node(x, y, z, fcost, tcost, parent);
+      return new (slot) Node(x, y, z, fcost, tcost, parent, pen);
     }
     void resetNodePool() { _nodechunk = 0; _nodeinchunk = NODE_CHUNK; }
     void freeNodePool()
@@ -607,7 +613,7 @@ class Router {
     bool _hasGuide{false};
 
     Node* createNode(const int x = 0, const int y = 0, const int z = 0,
-        const Node* parent = nullptr, const int fcost = -1, const int tcost = -1);
+        const Node* parent = nullptr, const int fcost = -1, const int tcost = -1, const int pen = 0);
 
     void evalFCost(Node* n)
     {
@@ -646,6 +652,7 @@ class Router {
           fcost += _guideWeight * guideDeviation(n->x(), n->y(), n->z());
         }
       }
+      if (n->tgt()) fcost += n->pen();
       n->setFCost(fcost);
       /*CostType bends{0};
       const Node* p = n;
