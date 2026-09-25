@@ -1109,6 +1109,15 @@ run_case offcentre_target "" -replay $IN/magical/ptail_offcentre.lef -d $IN/magi
   -ndr $IN/magical/ota2_ndr.json -uu 1000 -viacost 10
 sol_cuts offcentre_target_cuts offcentre_target 4
 
+# 55d2. reverse_pass_escapes: the same wire with its first pass cut short by the expansion budget, so the
+#       reverse pass rebuilds the escape points. The rebuild once kept the escape-cell record of the first
+#       build and left only each rectangle's nearest point (6 sources, 1 target); it must see all 350 / 114.
+LOGMUST="num src : 350 tgt : 114"
+ALLOW_UNROUTED=1
+EXPECT_EXIT=1
+run_case reverse_pass_escapes "" -replay $IN/magical/ptail_offcentre.lef -d $IN/magical/layers.json \
+  -ndr $IN/magical/ota2_ndr.json -uu 1000 -viacost 10 -nopattern -maxexp 200
+
 # 55e. samenet_*: MAGICAL placements (met4 cap, every layer bidirectional, -viacost 10); each design broke a
 #      same-net rule before its fix -- ota1 a stacked via's pad cross, ota3 gaps to its own shapes, leung_nmcnr
 #      boundary escapes left along their edge, leung_dfcfc2 a cut touching the tree's, hoilee_affc a pin pair

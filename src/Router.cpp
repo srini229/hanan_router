@@ -3441,6 +3441,7 @@ static long long rectGap(const Geom::Rect& r, const Geom::Rect& b)
 
 void Router::createSourceTargetNodes()
 {
+  _escapecells.clear();   // a rebuild thins afresh, or only each rectangle's nearest point survives
   for (const bool src : {true, false}) {
     bool prefLayerShape{false};
     if (!_preflayers.empty()) {
