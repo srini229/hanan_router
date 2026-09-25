@@ -538,6 +538,7 @@ class Module {
 
     void route(Router::Router& r, const std::string& outdir);
 
+    bool hasSymPairs() const { return !_sympairs.empty(); }
     // Nets still open after routing (routable, non-excluded, unrouted).
     int numUnrouted() const
     {
@@ -623,7 +624,7 @@ class Netlist {
     // has to be redone when a child's routes move. Every other hierarchy keeps the
     // routes -- and the DEF/LEF -- it already produced. Returns how many were
     // re-routed.
-    int reroute(Router::Router& r, const std::string& outdir)
+    int reroute(Router::Router& r, const std::string& outdir, const bool symOnly = false)
     {
       if (!_valid) return 0;
       std::map<const Module*, std::vector<Module*>> parents;
@@ -635,7 +636,8 @@ class Netlist {
       std::vector<Module*> work;
       std::set<Module*> dirty;
       for (auto& m : _modules) {
-        if (m.second->numUnrouted() > 0 && dirty.insert(m.second).second) work.push_back(m.second);
+        if (m.second->numUnrouted() > 0 && (!symOnly || m.second->hasSymPairs()) && dirty.insert(m.second).second)
+          work.push_back(m.second);
       }
       const size_t open = work.size();
       for (size_t i = 0; i < work.size(); ++i) {     // walk up to the parents
@@ -667,6 +669,14 @@ class Netlist {
       }
       COUT << "DRC_SUMMARY router-caused spacing violations = " << total << '\n';
       COUT << "DRC_SUMMARY placement spacing violations = " << placement << '\n';
+    }
+    // nets left open in hierarchies that route a symmetric pair
+    int symUnrouted() const
+    {
+      if (!_valid) return 0;
+      int t = 0;
+      for (auto& m : _modules) if (m.second->hasSymPairs()) t += m.second->numUnrouted();
+      return t;
     }
     // Total nets left open across every hierarchy after a route() call.
     int totalUnrouted() const

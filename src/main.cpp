@@ -232,6 +232,19 @@ int main(int argc, char* argv[])
     Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile, interlefdir);
     netlist.route(hrdb, outdir);
     int open = netlist.totalUnrouted();
+    if (const int sym = netlist.symUnrouted()) {
+      COUT << "hierarchies with symmetric pairs left " << sym
+           << " net(s) open; re-routing them with the symmetry guide on planar distance only\n";
+      hrdb.setGuideLayers(false);       // the partner may leave the guide's layers to let other nets by
+      netlist.reroute(hrdb, outdir, true);
+      if (netlist.symUnrouted() > sym) {
+        COUT << "planar guide left " << netlist.symUnrouted() << " net(s) open against " << sym
+             << "; re-routing those hierarchies as before\n";
+        hrdb.setGuideLayers(true);
+        netlist.reroute(hrdb, outdir, true);
+      }
+      open = netlist.totalUnrouted();
+    }
     if (open > 0) {
       COUT << "centre-track pin escape left " << open
            << " net(s) open; re-routing with corner pin-escape points\n";

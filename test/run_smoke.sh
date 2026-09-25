@@ -1134,6 +1134,14 @@ LOGMUST="pair=net0133,net0131 .*mirrored=0\.[7-9]"
 run_case symmetry_layer "" -d $IN/magical/layers.json -p $IN/magical/ota2/placement.json -l $IN/magical/ota2/cell.lef \
   -ndr $IN/magical/ota2_ndr.json -uu 1000 -reorder 30
 
+# 55d4. symmetry_planar_fallback: the harness strong_arm_latch. Kept to the guide's layers, OUTN takes the track
+#       CLK needs and the block ends one net open; re-routed with the guide on planar distance only (only the
+#       hierarchies with symmetric pairs that are still open), every net routes.
+LOGMUST="re-routing them with the symmetry guide on planar distance only|ROUTE_SUMMARY module=STRONG_ARM_LATCH_0 nets=8 unrouted=0"
+LOGNOT="corner pin escape left"
+run_case symmetry_planar_fallback "STRONG_ARM_LATCH_0.def" -d $IN/layers_sky130_bench.json -p $IN/sym_latch/placement.json \
+  -l $IN/sym_latch/combined.lef -ndr $IN/sym_latch/route_ndr.json -uu 1000 -reorder 30
+
 # 55e. samenet_*: MAGICAL placements (met4 cap, every layer bidirectional, -viacost 10); each design broke a
 #      same-net rule before its fix -- ota1 a stacked via's pad cross, ota3 gaps to its own shapes, leung_nmcnr
 #      boundary escapes left along their edge, leung_dfcfc2 a cut touching the tree's, hoilee_affc a pin pair

@@ -570,7 +570,7 @@ CostType Router::guideDeviation(const int x, const int y, const int z) const
   // no guide on this layer: the planar distance, plus a pitch per layer to the nearest layer the guide uses
   long d = nearest(_guideAll);
   int dz = INT_MAX;
-  for (auto& l : _guideByLayer) {
+  if (_guideLayers) for (auto& l : _guideByLayer) {
     if (!l.second.empty()) dz = std::min(dz, std::abs(l.first - z));
   }
   const long pitch = std::max(widthx(z), widthy(z)) + std::max(spacex(z), spacey(z));
