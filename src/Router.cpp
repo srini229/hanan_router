@@ -581,27 +581,17 @@ Node* Router::createNode(const int x, const int y, const int z,
     const Node* parent, const int fcost, const int tcost, const int pen)
 {
   const uint64_t coord = nodeKey(x, y);
-  auto it = _nodes[z].find(coord);
-  Node* n = nullptr;
   if (z < _minLayer || z > _maxLayer) COUT << "ERROR in layer no : " << z << '\n';
-  if (it == _nodes[z].end()) {
+  Node* n = _nodes[z].get(coord);
+  if (!n) {
     n = allocNode(x, y, z, fcost, tcost, parent, pen);
-    auto itr = _nodes[z].emplace(coord, n);
-    it = itr.first;
-    if (!itr.second) {
-      COUT << "ERROR adding node to nz "; n->print("n : ");
-      n->~Node();       // never entered the map, so flushNodes will not see it
-      n = itr.first->second;
+    _nodes[z].put(coord, n);
 #if DEBUG
-    } else {
-      _nodeset.insert(n);
-#endif
-    }
-#if DEBUG
+    _nodeset.insert(n);
     COUT << "creating new node : " << x << ',' << y << ',' << z << '\n';
 #endif
   }
-  return (it != _nodes[z].end()) ? it->second : nullptr;
+  return n;
 }
 
 Geom::PointWidthSet Router::findValidPoints(const Geom::Rect& r, const int z, const Direction dir) const
@@ -920,7 +910,7 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
       for (auto& bp : findBoundaryPoints(r, z, dir, points)) {
         const auto coord = std::make_pair(bp.first.x(), bp.first.y());
         if (points.find(bp) != points.end()) continue;
-        if (_nodes[z].count(nodeKey(coord.first, coord.second)) && !boundaryAdded.count(coord)) continue;
+        if (_nodes[z].get(nodeKey(coord.first, coord.second)) && !boundaryAdded.count(coord)) continue;
         bpoints.insert(bp);
         boundaryAdded.insert(coord);
       }
@@ -961,6 +951,7 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
       n->print((src ? "src" : "tgt"));
 #endif
       dest.insert(n);
+      ++_tgen;
       _bbox.merge(n->x(), n->y(), n->x(), n->y());
     }
     bool nearestb = true;
@@ -988,6 +979,7 @@ void Router::addSourceTarget(const Geom::Rect& r, const int z, const bool src)
         n->expand(SOUTH, true);
       }
       dest.insert(n);
+      ++_tgen;
       _bbox.merge(n->x(), n->y(), n->x(), n->y());
     }
   }
@@ -1199,7 +1191,7 @@ bool Router::viaCrowdsPath(const Node* n, const int zto) const
 
 void Router::checkAndInsert(Node* newn, const Node* n)
 {
-  if (_sources.find(newn) != _sources.end()) {
+  if (isSource(newn)) {
 #if DEBUG
     newn->print("trying to add source node : ");
 #endif
@@ -1300,17 +1292,11 @@ int Router::snap(const Node* n, const bool vert, const bool up) const
 
 void Router::getTargetGrid(std::vector<int>& s, const Node* n, const bool vert, const int snapc)
 {
-  for (auto& t : _targets) {
-    if (vert) {
-      auto maxc = std::max(n->y(), snapc);
-      auto minc = std::min(n->y(), snapc);
-      if (t->y() > minc && t->y() < maxc) s.push_back(t->y());
-    } else {
-      auto maxc = std::max(n->x(), snapc);
-      auto minc = std::min(n->x(), snapc);
-      if (t->x() > minc && t->x() < maxc) s.push_back(t->x());
-    }
-  }
+  refreshTargetIndex();
+  const auto& v = vert ? _tys : _txs;
+  const int c = vert ? n->y() : n->x();
+  const int minc = std::min(c, snapc), maxc = std::max(c, snapc);
+  for (auto it = std::upper_bound(v.begin(), v.end(), minc); it != v.end() && *it < maxc; ++it) s.push_back(*it);
 }
 
 void Router::getAdjacentGrid(std::vector<int>& s, const Node* n, const bool above, const bool up, const int snapc)
@@ -2497,6 +2483,7 @@ Geom::LayerRects Router::findSol()
     for (auto attempt : {0, 1}) {
       if (_targets.size() < _sources.size()) {
         std::swap(_sources,_targets);
+        ++_tgen;
         std::swap(_sourceshapes,_targetshapes);
         std::swap(_psources,_ptargets);
         // the moved nodes still carry their old role's costs
@@ -2514,6 +2501,7 @@ Geom::LayerRects Router::findSol()
         std::swap(_psources,_ptargets);
         _sources.clear();
         _targets.clear();
+        ++_tgen;
         flushNodes();
         createSourceTargetNodes();
       }
@@ -2668,7 +2656,7 @@ Geom::LayerRects Router::findSol()
       while (!patterned) {
         Node* t = popPQ();
         if (!t) { exhausted = true; break; }
-        if (_targets.find(t) != _targets.end()) {
+        if (isTarget(t)) {
           _sol = t;
           COUT << "sol found with " << _expansions << " expansions! cost " << t->fcost() << " for " << _name << std::endl;
           if (verboseAt(LogLevel::TRACE))
@@ -2742,6 +2730,7 @@ Geom::LayerRects Router::findSol()
       }
       _sources.clear();
       _targets.clear();
+      ++_tgen;
       flushNodes();
       _bbox = Geom::Rect();
       createSourceTargetNodes();
@@ -2758,7 +2747,7 @@ Geom::LayerRects Router::findSol()
       for (;;) {
         Node* t = popPQ();
         if (!t) break;
-        if (_targets.find(t) != _targets.end()) {
+        if (isTarget(t)) {
           _sol = t;
           COUT << "sol found with pin width for " << _name << " after " << _expansions << " expansions!\n";
           if (verboseAt(LogLevel::TRACE))
@@ -2799,6 +2788,7 @@ Geom::LayerRects Router::findSol()
         }
         _sources.clear();
         _targets.clear();
+        ++_tgen;
         flushNodes();
         _bbox = Geom::Rect();
         createSourceTargetNodes();
@@ -2815,7 +2805,7 @@ Geom::LayerRects Router::findSol()
         for (;;) {
           Node* t = popPQ();
           if (!t) break;
-          if (_targets.find(t) != _targets.end()) {
+          if (isTarget(t)) {
             _sol = t;
             COUT << "sol found with via escape relaxed for " << _name << " after " << _expansions << " expansions!\n";
             if (verboseAt(LogLevel::TRACE))

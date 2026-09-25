@@ -1,5 +1,6 @@
 #ifndef ROUTER_H_
 #define ROUTER_H_
+#include <unordered_set>
 #include <set>
 #include <unordered_map>
 #include <cstdint>
@@ -190,6 +191,40 @@ class CostFn {
     void setViaPitches(const double pitches, const DRC::LayerInfo& lf);
     void setViaFromResistance(const DRC::LayerInfo& lf);
     void setRelaxFloor(const CostType c) { if (c > 0 && c < COST_MAX) _minMetalCost = c; }
+    // Between two different layers and two different points deltaCost is never relaxed: its per-unit costs and its via
+    // sum depend on the layer pair alone. Per pair (a * (top + 1) + b): the horizontal and vertical unit costs and the
+    // vias, as deltaCost takes them, less only the half via it adds for a route that turns.
+    void layerPairBounds(std::vector<CostType>& h, std::vector<CostType>& v, std::vector<CostType>& via) const
+    {
+      const int n = _topRoutingLayer + 1;
+      h.assign(n * n, 0); v.assign(n * n, 0); via.assign(n * n, 0);
+      for (int a = 0; a < n; ++a)
+        for (int b = 0; b < n; ++b) {
+          if (a == b) continue;
+          int minz = std::min(a, b), maxz = std::max(a, b);
+          if (_layerHCost[minz] != _layerVCost[minz]) {
+            if (minz < _topRoutingLayer) maxz = minz + 1;
+            else minz -= 1;
+          }
+          CostType mh = COST_MAX, mv = COST_MAX;
+          for (int i = minz; i <= maxz; ++i) { mh = std::min(mh, _layerHCost[i]); mv = std::min(mv, _layerVCost[i]); }
+          h[a * n + b] = mh >= COST_MAX ? _minMetalCost : mh;
+          v[a * n + b] = mv >= COST_MAX ? _minMetalCost : mv;
+          CostType c = 0;
+          for (int i = std::min(a, minz); i < std::max(a, minz); ++i) c += _layerPairCost[i][i + 1];
+          for (int i = minz; i < maxz; ++i) c += _layerPairCost[i][i + 1];
+          for (int i = std::min(b, maxz); i < std::max(b, maxz); ++i) c += _layerPairCost[i][i + 1];
+          via[a * n + b] = c;
+        }
+    }
+    int layerCount() const { return _topRoutingLayer + 1; }
+    // the least any unit of wire length can cost: a lower bound on deltaCost per unit of Manhattan distance
+    CostType unitLowerBound() const
+    {
+      CostType u = _minMetalCost;
+      for (int i = 0; i <= _topRoutingLayer; ++i) u = std::min(u, std::min(_layerHCost[i], _layerVCost[i]));
+      return std::max<CostType>(u, 0);
+    }
     void clearRelaxZones()
     { _relaxzones.clear(); _relaxuf.clear(); _relaxbbox.clear(); _relaxindex.clear(); _relaxdirty = true; }
     void addRelaxZone(const int z, const Geom::Rect& r)
@@ -449,7 +484,46 @@ inline uint64_t nodeKey(const int x, const int y)
 struct NodeKeyHash {
   size_t operator() (const uint64_t k) const { return static_cast<size_t>(k); }
 };
-typedef std::vector<std::unordered_map<uint64_t, Node*, NodeKeyHash>> NodeMap;
+// Node lookup by nodeKey: open addressing with linear probing in one slot array (the keys are already mixed, so the
+// low bits index it), and the list of filled slots so that clearing costs what was filled, not the capacity.
+class NodeTable {
+  private:
+    struct Slot { uint64_t k; Node* v; };
+    std::vector<Slot> _slots;
+    std::vector<size_t> _used;
+    size_t _mask{0};
+    void grow()
+    {
+      std::vector<Slot> old;
+      old.swap(_slots);
+      _slots.assign(old.empty() ? 1024 : old.size() * 2, Slot{0, nullptr});
+      _mask = _slots.size() - 1;
+      _used.clear();
+      for (auto& s : old) if (s.v) put(s.k, s.v);
+    }
+  public:
+    Node* get(const uint64_t k) const
+    {
+      if (_used.empty()) return nullptr;
+      for (size_t i = k & _mask;; i = (i + 1) & _mask) {
+        const Slot& s = _slots[i];
+        if (!s.v) return nullptr;
+        if (s.k == k) return s.v;
+      }
+    }
+    void put(const uint64_t k, Node* v)   // k must be absent
+    {
+      if ((_used.size() + 1) * 2 > _slots.size()) grow();
+      size_t i = k & _mask;
+      while (_slots[i].v) i = (i + 1) & _mask;
+      _slots[i] = Slot{k, v};
+      _used.push_back(i);
+    }
+    template <typename F> void forEach(F f) const { for (auto i : _used) f(_slots[i].v); }
+    void clear() { for (auto i : _used) _slots[i].v = nullptr; _used.clear(); }
+    size_t size() const { return _used.size(); }
+};
+typedef std::vector<NodeTable> NodeMap;
 bool replay(class Router& r, const std::string& leffile, const int uu, const bool detour,
     const std::string& ndrfile, const DRC::LayerInfo& lf);
 
@@ -463,6 +537,42 @@ class Router {
     PriorityQueue _pq;
     std::vector<int> _gridposbuf;
     NodeSet _sources, _targets;
+    // flat and hashed copies of _sources and _targets for the search, rebuilt when _tgen (moved on every change to
+    // either set) no longer matches the copies' generation
+    mutable std::vector<const Node*> _tvec;
+    mutable std::vector<int> _txs, _tys;
+    mutable std::vector<std::unordered_set<uint64_t>> _tset, _sset;   // per layer, by nodeKey: sets compare coordinates
+    mutable unsigned long _tvecgen{0};
+    unsigned long _tgen{1};
+    mutable CostType _tunit{0};
+    mutable std::vector<CostType> _tlbh, _tlbv, _tlbvia, _tlb;
+    mutable int _tlayers{0};
+    void refreshTargetIndex() const
+    {
+      if (_tvecgen == _tgen) return;
+      _tvec.assign(_targets.begin(), _targets.end());
+      auto keys = [](std::vector<std::unordered_set<uint64_t>>& k, const NodeSet& from) {
+        for (auto& l : k) l.clear();
+        for (auto* m : from) {
+          if (m->z() < 0) continue;
+          if (static_cast<size_t>(m->z()) >= k.size()) k.resize(m->z() + 1);
+          k[m->z()].insert(nodeKey(m->x(), m->y()));
+        }
+      };
+      keys(_tset, _targets);
+      keys(_sset, _sources);
+      _txs.clear();
+      _tys.clear();
+      for (auto* t : _targets) { _txs.push_back(t->x()); _tys.push_back(t->y()); }
+      for (auto* v : {&_txs, &_tys}) {
+        std::sort(v->begin(), v->end());
+        v->erase(std::unique(v->begin(), v->end()), v->end());
+      }
+      _tunit = _cf.unitLowerBound();
+      _cf.layerPairBounds(_tlbh, _tlbv, _tlbvia);
+      _tlayers = _cf.layerCount();
+      _tvecgen = _tgen;
+    }
     NodeMap _nodes;
     // Nodes are created and released in bulk -- thousands per search, all torn
     // down together by flushNodes -- so they come out of chunked storage rather
@@ -707,8 +817,30 @@ class Router {
         n->setTCost(tcost);
         return;
       }
-      for (auto& t : _targets) {
-        tcost = std::min(tcost, _cf.deltaCost(*n, *t));
+      // exact minimum over the targets: deltaCost is at least the unit bound times the Manhattan distance, so the target
+      // nearest by that bound is priced first and any target whose bound cannot beat the best so far is skipped
+      refreshTargetIndex();
+      // a lower bound per target: the layer-pair costs between two layers, the cheapest unit on the node's own layer
+      _tlb.resize(_tvec.size());
+      size_t first = 0;
+      for (size_t i = 0; i < _tvec.size(); ++i) {
+        const Node* t = _tvec[i];
+        const long dx = std::labs(static_cast<long>(n->x()) - t->x()), dy = std::labs(static_cast<long>(n->y()) - t->y());
+        if (dx == 0 && dy == 0) {
+          _tlb[i] = 0;                    // a via straight up or down: deltaCost prices it on its own
+        } else if (t->z() != n->z() && n->z() < _tlayers && t->z() < _tlayers) {
+          const int k = n->z() * _tlayers + t->z();
+          _tlb[i] = _tlbh[k] * dx + _tlbv[k] * dy + _tlbvia[k];
+        } else {
+          _tlb[i] = _tunit * (dx + dy);
+        }
+        if (_tlb[i] < _tlb[first]) first = i;
+      }
+      if (!_tvec.empty()) tcost = _cf.deltaCost(*n, *_tvec[first]);
+      const CostType slack = 1e-9 * (1 + std::abs(tcost));   // the bound and deltaCost may round apart under -ffast-math
+      for (size_t i = 0; i < _tvec.size(); ++i) {
+        if (i == first || _tlb[i] - slack >= tcost) continue;
+        tcost = std::min(tcost, _cf.deltaCost(*n, *_tvec[i]));
       }
       n->setTCost(tcost);
     }
@@ -741,14 +873,14 @@ class Router {
     void flushNodes()
     {
       clearPQ();
+      ++_tgen;              // the flat target copy points at nodes about to be destroyed
       for (auto& l : _nodes) {
-        for (auto& n : l) {
-          n.second->~Node();
+        l.forEach([&](Node* n) {
+          n->~Node();
 #if DEBUG
-          _nodeset.erase(n.second);
+          _nodeset.erase(n);
 #endif
-          n.second = nullptr;
-        }
+        });
         l.clear();
       }
       resetNodePool();   // storage stays, the objects in it are gone
@@ -779,8 +911,12 @@ class Router {
     Geom::PointWidthSet findBoundaryPoints(const Geom::Rect& r, const int z, const Direction dir,
         const Geom::PointWidthSet& centre) const;
 
-    bool isTarget(const Node* n) const { return _targets.find(const_cast<Node*>(n)) != _targets.end(); }
-    bool isSource(const Node* n) const { return _sources.find(const_cast<Node*>(n)) != _sources.end(); }
+    bool isTarget(const Node* n) const { refreshTargetIndex(); return inKeys(_tset, n); }
+    bool isSource(const Node* n) const { refreshTargetIndex(); return inKeys(_sset, n); }
+    static bool inKeys(const std::vector<std::unordered_set<uint64_t>>& s, const Node* n)
+    {
+      return n->z() >= 0 && static_cast<size_t>(n->z()) < s.size() && s[n->z()].count(nodeKey(n->x(), n->y())) > 0;
+    }
     // Coordinate-based counterparts of isSource/isTarget, used to recognise a
     // pin's own escape via from the *other* side of the via check: isViaValid
     // is called on the node the search is expanding FROM, which for a via that
@@ -789,12 +925,12 @@ class Router {
     // pin node itself. These look up whatever node (if any) already exists at
     // (x,y,z) and test that node instead.
     bool isSourceAt(const int x, const int y, const int z) const {
-      auto it = _nodes[z].find(nodeKey(x, y));
-      return it != _nodes[z].end() && isSource(it->second);
+      const Node* m = _nodes[z].get(nodeKey(x, y));
+      return m && isSource(m);
     }
     bool isTargetAt(const int x, const int y, const int z) const {
-      auto it = _nodes[z].find(nodeKey(x, y));
-      return it != _nodes[z].end() && isTarget(it->second);
+      const Node* m = _nodes[z].get(nodeKey(x, y));
+      return m && isTarget(m);
     }
     const Geom::Rect* pinShapeAt(const int x, const int y, const int z) const
     {
@@ -877,6 +1013,7 @@ class Router {
       freeNodePool();
       _sources.clear();
       _targets.clear();
+      ++_tgen;
       _vias.clear();
     }
     const int maxLayer() const { return _maxLayer; }
@@ -909,6 +1046,7 @@ class Router {
       _cf.resetdirs();
       _sources.clear();
       _targets.clear();
+      ++_tgen;
       _escapecells.clear();
       _sourceshapes.clear();
       _samenet.clear();
