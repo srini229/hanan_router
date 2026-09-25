@@ -539,6 +539,7 @@ class Module {
     void route(Router::Router& r, const std::string& outdir);
 
     bool hasSymPairs() const { return !_sympairs.empty(); }
+    static std::chrono::nanoseconds writeTime, checkTime;   // every module's output writing and result checks
     // Nets still open after routing (routable, non-excluded, unrouted).
     int numUnrouted() const
     {

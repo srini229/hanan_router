@@ -19,6 +19,8 @@
 
 namespace Placement {
 
+std::chrono::nanoseconds Module::writeTime{0}, Module::checkTime{0};
+
 void Port::print() const
 {
   COUT << "port : " << _name << '\n';
@@ -1078,20 +1080,22 @@ void Module::route(Router::Router& router, const std::string& outdir)
       Geom::LayerRects laid;
       for (auto& n : _nets)
         if (!n.second.excluded()) Geom::MergeLayerRects(laid, n.second.routeShapesWithPins());
-      escapeCheck("post-route", &laid, true);
+      { TIME_MA(&checkTime); escapeCheck("post-route", &laid, true); }
     if (router.abutEscape() && router.abutSeen() > 0) {
       COUT << "ABUT " << _name << " : " << router.abutSeen()
            << " pad check(s) against a shape already touching the pin, "
            << router.abutAllowed() << " allowed through on overlap\n";
     }
     }
-    writeDEF(outdir);
+    { TIME_MA(&writeTime); writeDEF(outdir); }
   }
-  checkDRC(router);
+  { TIME_MA(&checkTime); checkDRC(router); }
   if (!_leaf) {
+    TIME_MA(&writeTime);
     writeLEF(outdir);
   }
   _routed = 1;
+  TIME_MA(&checkTime);
   checkShort();
 }
 

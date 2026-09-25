@@ -88,6 +88,7 @@ int main(int argc, char* argv[])
   // (IEEE TCAD 1994); see src/borah.h.
   const bool rsmtOpt = checkArg(argc, argv, "-rsmt");
 
+  const auto tStart = std::chrono::steady_clock::now();
   DRC::LayerInfo linfo(layerJSONFile, (uuflayer ? uu : 1));
   if (!linfo.populated())  {
     CERR << "missing or unable to read layers.json file argument" << std::endl;
@@ -230,6 +231,7 @@ int main(int argc, char* argv[])
   }
   if (!plfile.empty() && !leffile.empty()) {
     Placement::Netlist netlist(plfile, leffile, linfo, uu, ndrfile, interlefdir);
+    const auto tRead = std::chrono::steady_clock::now();
     netlist.route(hrdb, outdir);
     int open = netlist.totalUnrouted();
     if (const int sym = netlist.symUnrouted()) {
@@ -276,10 +278,17 @@ int main(int argc, char* argv[])
         netlist.reroute(hrdb, outdir);
       }
     }
+    const auto tRouted = std::chrono::steady_clock::now();
     netlist.printRouteSummaries();      // one authoritative summary, final state
     netlist.printWirelengths();
     netlist.checkShort();
     netlist.checkDRC(hrdb);
+    // routing alone: from the inputs read to the last pass, less the modules' output writing and checks
+    auto sec = [](const auto d) { return std::chrono::duration<double>(d).count(); };
+    const double wr = sec(Placement::Module::writeTime), ck = sec(Placement::Module::checkTime);
+    const auto tEnd = std::chrono::steady_clock::now();
+    COUT << "RUNTIME read=" << sec(tRead - tStart) << " route=" << sec(tRouted - tRead) - wr - ck << " write=" << wr
+         << " checks=" << ck + sec(tEnd - tRouted) << " total=" << sec(tEnd - tStart) << " (s)\n";
   }
 
   return 0;
