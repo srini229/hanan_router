@@ -649,6 +649,12 @@ run_case nopattern "GH_CONC_0.def" \
 LOGMUST="symmetric net : routing INM guided by INP|SYMMETRY module=SYM_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
 run_case symmetric_nets "SYM_CONC_0.def" \
   -d $IN/layers.json -p $IN/symmetric.netlist.json -l $IN/symmetric.lef \
+  -ndr $IN/symmetric_ndr.json -guidedsym
+# 29b2. symmetric_nets_exact: by default the pair's pins are mirrored, so INM is drawn as INP's exact mirror, no search
+LOGMUST="SYMMETRY module=SYM_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 meandev=0 mirrored=1 exact"
+LOGNOT="symmetric net : routing INM guided by INP"
+run_case symmetric_nets_exact "SYM_CONC_0.def" \
+  -d $IN/layers.json -p $IN/symmetric.netlist.json -l $IN/symmetric.lef \
   -ndr $IN/symmetric_ndr.json
 
 # 29c. same layout but with the mirror axis given explicitly ("V": 1000) instead
@@ -828,7 +834,7 @@ fi
 LOGMUST="symmetric net : routing INM guided by INP|SYMMETRY module=SYM_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
 run_case deviation_cost "SYM_CONC_0.def" \
   -d $IN/layers.json -p $IN/symmetric.netlist.json -l $IN/symmetric.lef \
-  -ndr $IN/symmetric_devcost_ndr.json
+  -ndr $IN/symmetric_devcost_ndr.json -guidedsym
 
 # 38. blocked-via diagnostics: the via_escape fixture (net A cannot route without
 #     -relaxvia) with per-wire debug dumping on. Every via escape is blocked, so
@@ -1132,6 +1138,13 @@ run_case reverse_pass_escapes "" -replay $IN/magical/ptail_offcentre.lef -d $IN/
 #       lay on the mirror image. The deviation now counts a pitch per layer away; the share must reach 0.7.
 LOGMUST="pair=net0133,net0131 .*mirrored=0\.[7-9]"
 run_case symmetry_layer "" -d $IN/magical/layers.json -p $IN/magical/ota2/placement.json -l $IN/magical/ota2/cell.lef \
+  -ndr $IN/magical/ota2_ndr.json -uu 1000 -reorder 30 -guidedsym
+
+# 55d3b. symmetry_exact: the same placement by default; its four pairs have mirrored pins on one side of the axis
+#        each, so every second net is drawn as the exact mirror of the first
+LOGMUST="pair=net0133,net0131 .*mirrored=1 exact|pair=VOP,VOM .*mirrored=1 exact|ROUTE_SUMMARY .* unrouted=0"
+LOGNOT="guided by"
+run_case symmetry_exact "" -d $IN/magical/layers.json -p $IN/magical/ota2/placement.json -l $IN/magical/ota2/cell.lef \
   -ndr $IN/magical/ota2_ndr.json -uu 1000 -reorder 30
 
 # 55d4. symmetry_planar_fallback: the harness strong_arm_latch. Kept to the guide's layers, OUTN takes the track

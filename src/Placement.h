@@ -226,6 +226,18 @@ class Net {
       }
     }
     long wirelength() const { return _wirelen; }
+    // a route drawn elsewhere (a symmetric partner's mirror), installed as this net's own
+    void setRoute(const Geom::LayerRects& sol, const long wirelen)
+    {
+      _unroute = 0;
+      _openwires.clear();
+      _wirelen = wirelen;
+      for (auto virt : {true, false})
+        for (auto& pin : (virt ? _vpins : _pins))
+          for (auto& p : pin->ports()) Geom::MergeLayerRects(_routeshapeswithpins, p->shapes(), &_bbox);
+      Geom::MergeLayerRects(_routeshapeswithpins, sol, &_bbox);
+      Geom::MergeLayerRects(_routeshapes, sol, &_bbox);
+    }
     void addWirelength(const long l) { _wirelen += l; }
     long rsmtLength() const { return _rsmtlen; }
     long mstLength() const { return _mstlen; }

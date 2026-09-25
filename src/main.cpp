@@ -34,6 +34,8 @@ int main(int argc, char* argv[])
       << "\t-admissible (A* uses the admissible distance bound everywhere, not only under a corridor guide)\n"
       << "\t-nopattern (skip L/Z pattern routing; every wire goes to A*)\n"
       << "\t-softwires (other nets' wires are not obstacles, only their pins: the nets still open are pin-limited; output not legal)\n"
+      << "\t-guidedsym (route a symmetric pair's second net under the guide only; by default, where the placement mirrored\n"
+      << "\t    the pair's pins, the first net is routed clear of every other net's mirror too and the second is its exact mirror)\n"
       << "\t-satpoint (pre-route escape check takes escapes from points along each pin, as the search does)\n"
       << "\t-reserveexcluded (keep one escape clear for every pin of a do_not_route net, for a later pass)\n"
       << "\t-noviarotate (offer each single-cut via only as drawn, not also turned 90 degrees)\n"
@@ -135,6 +137,7 @@ int main(int argc, char* argv[])
   if (checkArg(argc, argv, "-admissible")) hrdb.setAdmissibleBound(true);
   if (checkArg(argc, argv, "-nopattern")) hrdb.setNoPattern(true);
   if (checkArg(argc, argv, "-softwires")) hrdb.setSoftWires(true);
+  if (checkArg(argc, argv, "-guidedsym")) hrdb.setHardSymmetry(false);
   if (checkArg(argc, argv, "-satpoint")) hrdb.setSatPoint(true);
   if (checkArg(argc, argv, "-reserveexcluded")) hrdb.setReserveExcluded(true);
   if (checkArg(argc, argv, "-noviarotate")) hrdb.setViaRotate(false);
@@ -201,6 +204,7 @@ int main(int argc, char* argv[])
        << (hrdb.admissibleBound() ? " -admissible" : "")
        << (hrdb.noPattern() ? " -nopattern" : "")
        << (hrdb.softWires() ? " -softwires" : "")
+       << (hrdb.hardSymmetry() ? "" : " -guidedsym")
        << (hrdb.satPoint() ? " -satpoint" : "")
        << (hrdb.reserveExcluded() ? " -reserveexcluded" : "")
        << (hrdb.viaRotate() ? "" : " -noviarotate")
@@ -237,12 +241,15 @@ int main(int argc, char* argv[])
     if (const int sym = netlist.symUnrouted()) {
       COUT << "hierarchies with symmetric pairs left " << sym
            << " net(s) open; re-routing them with the symmetry guide on planar distance only\n";
+      const bool hard = hrdb.hardSymmetry();
       hrdb.setGuideLayers(false);       // the partner may leave the guide's layers to let other nets by
+      hrdb.setHardSymmetry(false);      // and need not be the first net's exact mirror
       netlist.reroute(hrdb, outdir, true);
       if (netlist.symUnrouted() > sym) {
         COUT << "planar guide left " << netlist.symUnrouted() << " net(s) open against " << sym
              << "; re-routing those hierarchies as before\n";
         hrdb.setGuideLayers(true);
+        hrdb.setHardSymmetry(hard);
         netlist.reroute(hrdb, outdir, true);
       }
       open = netlist.totalUnrouted();

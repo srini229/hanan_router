@@ -326,9 +326,12 @@ void Module::route(Router::Router& router, const std::string& outdir)
     std::unordered_set<const Net*> symNets;                 // every net in any pair
     std::unordered_map<const Net*, const SymPair*> secondToPair;  // second net -> pair
     std::unordered_map<const Net*, const SymPair*> netToPair;     // either net -> its pair
+    std::unordered_map<const Net*, const SymPair*> firstToPair;   // first net -> pair
+    std::unordered_set<const Net*> exactFirst;                    // first nets routed clear of the mirrored obstacles
     for (auto& sp : _sympairs) {
       symNets.insert(sp.first);
       symNets.insert(sp.second);
+      firstToPair[sp.first] = &sp;
       secondToPair[sp.second] = &sp;
       netToPair[sp.first] = &sp;
       netToPair[sp.second] = &sp;
@@ -599,6 +602,122 @@ void Module::route(Router::Router& router, const std::string& outdir)
       return batches;
     };
 
+    // -hardsym, first net: also keep clear of the mirror of every other net's metal and pins, so that its own mirror
+    // is legal for the partner. The partner's pins are left out of the mirrored set: their mirror is this net's own.
+    auto routeFirstExact = [&](size_t i, const SymPair& sp, const Geom::LayerRects& routed,
+                               const Geom::LayerRects& unrouted, const Geom::LayerRects& obs) -> bool {
+      bool vert; int pos;
+      resolveAxis(sp, vert, pos);
+      std::set<std::tuple<int, int, int, int, int>> partner;
+      for (auto virt : {true, false})
+        for (auto& pin : (virt ? sp.second->virtualpins() : sp.second->pins()))
+          for (auto& p : pin->ports())
+            for (auto& l : p->shapes())
+              for (auto& r : l.second) partner.emplace(l.first, r.xmin(), r.ymin(), r.xmax(), r.ymax());
+      Geom::LayerRects others;
+      for (auto& l : unrouted)
+        for (auto& r : l.second)
+          if (!partner.count(std::make_tuple(l.first, r.xmin(), r.ymin(), r.xmax(), r.ymax()))) others[l.first].push_back(r);
+      Geom::LayerRects l1 = routed, l2 = unrouted;
+      Geom::MergeLayerRects(l1, mirrorShapes(routed, vert, pos));
+      Geom::MergeLayerRects(l2, mirrorShapes(others, vert, pos));
+      nets[i]->route(router, l1, l2, obs, true, _uu, _bbox, _name);
+      if (!nets[i]->unrouted()) { exactFirst.insert(nets[i]); return true; }
+      exactFirst.erase(nets[i]);
+      COUT << "exact symmetry : " << nets[i]->name() << " does not route clear of the mirrored obstacles; routing the pair as before\n";
+      nets[i]->clearRoutes();
+      return false;
+    };
+    // -hardsym, second net: its partner's exact mirror, if that keeps clear of the partner and reaches every pin
+    auto installMirror = [&](size_t i, const SymPair& sp) -> bool {
+      bool vert; int pos;
+      resolveAxis(sp, vert, pos);
+      const Net* a = sp.first;
+      const Geom::LayerRects m = mirrorShapes(a->routeShapes(), vert, pos);
+      std::string why;
+      for (auto& l : m) {
+        auto it = a->routeShapesWithPins().find(l.first);
+        if (it == a->routeShapesWithPins().end() || !why.empty()) continue;
+        const long sx = router.drcSpaceX(l.first), sy = router.drcSpaceY(l.first);
+        for (auto& q : l.second) {
+          for (auto& p : it->second) {
+            const long gx = std::max(p.xmin() - q.xmax(), q.xmin() - p.xmax());
+            const long gy = std::max(p.ymin() - q.ymax(), q.ymin() - p.ymax());
+            if (gx < sx && gy < sy) { why = "within spacing of " + a->name() + " on " + layerName(l.first); break; }
+          }
+          if (!why.empty()) break;
+        }
+      }
+      if (why.empty()) {
+        for (auto& pin : nets[i]->pins()) {
+          bool hit = false;
+          for (auto& p : pin->ports())
+            for (auto& l : p->shapes()) {
+              auto it = m.find(l.first);
+              if (it == m.end()) continue;
+              for (auto& r : l.second)
+                for (auto& q : it->second)
+                  hit |= r.xmin() <= q.xmax() && q.xmin() <= r.xmax() && r.ymin() <= q.ymax() && q.ymin() <= r.ymax();
+            }
+          if (!hit) { why = "misses pin " + pin->name(); break; }
+        }
+      }
+      if (!why.empty()) {
+        COUT << "exact symmetry : mirror of " << a->name() << " not used for " << nets[i]->name() << " (" << why
+             << "); routing it under the guide\n";
+        return false;
+      }
+      nets[i]->setRoute(m, a->wirelength());
+      COUT << "SYMMETRY module=" << _name << " pair=" << a->name() << ',' << nets[i]->name() << " axis="
+           << (vert ? "V:" : "H:") << pos << " maxdev=0 meandev=0 mirrored=1 exact\n";
+      return true;
+    };
+
+    // A pair can be exactly mirrored only if the placement mirrored its pins (each of the second net's pins overlaps
+    // the mirror of one of the first's) and the first net's pins lie on one side of the axis: a net that has to cross
+    // the axis meets its own mirror there.
+    std::unordered_map<const SymPair*, bool> mirrorable;
+    auto canMirror = [&](const SymPair& sp) -> bool {
+      auto it = mirrorable.find(&sp);
+      if (it != mirrorable.end()) return it->second;
+      bool vert; int pos;
+      resolveAxis(sp, vert, pos);
+      using namespace boost::polygon::operators;
+      bool ok = sp.first->routable() && sp.second->routable(), lo = false, hi = false;
+      for (auto& pin : sp.first->pins())
+        for (auto& p : pin->ports())
+          for (auto& l : p->shapes())
+            for (auto& r : l.second) {
+              lo |= vert ? r.xmin() < pos : r.ymin() < pos;
+              hi |= vert ? r.xmax() > pos : r.ymax() > pos;
+            }
+      if (lo && hi) ok = false;
+      for (auto& pb : sp.second->pins()) {
+        if (!ok) break;
+        std::map<int, PolySet> b;
+        for (auto& p : pb->ports())
+          for (auto& l : p->shapes())
+            for (auto& r : l.second) b[l.first] += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
+        bool held = false;
+        for (auto& pa : sp.first->pins()) {
+          for (auto& p : pa->ports())
+            for (auto& l : p->shapes())
+              for (auto& r : l.second) {
+                const Geom::Rect m = mirrorRect(r, vert, pos);
+                PolySet ms;
+                ms += PRect(m.xmin(), m.ymin(), m.xmax(), m.ymax());
+                auto bt = b.find(l.first);
+                if (bt != b.end() && bp::area(ms & bt->second) > 0) held = true;
+              }
+          if (held) break;
+        }
+        ok = held;
+      }
+      if (!ok && sp.first->routable() && sp.second->routable()) COUT << "exact symmetry : pair " << sp.first->name() << ',' << sp.second->name() << " is not mirrorable ("
+                    << (lo && hi ? "the first net's pins straddle the axis" : "pins not mirrored") << "); routed under the guide\n";
+      return mirrorable[&sp] = ok;
+    };
+
     auto routeBatch = [&](const std::vector<size_t>& batch,
                           const Geom::LayerRects& routedSnapshot,
                           const std::vector<Geom::LayerRects>& unroutedSets,
@@ -609,6 +728,14 @@ void Module::route(Router::Router& router, const std::string& outdir)
         size_t i = batch[0];
         router.setNetName(nets[i]->name());
         applyDebug(router, i);
+        if (router.hardSymmetry()) {
+          auto fit = firstToPair.find(nets[i]);
+          if (fit != firstToPair.end() && canMirror(*fit->second) &&
+              routeFirstExact(i, *fit->second, routedSnapshot, unroutedSets[0], obsSets[0])) return;
+          if (fit != firstToPair.end()) exactFirst.erase(nets[i]);
+          auto hit = secondToPair.find(nets[i]);
+          if (hit != secondToPair.end() && exactFirst.count(hit->second->first) && installMirror(i, *hit->second)) return;
+        }
         // If this net is the second of a symmetric pair and its partner routed,
         // install the mirrored partner route as an A* guide.
         bool vert = true; int pos = 0; bool guided = false;

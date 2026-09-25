@@ -559,6 +559,7 @@ class Router {
     bool _noPattern{false};        // -nopattern: skip L/Z pattern routing, A* only
     bool _softWires{false};        // -softwires: other nets' wires are not obstacles (a contention bound, not a legal route)
     bool _guideLayers{true};       // off: the symmetry guide charges planar distance only, not a pitch per layer off it
+    bool _hardSym{true};           // a pair's second net is the first's exact mirror where that is legal; -guidedsym off
     bool _satPoint{false};         // -satpoint: escape certificate uses the point model
     bool _reserveExcluded{false};  // -reserveexcluded: reserve an escape for every pin of an excluded net
     bool _viaRotate{true};         // -noviarotate: offer each single-cut via only as the layer file draws it
@@ -1064,6 +1065,8 @@ class Router {
     void setNoPattern(const bool b) { _noPattern = b; }
     void setSoftWires(const bool b) { _softWires = b; }
     void setGuideLayers(const bool b) { _guideLayers = b; }
+    void setHardSymmetry(const bool b) { _hardSym = b; }
+    bool hardSymmetry() const { return _hardSym; }
     bool guideLayers() const { return _guideLayers; }
     bool softWires() const { return _softWires; }
     void setSatPoint(const bool b) { _satPoint = b; }
