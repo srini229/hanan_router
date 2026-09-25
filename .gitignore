@@ -5,3 +5,4 @@ bin/*.o
 **/.DS_Store
 docs/**
 coverage/**
+pgo-profile/
