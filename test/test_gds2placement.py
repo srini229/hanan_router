@@ -63,7 +63,7 @@ class Gds2Placement(unittest.TestCase):
         gds = os.path.join(self.d, 'a.gds')
         lib.write_gds(gds)
 
-        out = os.path.join(self.d, 'a.placement_verilog.json')
+        out = os.path.join(self.d, 'a.netlist.json')
         rc, log = run_tool(gds, self.layers, out)
         self.assertEqual(rc, 0, log)
         with open(out) as f:
@@ -81,7 +81,7 @@ class Gds2Placement(unittest.TestCase):
         gds = os.path.join(self.d, 'b.gds')
         lib.write_gds(gds)
 
-        out = os.path.join(self.d, 'b.placement_verilog.json')
+        out = os.path.join(self.d, 'b.netlist.json')
         rc, log = run_tool(gds, self.layers, out)
         self.assertEqual(rc, 0, log)
         with open(out) as f:
@@ -101,7 +101,7 @@ class Gds2Placement(unittest.TestCase):
         gds = os.path.join(self.d, 'v.gds')
         lib.write_gds(gds)
 
-        out = os.path.join(self.d, 'v.placement_verilog.json')
+        out = os.path.join(self.d, 'v.netlist.json')
         rc, log = run_tool(gds, self.layers, out)
         self.assertEqual(rc, 0, log)
         with open(out) as f:
@@ -149,7 +149,7 @@ class Gds2Placement(unittest.TestCase):
         gds = os.path.join(self.d, 'c.gds')
         lib.write_gds(gds)
 
-        out = os.path.join(self.d, 'c.placement_verilog.json')
+        out = os.path.join(self.d, 'c.netlist.json')
         rc, log = run_tool(gds, self.layers, out)
         self.assertEqual(rc, 0, log)
         with open(out) as f:
@@ -193,7 +193,7 @@ class Gds2Placement(unittest.TestCase):
         gds = os.path.join(self.d, 'e.gds')
         lib.write_gds(gds)
 
-        out = os.path.join(self.d, 'e.placement_verilog.json')
+        out = os.path.join(self.d, 'e.netlist.json')
         rc, log = run_tool(gds, self.layers, out)
         self.assertEqual(rc, 0, log)
         with open(out) as f:
@@ -228,7 +228,7 @@ class Gds2Placement(unittest.TestCase):
             f.write('subckt DEV PIN1\n')
             f.write('ends\n')
 
-        out = os.path.join(self.d, 'd.placement_verilog.json')
+        out = os.path.join(self.d, 'd.netlist.json')
         rc, log = run_tool(gds, self.layers, out, netlist=netlist)
         self.assertEqual(rc, 0, log)
         with open(out) as f:

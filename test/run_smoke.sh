@@ -220,7 +220,7 @@ perf_parallel_speedup() {
   fi
   local dir="$OUTROOT/$name"
   rm -rf "$dir"; mkdir -p "$dir/seq" "$dir/par"
-  local pl="$dir/bench.placement_verilog.json" ndr="$dir/bench_ndr.json"
+  local pl="$dir/bench.netlist.json" ndr="$dir/bench_ndr.json"
   if ! python3 ./gen_parallel_bench.py 32 "$pl" "$ndr" >/dev/null 2>&1; then
     echo "FAIL $name :generator-failed;"; FAIL=$((FAIL+1))
     ERRS="${ERRS}$name:generator-failed;\n"; return
@@ -282,7 +282,7 @@ IN=../..   # inputs relative to each case directory
 
 # 1. base testcase from the README
 run_case basic "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef
 
 # 1b. def_pin_syntax: every NETS pin reference must be DEF's "( component pin )"
 #     syntax -- a bare instance name, then a bare pin name -- never the full
@@ -301,31 +301,31 @@ fi
 
 # 2. the simple single-module test
 run_case simple "BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test1.placement_verilog.json -l $IN/test.lef
+  -d $IN/layers.json -p $IN/test1.netlist.json -l $IN/test.lef
 
 # 3. NDR: per-module widths/spaces, preferred layers, virtual pin, clock driver
 LOGMUST="added virtual pin|clock net : D with driver : J_1/Y"
 run_case ndr_full "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/ndr.json
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef -ndr $IN/ndr.json
 
 # 4. NDR: do_not_route + per-net NDR + net-scoped obstacles
 LOGMUST="excluding net : Y|Adding obstacle to net : D"
 run_case ndr_donotroute "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr1.json
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef -ndr $IN/smoke_ndr1.json
 
 # 5. NDR: module-level obstacles applied to all nets
 # -v enables the verbose per-obstacle log this case asserts on
 LOGMUST="Adding obstacle to module TEST_CONC_0"
 run_case ndr_obstacles "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr2.json -v
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef -ndr $IN/smoke_ndr2.json -v
 
 # 6. NDR: module-wide preferred layers + custom via array
 run_case ndr_vias "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr3.json
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef -ndr $IN/smoke_ndr3.json
 
 # 7. coordinate precision rounding
 run_case precision "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -r 4
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef -r 4
 
 # 7b. outdir_no_slash: -o given without a trailing '/' (main.cpp appends one
 #     if missing). Every other case relies on run_case's own appended
@@ -334,24 +334,24 @@ run_case precision "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
 #     (parseArgs returns the first -o it finds) and still resolves to the
 #     current directory, so run_case's own file-existence checks apply as-is.
 run_case outdir_no_slash "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -o .
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef -o .
 
 # 8. debug plot outputs (HANAN_DEBUG_WIRE exercises the per-wire dump routines,
 #    HANAN_DEBUG_NET the per-net debug LEF dump)
 export HANAN_DEBUG_WIRE=1 HANAN_DEBUG_NET=X,Y
 #LOGMUST="writing sto to|sol("
 run_case debug_plot "BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test1.placement_verilog.json -l $IN/test.lef
+  -d $IN/layers.json -p $IN/test1.netlist.json -l $IN/test.lef
 unset HANAN_DEBUG_WIRE HANAN_DEBUG_NET
 
 # 9. NDR: per-layer directions, large_detour, routing_order, use_pin_width
 LOGMUST="use pin width : 1"
 run_case ndr_extras "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr4.json
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef -ndr $IN/smoke_ndr4.json
 
 # 10. layers.json with the optional MinL/MaxL/EndToEnd/Offset keys
 run_case layers_ext "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/smoke_layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+  -d $IN/smoke_layers.json -p $IN/test.netlist.json -l $IN/test.lef
 
 # 10b. layers_float_width: identical to layers.json except M1's "Width" is
 #      written as 32.0 (a JSON float) instead of 32 (a JSON int). Every
@@ -363,31 +363,31 @@ run_case layers_ext "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
 #      confirms M1 (layer index 2) parses to width 32, not 0.
 LOGMUST="layer : 2 width : 32 "
 run_case layers_float_width "TEST_CONC_0.def,BLOCK_B_CONC_0.def" -v \
-  -d $IN/layers_float_width.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+  -d $IN/layers_float_width.json -p $IN/test.netlist.json -l $IN/test.lef
 
 # 11. leaf LEF with an OBS section (macro obstacles transformed into instances)
 run_case lef_obs "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/smoke_obs.lef
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/smoke_obs.lef
 
 # 12. mirrored instance placement (sX/sY = -1, orientation S in the DEF)
 run_case flipped "BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/smoke_flip.placement_verilog.json -l $IN/test.lef
+  -d $IN/layers.json -p $IN/smoke_flip.netlist.json -l $IN/test.lef
 
 # 13. many obstacles on one layer (forces R-tree node splits)
 LOGMUST="Adding obstacle to module TEST_CONC_0"
 run_case many_obstacles "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/smoke_ndr5.json -v
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef -ndr $IN/smoke_ndr5.json -v
 
 # 14. hierarchical reuse: route once, then reload the interim LEFs (-uil)
 run_case uil_stage "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef
 LOGMUST="loading macro BLOCK_B_CONC_0"
 run_case uil_reuse "" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -uil $IN/smoke_out/uil_stage
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef -uil $IN/smoke_out/uil_stage
 
 # 15. ViaArrayGenerators testcase from the README
 run_case ViaArrayGenerators "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers_viagen.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+  -d $IN/layers_viagen.json -p $IN/test.netlist.json -l $IN/test.lef
 
 # 15b. ViaArrayGeneratorsMixed: two V1 via types from the array used at different
 #      locations in the same net.  NDR obstacles on M1 restrict which type fits
@@ -401,7 +401,7 @@ run_case ViaArrayGenerators "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
 #          blocked → NumX=2,NumY=1 is selected.
 LOGMUST="Adding obstacle to module VG2VT_CONC_0"
 run_case ViaArrayGeneratorsMixed "VG2VT_CONC_0.def" \
-  -d $IN/layers_viagen.json -p $IN/viagen_mixed.placement_verilog.json \
+  -d $IN/layers_viagen.json -p $IN/viagen_mixed.netlist.json \
   -l $IN/test.lef -ndr $IN/viagen_mixed_ndr.json -v
 
 # 15c. via_array_venc: V1's ViaCut is a ViaArrayGenerators array of two entries
@@ -423,14 +423,14 @@ LOGMUST="via : l: 2 u: 3 c: 8 center: (0,0) lb: \[(-36,-36),(36,36)\] ub: \[(-36
 #      (-v 1: the via table is per-net detail, not a result, so it only prints
 #      above the default verbosity)
 run_case via_array_venc "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers_via_venc.json -p $IN/test.placement_verilog.json -l $IN/test.lef -v 1
+  -d $IN/layers_via_venc.json -p $IN/test.netlist.json -l $IN/test.lef -v 1
 
 # 16. use_pin_width_escape: pins narrower than the layer width block standard routing
 #     (OBS column at x=36..80 bloats to cover pin centre x=4 with standard widthy=32,
 #     but not with narrow widthy=8 derived from the pin x-span)
 #LOGMUST="retrying.*with pin width escape|sol found with narrow escape for"
 run_case pin_width_escape "NARROW_M_CONC_0.def" \
-  -d $IN/layers_M1_O.json -p $IN/narrow_escape.placement_verilog.json \
+  -d $IN/layers_M1_O.json -p $IN/narrow_escape.netlist.json \
   -l $IN/narrow_escape.lef -ndr $IN/narrow_escape_ndr.json
 
 # 17. m1_pin_adj_obstacle: net A (routed first, smaller HPWL) would naturally run
@@ -443,7 +443,7 @@ run_case pin_width_escape "NARROW_M_CONC_0.def" \
 #     shapes, i.e. unrouted, without the fix.
 NETROUTED="B"
 run_case m1_pin_adj_obstacle "M1ADJ_CONC_0.def" \
-  -d $IN/layers.json -p $IN/m1adj_escape.placement_verilog.json \
+  -d $IN/layers.json -p $IN/m1adj_escape.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/m1adj_escape_ndr.json
 
 # 18. unconnected_pin: instance I_U has a pin (M1) that is not wired to any net,
@@ -454,7 +454,7 @@ run_case m1_pin_adj_obstacle "M1ADJ_CONC_0.def" \
 LOGMUST="protecting unconnected pin I_U/P"
 NETROUTED="A"
 run_case unconnected_pin "UNCONN_CONC_0.def" \
-  -d $IN/layers.json -p $IN/unconnected_pin.placement_verilog.json -l $IN/m1adj_escape.lef
+  -d $IN/layers.json -p $IN/unconnected_pin.netlist.json -l $IN/m1adj_escape.lef
 
 # 19. sat_pin_escape: pin I_A0 is fully boxed (M1 obstacles on all four sides +
 #     an M2 obstacle over it, and M1 is the bottom layer), so it has neither a
@@ -463,7 +463,7 @@ run_case unconnected_pin "UNCONN_CONC_0.def" \
 LOGMUST="pin escape SAT (pre-route) : BOXEDPIN_CONC_0 is infeasible|no escape for pin : BOXEDPIN_CONC_0/I_A0/P"
 ALLOW_UNROUTED=1
 run_case sat_pin_escape "" \
-  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -d $IN/layers.json -p $IN/boxedpin.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
 
 # 19a. sat_pin_escape_point: the same boxed pin under -satpoint; a pin with no escape
@@ -471,7 +471,7 @@ run_case sat_pin_escape "" \
 LOGMUST="model=point|no escape for pin : BOXEDPIN_CONC_0/I_A0/P net "
 ALLOW_UNROUTED=1
 run_case sat_pin_escape_point "" \
-  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -d $IN/layers.json -p $IN/boxedpin.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json -satpoint
 
 # 19b. sat_spacing_gap: same boxed-pin layout as above, but the M2 obstacle
@@ -486,7 +486,7 @@ run_case sat_pin_escape_point "" \
 LOGMUST="pin escape SAT (pre-route) : BOXEDPIN_CONC_0 is infeasible|no escape for pin : BOXEDPIN_CONC_0/I_A0/P"
 ALLOW_UNROUTED=1
 run_case sat_spacing_gap "" \
-  -d $IN/layers.json -p $IN/sat_spacing_gap.placement_verilog.json \
+  -d $IN/layers.json -p $IN/sat_spacing_gap.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/sat_spacing_gap_ndr.json
 
 # 19c. sat_clash: two DIFFERENT nets (A, B) each have one pin (I_A0, I_B0)
@@ -506,7 +506,7 @@ run_case sat_spacing_gap "" \
 LOGMUST="pin escape SAT (pre-route) : SATCLASH_CONC_0 is infeasible (escapes mutually conflict (unsat))"
 ALLOW_UNROUTED=1
 run_case sat_clash "" \
-  -d $IN/layers.json -p $IN/sat_clash.placement_verilog.json \
+  -d $IN/layers.json -p $IN/sat_clash.netlist.json \
   -l $IN/sat_clash.lef -ndr $IN/sat_clash_ndr.json
 
 # 20. reorder: 5 nets criss-cross through one capacity-limited gap in a wall (left
@@ -520,7 +520,7 @@ run_case sat_clash "" \
 LOGMUST="promoting blocked nets up the routing order"
 NETROUTED="N0|N1|N2|N3|N4"
 run_case reorder "REORDER_CONC_0.def" \
-  -d $IN/layers.json -p $IN/reorder.placement_verilog.json \
+  -d $IN/layers.json -p $IN/reorder.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json
 
 # 21. reorder_disabled: the same case with -reorder 0 turns the net-ordering search
@@ -531,21 +531,21 @@ run_case reorder "REORDER_CONC_0.def" \
 LOGMUST="ROUTE_SUMMARY module=REORDER_CONC_0 nets=5 unrouted=1"
 ALLOW_UNROUTED=1
 run_case reorder_disabled "" \
-  -d $IN/layers.json -p $IN/reorder.placement_verilog.json \
+  -d $IN/layers.json -p $IN/reorder.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json -reorder 0 -viacost 0
 
 # 22-25. argument-handling / error paths (cover main.cpp CLI parsing and the
 #     std::cerr diagnostics). Each asserts the expected message on stderr/err.log.
 cli_check usage_no_args   "usage :"                                       # argc<=1 -> usage text
 cli_check missing_layers  "missing or unable to read layers" \
-  -d $IN/does_not_exist.json -p $IN/reorder.placement_verilog.json -l $IN/m1adj_escape.lef
+  -d $IN/does_not_exist.json -p $IN/reorder.netlist.json -l $IN/m1adj_escape.lef
 cli_check bad_precision   "invalid -r precision" \
-  -d $IN/layers.json -p $IN/reorder.placement_verilog.json -l $IN/m1adj_escape.lef -r notanint
+  -d $IN/layers.json -p $IN/reorder.netlist.json -l $IN/m1adj_escape.lef -r notanint
 cli_check bad_reorder_arg "invalid -reorder value" \
-  -d $IN/layers.json -p $IN/reorder.placement_verilog.json -l $IN/m1adj_escape.lef \
+  -d $IN/layers.json -p $IN/reorder.netlist.json -l $IN/m1adj_escape.lef \
   -ndr $IN/reorder_ndr.json -reorder xyz
 cli_check bad_threads_arg "invalid -threads value" \
-  -d $IN/layers.json -p $IN/reorder.placement_verilog.json -l $IN/m1adj_escape.lef \
+  -d $IN/layers.json -p $IN/reorder.netlist.json -l $IN/m1adj_escape.lef \
   -ndr $IN/reorder_ndr.json -threads xyz
 # Netlist input-error paths (cover Netlist.cpp open/parse failure handling).
 cli_check no_placement_file "unable to open placement file" \
@@ -553,7 +553,7 @@ cli_check no_placement_file "unable to open placement file" \
 cli_check bad_placement_json "parse error" \
   -d $IN/layers.json -p $IN/bad_placement.json -l $IN/m1adj_escape.lef
 cli_check no_lef_file "unable to open leffile" \
-  -d $IN/layers.json -p $IN/reorder.placement_verilog.json -l $IN/does_not_exist.lef
+  -d $IN/layers.json -p $IN/reorder.netlist.json -l $IN/does_not_exist.lef
 # bad_layers_json: a layers.json whose UnitR.Mean is a string instead of a
 #     number. LayerInfo::LayerInfo() read this via nlohmann's .value<float>(),
 #     which throws json::type_error on a type mismatch (unlike a missing key,
@@ -562,7 +562,7 @@ cli_check no_lef_file "unable to open leffile" \
 #     process (not a clean "invalid input" message). Must degrade to a clean
 #     diagnostic instead of terminate()/SIGABRT.
 cli_check bad_layers_json "invalid UnitR" \
-  -d $IN/bad_layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef
+  -d $IN/bad_layers.json -p $IN/test.netlist.json -l $IN/test.lef
 
 # bad_ndr_via: an NDR "vias" WidthX given as a JSON string instead of a
 #     number. readNDR() read every via field (WidthX/Y, SpaceX/Y, NumX/Y) via
@@ -573,7 +573,7 @@ cli_check bad_layers_json "invalid UnitR" \
 #     silently default that one field to 0 and route normally, matching how
 #     every other malformed-but-present NDR field in this codebase behaves.
 run_case bad_ndr_via "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
-  -d $IN/layers.json -p $IN/test.placement_verilog.json -l $IN/test.lef -ndr $IN/bad_ndr_via.json
+  -d $IN/layers.json -p $IN/test.netlist.json -l $IN/test.lef -ndr $IN/bad_ndr_via.json
 
 # 26. reorder_reroute: a harder 6-net criss-cross (gap fits fewer than 6) that the
 #     reorder search improves on (promotes blocked nets) but cannot fully solve;
@@ -586,7 +586,7 @@ run_case bad_ndr_via "TEST_CONC_0.def,BLOCK_B_CONC_0.def" \
 LOGMUST="promoting blocked nets up the routing order"
 ALLOW_UNROUTED=1
 run_case reorder_reroute "REORDER_CONC_0.def" \
-  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -d $IN/layers.json -p $IN/reorder_reroute.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
 
 # 27. m2_pin_escape: a 2-pin net whose pins sit on M2 (not the bottom layer M1).
@@ -594,7 +594,7 @@ run_case reorder_reroute "REORDER_CONC_0.def" \
 #     M1-only pins never trigger. LOGMUST checks the SAT ran for the M2 module.
 LOGMUST="pin escape SAT (pre-route) : all 2 pins in M2T_CONC_0"
 run_case m2_pin_escape "M2T_CONC_0.def" \
-  -d $IN/layers.json -p $IN/m2pin.placement_verilog.json -l $IN/m2pin.lef
+  -d $IN/layers.json -p $IN/m2pin.netlist.json -l $IN/m2pin.lef
 
 # 28. ndr_via_detour: NDR forces net A (M1 pins) onto preferred_layers M3/M4, so
 #     it must via UP off M1 and via DOWN back onto M1 -- exercising multi-layer
@@ -605,7 +605,7 @@ run_case m2_pin_escape "M2T_CONC_0.def" \
 #     with vias) confirms the via-down + large-detour path worked.
 NETROUTED="A"
 run_case ndr_via_detour "VIADET_CONC_0.def" \
-  -d $IN/layers.json -p $IN/ndr_viadetour.placement_verilog.json \
+  -d $IN/layers.json -p $IN/ndr_viadetour.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/ndr_viadetour.json
 
 # 29. global_net: a non-empty "global_signals" list (VDD) adds the global net as a
@@ -613,20 +613,20 @@ run_case ndr_via_detour "VIADET_CONC_0.def" \
 #     LOGMUST confirms the global net was created.
 LOGMUST="net : VDD num pins"
 run_case global_net "GLOB_CONC_0.def" \
-  -d $IN/layers.json -p $IN/global_net.placement_verilog.json -l $IN/m1adj_escape.lef
+  -d $IN/layers.json -p $IN/global_net.netlist.json -l $IN/m1adj_escape.lef
 
 # 29a. global_hier: a sub-module uses global VDD but its instance's fa_map omits
 #      it, as ALIGN writes it; the top must still route its VDD to the sub-module.
 LOGMUST="routing : VDD__X_SUB/VDD_port_0__I_T/P_port_0"
 run_case global_hier "GH_CONC_0.def" \
-  -d $IN/layers.json -p $IN/global_hier.placement_verilog.json -l $IN/m1adj_escape.lef
+  -d $IN/layers.json -p $IN/global_hier.netlist.json -l $IN/m1adj_escape.lef
 
 # 29a2. -nopattern: every wire goes to A*, none is accepted as an L/Z pattern,
 #       and the pre-route escape check reports its instance size and outcome.
 LOGMUST="pin escape SAT stats (pre-route) : module=GH_CONC_0 model=whole pins="
 LOGNOT="sol found with pattern"
 run_case nopattern "GH_CONC_0.def" \
-  -d $IN/layers.json -p $IN/global_hier.placement_verilog.json -l $IN/m1adj_escape.lef -nopattern
+  -d $IN/layers.json -p $IN/global_hier.netlist.json -l $IN/m1adj_escape.lef -nopattern
 
 # 29b. symmetric_nets: two diagonal nets (INP, INM) placed as mirror images about
 #      x=1000, with a routing obstacle ON THE INP SIDE ONLY. Unguided, INP must
@@ -639,7 +639,7 @@ run_case nopattern "GH_CONC_0.def" \
 #      here is auto-detected from the nets' pin geometry (no explicit override).
 LOGMUST="symmetric net : routing INM guided by INP|SYMMETRY module=SYM_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
 run_case symmetric_nets "SYM_CONC_0.def" \
-  -d $IN/layers.json -p $IN/symmetric.placement_verilog.json -l $IN/symmetric.lef \
+  -d $IN/layers.json -p $IN/symmetric.netlist.json -l $IN/symmetric.lef \
   -ndr $IN/symmetric_ndr.json
 
 # 29c. same layout but with the mirror axis given explicitly ("V": 1000) instead
@@ -647,7 +647,7 @@ run_case symmetric_nets "SYM_CONC_0.def" \
 #      identical: INM mirrors INP's detour exactly (maxdev=0).
 LOGMUST="SYMMETRY module=SYM_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
 run_case symmetric_nets_axis "SYM_CONC_0.def" \
-  -d $IN/layers.json -p $IN/symmetric.placement_verilog.json -l $IN/symmetric.lef \
+  -d $IN/layers.json -p $IN/symmetric.netlist.json -l $IN/symmetric.lef \
   -ndr $IN/symmetric_axis_ndr.json
 
 # 29d. symmetric_s: a harder symmetric case whose routes are S-shaped. Each net's
@@ -660,7 +660,7 @@ run_case symmetric_nets_axis "SYM_CONC_0.def" \
 #      straight wire -- so maxdev=0 means a full S was mirrored, not a trivial line.
 LOGMUST="SYMMETRY module=SYMS_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
 run_case symmetric_s "SYMS_CONC_0.def" \
-  -d $IN/layers.json -p $IN/symmetric_s.placement_verilog.json -l $IN/symmetric.lef \
+  -d $IN/layers.json -p $IN/symmetric_s.netlist.json -l $IN/symmetric.lef \
   -ndr $IN/symmetric_s_ndr.json
 sdef="$OUTROOT/symmetric_s/SYMS_CONC_0.def"
 if awk '
@@ -681,7 +681,7 @@ fi
 LOGMUST="has pin(s) coincident with net|merging them into one connected net"
 NETROUTED="A"
 run_case coincident_pin "COIN_CONC_0.def" \
-  -d $IN/layers.json -p $IN/coincident_pin.placement_verilog.json -l $IN/m1adj_escape.lef
+  -d $IN/layers.json -p $IN/coincident_pin.netlist.json -l $IN/m1adj_escape.lef
 
 # zero_length_sol: net A has two pins of the SAME net at the exact same
 #     location (unlike coincident_pin above, which is two DIFFERENT nets
@@ -695,14 +695,14 @@ run_case coincident_pin "COIN_CONC_0.def" \
 #     default unrouted=0 check (via ROUTE_SUMMARY) is what catches this;
 #     NETROUTED isn't used here since this specific connection needs no via.
 run_case zero_length_sol "ZEROLEN_CONC_0.def" \
-  -d $IN/layers.json -p $IN/zero_length_sol.placement_verilog.json -l $IN/zero_length_sol.lef
+  -d $IN/layers.json -p $IN/zero_length_sol.netlist.json -l $IN/zero_length_sol.lef
 
 # 31. net30: a 30-net module (30 parallel 2-pin nets on a 120-unit pitch) -- a
 #     larger throughput check. All thirty route; the harness flags any unrouted
 #     net via ROUTE_SUMMARY. LOGMUST asserts the full 30-net, 0-unrouted summary.
 LOGMUST="ROUTE_SUMMARY module=NET30_CONC_0 nets=30 unrouted=0"
 run_case net30 "NET30_CONC_0.def" \
-  -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
+  -d $IN/layers.json -p $IN/net30.netlist.json -l $IN/m1adj_escape.lef
 
 # 31b. net30 routed in parallel (-threads 4): the 30 disjoint nets get grouped
 #      into non-overlapping batches and routed concurrently. Must still route all
@@ -711,7 +711,7 @@ run_case net30 "NET30_CONC_0.def" \
 #      deterministic: pins are emitted name-sorted, not in pointer order).
 LOGMUST="ROUTE_SUMMARY module=NET30_CONC_0 nets=30 unrouted=0"
 run_case net30_threads "NET30_CONC_0.def" \
-  -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef \
+  -d $IN/layers.json -p $IN/net30.netlist.json -l $IN/m1adj_escape.lef \
   -threads 4
 if diff -q "$OUTROOT/net30/NET30_CONC_0.def" \
            "$OUTROOT/net30_threads/NET30_CONC_0.def" >/dev/null 2>&1; then
@@ -734,7 +734,7 @@ fi
 #      This must simply not crash; the fixture has no obstacles so once fixed
 #      the net trivially routes.
 run_case noport_pin "NOPORTNET_CONC_0.def" \
-  -d $IN/layers.json -p $IN/noport.placement_verilog.json -l $IN/noport.lef
+  -d $IN/layers.json -p $IN/noport.netlist.json -l $IN/noport.lef
 
 # 32. via_escape_source_blocked: net A's source pin I_A0 is boxed with M1 walls
 #     above/below (10-unit gap, so same-layer escape is blocked at full M1
@@ -744,7 +744,7 @@ run_case noport_pin "NOPORTNET_CONC_0.def" \
 #     ALLOW_UNROUTED proves the fixture genuinely needs the feature below.
 ALLOW_UNROUTED=1
 run_case via_escape_source_blocked "" \
-  -d $IN/layers.json -p $IN/via_escape.placement_verilog.json \
+  -d $IN/layers.json -p $IN/via_escape.netlist.json \
   -l $IN/via_escape.lef -ndr $IN/via_escape_ndr.json
 
 # 33. via_escape_source_relaxed: same fixture as above, routed with -relaxvia.
@@ -757,7 +757,7 @@ run_case via_escape_source_blocked "" \
 LOGMUST="retrying A.*with via escape relaxed at source|sol found with via escape relaxed for A"
 NETROUTED="A"
 run_case via_escape_source_relaxed "VESC_CONC_0.def" -relaxvia \
-  -d $IN/layers.json -p $IN/via_escape.placement_verilog.json \
+  -d $IN/layers.json -p $IN/via_escape.netlist.json \
   -l $IN/via_escape.lef -ndr $IN/via_escape_ndr.json
 
 # 34. via_escape_both_blocked: like case 32, but I_A1 (target) is boxed with
@@ -766,7 +766,7 @@ run_case via_escape_source_relaxed "VESC_CONC_0.def" -relaxvia \
 #     sides relaxed, not just source.
 ALLOW_UNROUTED=1
 run_case via_escape_both_blocked "" \
-  -d $IN/layers.json -p $IN/via_escape_both.placement_verilog.json \
+  -d $IN/layers.json -p $IN/via_escape_both.netlist.json \
   -l $IN/via_escape.lef -ndr $IN/via_escape_both_ndr.json
 
 # 35. via_escape_both_relaxed: same both-boxed fixture, routed with -relaxvia.
@@ -778,18 +778,18 @@ run_case via_escape_both_blocked "" \
 LOGMUST="via escape relaxed at source failed for A.*also relaxing at target|sol found with via escape relaxed for A"
 NETROUTED="A"
 run_case via_escape_both_relaxed "VESC2_CONC_0.def" -relaxvia \
-  -d $IN/layers.json -p $IN/via_escape_both.placement_verilog.json \
+  -d $IN/layers.json -p $IN/via_escape_both.netlist.json \
   -l $IN/via_escape.lef -ndr $IN/via_escape_both_ndr.json
 
 # 31. maze30 (opt-in stress, ~25s): the same 30 nets crossing a staggered-gap
 #     wall, every net flagged large_detour so it can weave around it. Deliberately
 #     hard -- the router leaves ~1/3 of the nets unrouted. Off by default because
 #     of its runtime; run with:  MAZE_STRESS=1 ./run_smoke.sh
-#     Solution quality: python3 maze_quality.py <def> maze30.placement_verilog.json
+#     Solution quality: python3 maze_quality.py <def> maze30.netlist.json
 if [ -n "${MAZE_STRESS:-}" ]; then
   ALLOW_UNROUTED=1
   run_case maze30 "MAZE_CONC_0.def" \
-    -d $IN/layers.json -p $IN/maze30.placement_verilog.json \
+    -d $IN/layers.json -p $IN/maze30.netlist.json \
     -l $IN/m1adj_escape.lef -ndr $IN/maze30_ndr.json
 fi
 
@@ -799,7 +799,7 @@ fi
 #     the larger of the two, naming both numbers and the pitch that would be
 #     needed. Covers DRC::MetalLayer::setMinSpace, which no other fixture sets.
 run_case minspacing "BLOCK_B_CONC_0.def" \
-  -d $IN/layers_minspace.json -p $IN/test1.placement_verilog.json -l $IN/test.lef
+  -d $IN/layers_minspace.json -p $IN/test1.netlist.json -l $IN/test.lef
 MSLOG="$OUTROOT/minspacing/err.log"
 if grep -q "layer M1 pitch gives spacing 24 but MinSpacing is 40" "$MSLOG" 2>/dev/null; then
   echo "PASS minspacing_warning"
@@ -818,7 +818,7 @@ fi
 #     a non-default weight parses and still produces the exact mirror.
 LOGMUST="symmetric net : routing INM guided by INP|SYMMETRY module=SYM_CONC_0 pair=INP,INM axis=V:1000 maxdev=0 "
 run_case deviation_cost "SYM_CONC_0.def" \
-  -d $IN/layers.json -p $IN/symmetric.placement_verilog.json -l $IN/symmetric.lef \
+  -d $IN/layers.json -p $IN/symmetric.netlist.json -l $IN/symmetric.lef \
   -ndr $IN/symmetric_devcost_ndr.json
 
 # 38. blocked-via diagnostics: the via_escape fixture (net A cannot route without
@@ -830,7 +830,7 @@ run_case deviation_cost "SYM_CONC_0.def" \
 export HANAN_DEBUG_WIRE=1
 ALLOW_UNROUTED=1
 run_case via_escape_blocked_diag "" \
-  -d $IN/layers.json -p $IN/via_escape.placement_verilog.json \
+  -d $IN/layers.json -p $IN/via_escape.netlist.json \
   -l $IN/via_escape.lef -ndr $IN/via_escape_ndr.json
 unset HANAN_DEBUG_WIRE
 if grep -lq "PIN DRC_BLOCKED_VIA" "$OUTROOT/via_escape_blocked_diag"/ATTEMPT_*.lef 2>/dev/null; then
@@ -883,21 +883,21 @@ fi
 #     hopeless setting, so the pair proves the cap binds rather than being
 #     ignored -- same fixture, routed at the default budget and open at 1.
 cli_check bad_maxexp_arg "invalid -maxexp value" \
-  -maxexp zzz -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
+  -maxexp zzz -d $IN/layers.json -p $IN/net30.netlist.json -l $IN/m1adj_escape.lef
 LOGMUST=" -maxexp 1 "
 ALLOW_UNROUTED=1
 run_case maxexp_budget "" -maxexp 1 \
-  -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
+  -d $IN/layers.json -p $IN/net30.netlist.json -l $IN/m1adj_escape.lef
 
 # 35. escapepitch: escape points closer together than a wire pitch cannot serve
 #     as distinct tracks, so only the one nearest each pin rectangle's centre is
 #     seeded. -escapepitch 0 turns that off; the thinned run must seed strictly
 #     fewer entry points, and both must still route all 30 nets.
 run_case escapepitch_on "ESCB_CONC_0.def" \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -d $IN/layers.json -p $IN/escblock.netlist.json \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 run_case escapepitch_off "ESCB_CONC_0.def" -escapepitch 0 \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -d $IN/layers.json -p $IN/escblock.netlist.json \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 log_count_lt escapepitch_thins escapepitch_on escapepitch_off "^num src :" 4
 
@@ -908,11 +908,11 @@ log_count_lt escapepitch_thins escapepitch_on escapepitch_off "^num src :" 4
 #     behaviour and the "pruned" line must then be absent.
 LOGMUST="pruned 1 blocked escape point"
 run_case blocked_escape_prune "ESCB_CONC_0.def" \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -d $IN/layers.json -p $IN/escblock.netlist.json \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 LOGNOT="blocked escape point"
 run_case blocked_escape_keep "ESCB_CONC_0.def" -keepblockedescapes \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -d $IN/layers.json -p $IN/escblock.netlist.json \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 
 # 37. seedpolys: splitpin's pin is four disjoint M1 stripes, so each end of the
@@ -921,10 +921,10 @@ run_case blocked_escape_keep "ESCB_CONC_0.def" -keepblockedescapes \
 #     the marker must be absent.
 LOGMUST="seeding 2 of 4 source pin polygon|seeding 2 of 4 target pin polygon"
 run_case seedpolys_limit "SPLIT_CONC_0.def" -seedpolys 2 -seedpolysalways \
-  -d $IN/layers.json -p $IN/splitpin.placement_verilog.json -l $IN/splitpin.lef
+  -d $IN/layers.json -p $IN/splitpin.netlist.json -l $IN/splitpin.lef
 LOGNOT="pin polygon(s) nearest the other end"
 run_case seedpolys_default "SPLIT_CONC_0.def" \
-  -d $IN/layers.json -p $IN/splitpin.placement_verilog.json -l $IN/splitpin.lef
+  -d $IN/layers.json -p $IN/splitpin.netlist.json -l $IN/splitpin.lef
 
 # 38. reorder budget: a block whose base route is already expensive cannot afford
 #     ten reorder passes, so the count is scaled by measured search work. Needs a
@@ -933,12 +933,12 @@ run_case seedpolys_default "SPLIT_CONC_0.def" \
 LOGMUST="capping reorder at"
 ALLOW_UNROUTED=1
 run_case reorder_budget "REORDER_CONC_0.def" -reorderbudget 1 \
-  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -d $IN/layers.json -p $IN/reorder_reroute.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
 LOGNOT="capping reorder at"
 ALLOW_UNROUTED=1
 run_case reorder_uncapped "REORDER_CONC_0.def" -reorderbudget 0 \
-  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -d $IN/layers.json -p $IN/reorder_reroute.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
 
 # 39. reorder_converged: passes that stop improving on the best end the loop
@@ -946,7 +946,7 @@ run_case reorder_uncapped "REORDER_CONC_0.def" -reorderbudget 0 \
 LOGMUST="no improvement in"
 ALLOW_UNROUTED=1
 run_case reorder_converged "REORDER_CONC_0.def" \
-  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -d $IN/layers.json -p $IN/reorder_reroute.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
 
 # 40. search_skips: a wire that keeps failing is not searched again from
@@ -957,7 +957,7 @@ run_case reorder_converged "REORDER_CONC_0.def" \
 LOGMUST="identical problem already failed|no target is reachable from any source"
 ALLOW_UNROUTED=1
 run_case search_skips "REORDER_CONC_0.def" \
-  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -d $IN/layers.json -p $IN/reorder_reroute.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
 
 # 41. reachability_proof: a source pin boxed in on every side has no reachable
@@ -965,7 +965,7 @@ run_case search_skips "REORDER_CONC_0.def" \
 LOGMUST="no target is reachable from any source"
 ALLOW_UNROUTED=1
 run_case reachability_proof "" \
-  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -d $IN/layers.json -p $IN/boxedpin.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
 
 # 42. verbosity levels: -v is a level, not a switch. escblock emits exactly one
@@ -974,21 +974,21 @@ run_case reachability_proof "" \
 #     arrived and that nothing above it leaked down.
 LOGNOT="via : l:| points : |expanded :"
 run_case verbose_default "ESCB_CONC_0.def" \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -d $IN/layers.json -p $IN/escblock.netlist.json \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 LOGMUST=" -v 1|via : l:"
 LOGNOT=" points : |expanded :"
 run_case verbose_net "ESCB_CONC_0.def" -v \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -d $IN/layers.json -p $IN/escblock.netlist.json \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 LOGMUST=" -v 2| points : |via : l:"
 LOGNOT="expanded :"
 run_case verbose_element "ESCB_CONC_0.def" -v 2 \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -d $IN/layers.json -p $IN/escblock.netlist.json \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 LOGMUST=" -v 3|expanded :| points : |via : l:"
 run_case verbose_trace "ESCB_CONC_0.def" -v 3 \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -d $IN/layers.json -p $IN/escblock.netlist.json \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 same_defs verbose_defs_stable verbose_default verbose_trace "ESCB_CONC_0.def"
 
@@ -997,9 +997,9 @@ same_defs verbose_defs_stable verbose_default verbose_trace "ESCB_CONC_0.def"
 #     iteration nor tree order is available to lean on. Two identical runs must
 #     still produce identical DEFs.
 run_case determinism_a "NET30_CONC_0.def" \
-  -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
+  -d $IN/layers.json -p $IN/net30.netlist.json -l $IN/m1adj_escape.lef
 run_case determinism_b "NET30_CONC_0.def" \
-  -d $IN/layers.json -p $IN/net30.placement_verilog.json -l $IN/m1adj_escape.lef
+  -d $IN/layers.json -p $IN/net30.netlist.json -l $IN/m1adj_escape.lef
 same_defs determinism_stable determinism_a determinism_b "NET30_CONC_0.def"
 
 # 50. satfirst: the pre-route escape check names the pins with no guaranteed
@@ -1007,7 +1007,7 @@ same_defs determinism_stable determinism_a determinism_b "NET30_CONC_0.def"
 LOGMUST="1 net(s) with a pin the escape check could not clear, routing them first"
 ALLOW_UNROUTED=1
 run_case satfirst_order "" -satfirst \
-  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -d $IN/layers.json -p $IN/boxedpin.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
 
 # 51. hopeless_retire: a net the escape check flagged that then routes nothing
@@ -1017,12 +1017,12 @@ run_case satfirst_order "" -satfirst \
 LOGMUST="routed nothing in 1 attempt(s); not retrying it"
 ALLOW_UNROUTED=1
 run_case hopeless_retire "" -hopeless 1 \
-  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -d $IN/layers.json -p $IN/boxedpin.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
 LOGNOT="not retrying it"
 ALLOW_UNROUTED=1
 run_case hopeless_never "" -hopeless 0 \
-  -d $IN/layers.json -p $IN/boxedpin.placement_verilog.json \
+  -d $IN/layers.json -p $IN/boxedpin.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/boxedpin_ndr.json
 
 # 52. hopeless_needs_sat: retirement requires the escape check's flag as well as
@@ -1031,7 +1031,7 @@ run_case hopeless_never "" -hopeless 0 \
 LOGNOT="not retrying it"
 ALLOW_UNROUTED=1
 run_case hopeless_needs_sat "REORDER_CONC_0.def" -hopeless 1 \
-  -d $IN/layers.json -p $IN/reorder_reroute.placement_verilog.json \
+  -d $IN/layers.json -p $IN/reorder_reroute.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_reroute_ndr.json
 
 # 53. abutescape: a shape already touching a pin has no spacing to that pin left
@@ -1041,11 +1041,11 @@ run_case hopeless_needs_sat "REORDER_CONC_0.def" -hopeless 1 \
 #     this is the guard against it firing on merely-near shapes.
 LOGNOT="ABUT "
 run_case abut_not_near "ESCB_CONC_0.def" -abutescape \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -d $IN/layers.json -p $IN/escblock.netlist.json \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 # and with the flag off nothing changes for anyone
 run_case abut_off "ESCB_CONC_0.def" \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json \
+  -d $IN/layers.json -p $IN/escblock.netlist.json \
   -l $IN/escblock.lef -ndr $IN/escblock_ndr.json
 same_defs abut_no_effect_when_clear abut_off abut_not_near "ESCB_CONC_0.def"
 
@@ -1056,13 +1056,13 @@ same_defs abut_no_effect_when_clear abut_off abut_not_near "ESCB_CONC_0.def"
 #     design must not report a drop at all.
 LOGNOT="covered by a pin shape"
 run_case pindup_clean "ESCB_CONC_0.def" \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json -l $IN/escblock.lef
+  -d $IN/layers.json -p $IN/escblock.netlist.json -l $IN/escblock.lef
 LOGMUST="dropped 2 obstacle(s) covered by a pin shape"
 run_case pindup_exact "ESCB_CONC_0.def" \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json -l $IN/pindupobs.lef
+  -d $IN/layers.json -p $IN/escblock.netlist.json -l $IN/pindupobs.lef
 LOGMUST="dropped 2 obstacle(s) covered by a pin shape"
 run_case pindup_inside "ESCB_CONC_0.def" \
-  -d $IN/layers.json -p $IN/escblock.placement_verilog.json -l $IN/pininobs.lef
+  -d $IN/layers.json -p $IN/escblock.netlist.json -l $IN/pininobs.lef
 same_defs pindup_exact_as_clean pindup_clean pindup_exact "ESCB_CONC_0.def"
 same_defs pindup_inside_as_clean pindup_clean pindup_inside "ESCB_CONC_0.def"
 
@@ -1093,11 +1093,11 @@ run_case via_rotate_off "" -replay $IN/viarotate_tap.lef -d $IN/layers_align_sky
 #      an obstacle; open after the corner-escape pass, routed by the -padhalo re-route of that hierarchy.
 #      -viacost 0: the layer-file via cost the case was built on; priced by resistance, one net stays boxed in.
 LOGMUST="re-routing with via-pad halo grid lines"
-run_case halo_fallback "STRONG_ARM_LATCH_0.def" -d $IN/layers_sky130_bench.json -p $IN/halofallback.placement_verilog.json \
+run_case halo_fallback "STRONG_ARM_LATCH_0.def" -d $IN/layers_sky130_bench.json -p $IN/halofallback.netlist.json \
   -l $IN/halofallback.lef -ndr $IN/halofallback_ndr.json -uu 1000 -reorder 30 -viacost 0
 LOGMUST="unrouted=2"
 ALLOW_UNROUTED=1
-run_case halo_fallback_off "STRONG_ARM_LATCH_0.def" -d $IN/layers_sky130_bench.json -p $IN/halofallback.placement_verilog.json \
+run_case halo_fallback_off "STRONG_ARM_LATCH_0.def" -d $IN/layers_sky130_bench.json -p $IN/halofallback.netlist.json \
   -l $IN/halofallback.lef -ndr $IN/halofallback_ndr.json -uu 1000 -reorder 30 -nohalofallback -viacost 0
 
 # 55d. offcentre_target: ota2's PTAIL on MAGICAL's placement joins its routed tree. The tree was the larger set,
@@ -1168,7 +1168,7 @@ fi
 pgdir="$OUTROOT/pwr_grid_route"
 mkdir -p "$pgdir"
 if python3 ../bin/gen_pwr_grid.py -l ./layers.json \
-     -p ./pwrcell.placement_verilog.json --bottom M3 --top M4 --stride 2 \
+     -p ./pwrcell.netlist.json --bottom M3 --top M4 --stride 2 \
      --avoid ./pwrcell.lef \
      --lef "$pgdir/pgrid.lef" --placement-out "$pgdir/pg_place.json" \
      >"$pgdir/gen.log" 2>&1; then

@@ -14,7 +14,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("-g", "--gds",     required=True, help="Input GDS file")
 ap.add_argument("-l", "--layers",  required=True, help="layers.json")
 ap.add_argument("-n", "--netlist", default="",    help="Optional SCS netlist")
-ap.add_argument("-o", "--out",     default="out.placement_verilog.json",
+ap.add_argument("-o", "--out",     default="out.netlist.json",
                 help="Output JSON file")
 args = ap.parse_args()
 

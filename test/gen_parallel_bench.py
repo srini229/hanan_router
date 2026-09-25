@@ -14,7 +14,7 @@ import json
 import sys
 
 N        = int(sys.argv[1]) if len(sys.argv) > 1 else 32
-PL_OUT   = sys.argv[2] if len(sys.argv) > 2 else "parallel_bench.placement_verilog.json"
+PL_OUT   = sys.argv[2] if len(sys.argv) > 2 else "parallel_bench.netlist.json"
 NDR_OUT  = sys.argv[3] if len(sys.argv) > 3 else "parallel_bench_ndr.json"
 
 W      = 4000        # band width (route span)

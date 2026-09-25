@@ -7,13 +7,13 @@ import argparse
 import os
 
 ap = argparse.ArgumentParser()
-ap.add_argument( "-p", "--pl_file", type=str, default="", help='<filename.placement_verilog.json>')
+ap.add_argument( "-p", "--pl_file", type=str, default="", help='<filename.netlist.json>')
 ap.add_argument( "-g", "--gds_dir", type=str, default="", help='<dir with all leaf gds files>')
 ap.add_argument( "-t", "--top_cell", type=str, default="library", help='<top cell>')
 ap.add_argument( "-u", "--units", type=float, default=1e-6, help='<units in m>')
 ap.add_argument( "-s", "--scale", type=float, default=1e3, help='<scale>')
 args = ap.parse_args()
-print(f"placement verilog : {args.pl_file}")
+print(f"netlist : {args.pl_file}")
 print(f"gds dir           : {args.gds_dir}")
 print(f"top cell          : {args.top_cell}")
 print(f"units             : {args.units}")

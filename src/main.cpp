@@ -11,7 +11,7 @@ int main(int argc, char* argv[])
 {
   const std::string logfile = parseArgs(argc, argv, "-log", "route.log");
   if (argc <= 1) {
-    std::cerr << "usage : " << argv[0] << "\n\t-d <layers.json>\n\t-p <placement file>\n\t-l <lef file>\n"
+    std::cerr << "usage : " << argv[0] << "\n\t-d <layers.json>\n\t-p <netlist.json> (netlist and placement)\n\t-l <lef file>\n"
       << "\t-s <lef scaling>\n\t-uu <user units scaling>\n\t-ndr <ndr constraints.json> -o <output dir> -r <precision>\n"
       << "\t-reorder <N> (alternate net-ordering passes when nets remain unrouted; default 10)\n"
       << "\t-maxexp <N> (A* node-expansion budget per search stage; default 100000)\n"

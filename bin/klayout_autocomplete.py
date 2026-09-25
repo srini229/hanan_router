@@ -225,7 +225,7 @@ def build_router_inputs(work_dir, net_name, islands, obstacles_by_layer,
             net_entry["corridor_guide_weight"] = corridor_guide_weight
         ndr[0]["nets"] = [net_entry]
 
-    placement_path = os.path.join(work_dir, "autocomplete.placement_verilog.json")
+    placement_path = os.path.join(work_dir, "autocomplete.netlist.json")
     ndr_path = os.path.join(work_dir, "autocomplete_ndr.json")
     lef_path = os.path.join(work_dir, "autocomplete.lef")
     with open(placement_path, "w") as f:
@@ -305,7 +305,7 @@ def build_router_inputs_multi(work_dir, nets, obstacles_by_layer, layout_dbu,
     if ndr_nets:
         ndr[0]["nets"] = ndr_nets
 
-    placement_path = os.path.join(work_dir, "autocomplete.placement_verilog.json")
+    placement_path = os.path.join(work_dir, "autocomplete.netlist.json")
     ndr_path = os.path.join(work_dir, "autocomplete_ndr.json")
     lef_path = os.path.join(work_dir, "autocomplete.lef")
     with open(placement_path, "w") as f:

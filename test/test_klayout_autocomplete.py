@@ -158,7 +158,7 @@ class AutocompleteFixture(unittest.TestCase):
         self.lef = os.path.join(self.d, 'pad.lef')
         with open(self.lef, 'w') as f:
             f.write(LEF)
-        self.placement = os.path.join(self.d, 'top.placement_verilog.json')
+        self.placement = os.path.join(self.d, 'top.netlist.json')
         with open(self.placement, 'w') as f:
             json.dump(PLACEMENT, f)
 

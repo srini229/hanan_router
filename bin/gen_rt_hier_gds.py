@@ -20,7 +20,7 @@ if args.pl_file == "" or args.gds_dir == "" or args.layers == "" or args.deff ==
     ap.print_help()
     exit()
 
-print(f"placement verilog : {args.pl_file}")
+print(f"netlist : {args.pl_file}")
 print(f"gds dir           : {args.gds_dir}")
 print(f"top cell          : {args.top_cell}")
 print(f"units             : {args.units}")

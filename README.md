@@ -48,13 +48,13 @@ The JSON file formats reuse the syntax from the [ALIGN](https://github.com/ALIGN
 # Usage
 
 ```
-hanan_router -d <layers.json> -p <placement file> -l <lef file> [options]
+hanan_router -d <layers.json> -p <netlist.json> -l <lef file> [options]
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
 | `-d <layers.json>` | yes | Abstracted information for each metal/via layer of the technology. |
-| `-p <placement file>` | yes | Placement / netlist in JSON (ALIGN `placement_verilog.json` format). |
+| `-p <netlist.json>` | yes | Netlist and placement in JSON: instances with their transforms, and nets (the format of ALIGN's placement output). |
 | `-l <lef file>` | yes | LEF with the pin/blockage (OBS) information for each leaf cell. |
 | `-ndr <ndr.json>` | no | User-specified non-default rules (see [NDR constraints](#ndr-constraints)). |
 | `-o <output dir>` | no | Output directory for the generated LEF/DEF (default `./`). |
@@ -326,6 +326,6 @@ usage: gen_rt_gds.py [-h] [-p PL_FILE] [-g GDS_DIR] [-t TOP_CELL] [-u UNITS] [-s
 
 For example:
 ```
-../bin/gen_rt_gds.py -p test.placement_verilog.json -g . -t TEST_CONC_0 -l layers.json -d TEST_CONC_0.def
+../bin/gen_rt_gds.py -p test.netlist.json -g . -t TEST_CONC_0 -l layers.json -d TEST_CONC_0.def
 ```
 The generated GDSII can be viewed in klayout and streamed into commercial P&R tools.
