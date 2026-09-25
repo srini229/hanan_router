@@ -1118,6 +1118,13 @@ EXPECT_EXIT=1
 run_case reverse_pass_escapes "" -replay $IN/magical/ptail_offcentre.lef -d $IN/magical/layers.json \
   -ndr $IN/magical/ota2_ndr.json -uu 1000 -viacost 10 -nopattern -maxexp 200
 
+# 55d3. symmetry_layer: in ota2 on MAGICAL's placement, net0131 follows net0133's mirror in the plane but, with
+#       no guide on its layer, the guide once charged it nothing for being on another metal: 3% of its metal
+#       lay on the mirror image. The deviation now counts a pitch per layer away; the share must reach 0.7.
+LOGMUST="pair=net0133,net0131 .*mirrored=0\.[7-9]"
+run_case symmetry_layer "" -d $IN/magical/layers.json -p $IN/magical/ota2/placement.json -l $IN/magical/ota2/cell.lef \
+  -ndr $IN/magical/ota2_ndr.json -uu 1000 -reorder 30
+
 # 55e. samenet_*: MAGICAL placements (met4 cap, every layer bidirectional, -viacost 10); each design broke a
 #      same-net rule before its fix -- ota1 a stacked via's pad cross, ota3 gaps to its own shapes, leung_nmcnr
 #      boundary escapes left along their edge, leung_dfcfc2 a cut touching the tree's, hoilee_affc a pin pair

@@ -567,8 +567,14 @@ CostType Router::guideDeviation(const int x, const int y, const int z) const
     long d = nearest(it->second);
     if (d >= 0) return static_cast<CostType>(d);
   }
+  // no guide on this layer: the planar distance, plus a pitch per layer to the nearest layer the guide uses
   long d = nearest(_guideAll);
-  return d < 0 ? 0 : static_cast<CostType>(d);
+  int dz = INT_MAX;
+  for (auto& l : _guideByLayer) {
+    if (!l.second.empty()) dz = std::min(dz, std::abs(l.first - z));
+  }
+  const long pitch = std::max(widthx(z), widthy(z)) + std::max(spacex(z), spacey(z));
+  return d < 0 ? 0 : static_cast<CostType>(d + (dz == INT_MAX ? 0 : dz * pitch));
 }
 
 Node* Router::createNode(const int x, const int y, const int z,

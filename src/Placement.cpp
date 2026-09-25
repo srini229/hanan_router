@@ -610,11 +610,12 @@ void Module::route(Router::Router& router, const std::string& outdir)
         // If this net is the second of a symmetric pair and its partner routed,
         // install the mirrored partner route as an A* guide.
         bool vert = true; int pos = 0; bool guided = false;
+        Geom::LayerRects mirror;
         auto sit = secondToPair.find(nets[i]);
         if (sit != secondToPair.end() && !sit->second->first->routeShapes().empty()) {
           resolveAxis(*sit->second, vert, pos);
-          router.setGuide(mirrorShapes(sit->second->first->routeShapes(), vert, pos),
-                          _devweight * router.baseUnitCost());
+          mirror = mirrorShapes(sit->second->first->routeShapes(), vert, pos);
+          router.setGuide(mirror, _devweight * router.baseUnitCost());
           guided = true;
           COUT << "symmetric net : routing " << nets[i]->name() << " guided by "
                << sit->second->first->name() << " mirrored about "
@@ -629,9 +630,23 @@ void Module::route(Router::Router& router, const std::string& outdir)
               double d = router.guideDeviation(r.xcenter(), r.ycenter(), l.first);
               maxdev = std::max(maxdev, d); sumdev += d; ++cnt;
             }
+          // share of the net's metal on its partner's mirror image, layer for layer
+          using namespace boost::polygon::operators;
+          double on = 0, all = 0;
+          for (auto& l : nets[i]->routeShapes()) {
+            PolySet mine, theirs;
+            for (auto& r : l.second) mine += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
+            auto it = mirror.find(l.first);
+            if (it != mirror.end())
+              for (auto& r : it->second) theirs += PRect(r.xmin(), r.ymin(), r.xmax(), r.ymax());
+            all += static_cast<double>(bp::area(mine));
+            PolySet both = mine & theirs;
+            on += static_cast<double>(bp::area(both));
+          }
           COUT << "SYMMETRY module=" << _name << " pair=" << sit->second->first->name()
                << ',' << nets[i]->name() << " axis=" << (vert ? "V:" : "H:") << pos
-               << " maxdev=" << maxdev << " meandev=" << (cnt ? sumdev / cnt : 0.0) << '\n';
+               << " maxdev=" << maxdev << " meandev=" << (cnt ? sumdev / cnt : 0.0)
+               << " mirrored=" << (all > 0 ? on / all : 1.0) << '\n';
           router.clearGuide();
         }
         return;
