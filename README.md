@@ -71,6 +71,17 @@ hanan_router -d <layers.json> -p <netlist.json> -l <lef file> [options]
 | `-seedpolys <N>` | no | For a pin split into more than `N` polygons, seed only the `N` nearest the other terminal (default `0` = seed all). |
 | `-seedpolysalways` | no | Keep that limit on every attempt; by default the rest are restored for a net still open by attempt 3. |
 | `-rsmt` | no | Confine each net to a Borah-Owens-Irwin Steiner corridor over its pins. |
+| `-viacost <r\|P\|0>` | no | How a via is priced. `r` (default): the length of the narrower metal it joins that has the same resistance. `P`: at least `P` wire pitches of the cheaper metal. `0`: its bare layer-file resistance. |
+| `-padhalo` | no | Also put grid lines where a via pad, not only a wire, clears each obstacle. Off by default; a hierarchy still open at the end is re-routed with them. |
+| `-nohalofallback` | no | Do not re-route still-open hierarchies with `-padhalo` lines at the end. |
+| `-admissible` | no | Use the admissible distance bound in every A\* search, not only under a corridor guide. |
+| `-nopattern` | no | Skip L/Z pattern routing; every wire goes to A\*. |
+| `-noviarotate` | no | Offer each single-cut via only as the layer file draws it, not also turned 90 degrees. |
+| `-gridprune <pct>` | no | Collapse grid coordinates closer than `pct` percent of the pitch. |
+| `-satpoint` | no | The pre-route escape check takes escapes from points along each pin, as the search does. |
+| `-reserveexcluded` | no | Keep one escape clear for every pin of a `do_not_route` net, for a later pass. |
+| `-noseed` | no | Do not seed grid lines inside corridor bands. |
+| `-softwires` | no | Measurement only: other nets' wires are not obstacles, only their pins, so the result overlaps nets and is not legal. A net still open this way is limited by its pins or the grid, not by contention for routing space. |
 | `-relaxvia` | no | In the final pass, retry a still-unrouted net's escape via with spacing relaxed to as close as 5 to (never on) a shape -- source pins first, then target pins too. |
 | `-threads <N>` | no | Route non-overlapping nets in parallel using `N` worker threads (default `1` = sequential). See [Parallel routing](#parallel-routing). |
 | `-uu <scale>` | no | User-units scaling for the placement file (e.g. nm/um). |

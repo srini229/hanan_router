@@ -64,7 +64,7 @@ run_case() {
     # "Checking SHORTS" headers always appear; actual violations must not
     local shorts
     shorts=$(grep -c "SHORT.*between" "$log")
-    if [ "$shorts" != "0" ]; then
+    if [ "$shorts" != "0" ] && [ -z "${ALLOW_SHORTS:-}" ]; then   # ALLOW_SHORTS: -softwires overlaps nets by design
       errs="$errs short-violations=$shorts;"
     fi
   fi
@@ -124,6 +124,7 @@ run_case() {
   LOGNOT=""
   NETROUTED=""
   ALLOW_UNROUTED=""
+  ALLOW_SHORTS=""
   EXPECT_EXIT=""
 }
 
@@ -533,6 +534,14 @@ ALLOW_UNROUTED=1
 run_case reorder_disabled "" \
   -d $IN/layers.json -p $IN/reorder.netlist.json \
   -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json -reorder 0 -viacost 0
+
+# softwires: the same case with other nets' wires not obstacles routes all five, so the stranded net is blocked by
+#     contention rather than by its pins; the wires overlap, so the router's own check reports shorts.
+LOGMUST="ROUTE_SUMMARY module=REORDER_CONC_0 nets=5 unrouted=0|SHORT (router or pin) between|Effective settings .* -softwires"
+ALLOW_SHORTS=1
+run_case softwires "REORDER_CONC_0.def" \
+  -d $IN/layers.json -p $IN/reorder.netlist.json \
+  -l $IN/m1adj_escape.lef -ndr $IN/reorder_ndr.json -reorder 0 -viacost 0 -softwires
 
 # 22-25. argument-handling / error paths (cover main.cpp CLI parsing and the
 #     std::cerr diagnostics). Each asserts the expected message on stderr/err.log.

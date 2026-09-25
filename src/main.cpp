@@ -33,6 +33,7 @@ int main(int argc, char* argv[])
       << "\t-nohalofallback (do not re-route still-open hierarchies with -padhalo lines at the end)\n"
       << "\t-admissible (A* uses the admissible distance bound everywhere, not only under a corridor guide)\n"
       << "\t-nopattern (skip L/Z pattern routing; every wire goes to A*)\n"
+      << "\t-softwires (other nets' wires are not obstacles, only their pins: the nets still open are pin-limited; output not legal)\n"
       << "\t-satpoint (pre-route escape check takes escapes from points along each pin, as the search does)\n"
       << "\t-reserveexcluded (keep one escape clear for every pin of a do_not_route net, for a later pass)\n"
       << "\t-noviarotate (offer each single-cut via only as drawn, not also turned 90 degrees)\n"
@@ -132,6 +133,7 @@ int main(int argc, char* argv[])
   if (checkArg(argc, argv, "-padhalo")) hrdb.setPadHaloLines(true);
   if (checkArg(argc, argv, "-admissible")) hrdb.setAdmissibleBound(true);
   if (checkArg(argc, argv, "-nopattern")) hrdb.setNoPattern(true);
+  if (checkArg(argc, argv, "-softwires")) hrdb.setSoftWires(true);
   if (checkArg(argc, argv, "-satpoint")) hrdb.setSatPoint(true);
   if (checkArg(argc, argv, "-reserveexcluded")) hrdb.setReserveExcluded(true);
   if (checkArg(argc, argv, "-noviarotate")) hrdb.setViaRotate(false);
@@ -197,6 +199,7 @@ int main(int argc, char* argv[])
        << (hrdb.padHaloLines() ? " -padhalo" : "")
        << (hrdb.admissibleBound() ? " -admissible" : "")
        << (hrdb.noPattern() ? " -nopattern" : "")
+       << (hrdb.softWires() ? " -softwires" : "")
        << (hrdb.satPoint() ? " -satpoint" : "")
        << (hrdb.reserveExcluded() ? " -reserveexcluded" : "")
        << (hrdb.viaRotate() ? "" : " -noviarotate")

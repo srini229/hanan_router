@@ -557,6 +557,7 @@ class Router {
     bool _padHaloLines{false};    // -padhalo: grid lines at the via-pad halo too
     bool _admissibleAlways{false}; // -admissible: admissibleBound() in every search
     bool _noPattern{false};        // -nopattern: skip L/Z pattern routing, A* only
+    bool _softWires{false};        // -softwires: other nets' wires are not obstacles (a contention bound, not a legal route)
     bool _satPoint{false};         // -satpoint: escape certificate uses the point model
     bool _reserveExcluded{false};  // -reserveexcluded: reserve an escape for every pin of an excluded net
     bool _viaRotate{true};         // -noviarotate: offer each single-cut via only as the layer file draws it
@@ -1060,6 +1061,8 @@ class Router {
     bool centrelineClear(const int z, const Geom::Rect& seg) const;
     void setAdmissibleBound(const bool b) { _admissibleAlways = b; }
     void setNoPattern(const bool b) { _noPattern = b; }
+    void setSoftWires(const bool b) { _softWires = b; }
+    bool softWires() const { return _softWires; }
     void setSatPoint(const bool b) { _satPoint = b; }
     void setReserveExcluded(const bool b) { _reserveExcluded = b; }
     void setViaRotate(const bool b) { _viaRotate = b; }

@@ -762,7 +762,8 @@ void Module::route(Router::Router& router, const std::string& outdir)
         for (size_t bi = 0; bi < batch.size(); ++bi) {
           size_t i = batch[bi];
           if (nets[i]->routable() && nets[i]->unrouted()) anyUnrouted = true;
-          Geom::MergeLayerRects(netObstaclesRouted, nets[i]->routeShapesWithPins());
+          if (!router.softWires()) Geom::MergeLayerRects(netObstaclesRouted, nets[i]->routeShapesWithPins());
+          else Geom::MergeLayerRects(netObstaclesRouted, nets[i]->pinSnapshotShapes());   // ports hold the route too
         }
       }
       return anyUnrouted;

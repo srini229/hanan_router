@@ -189,6 +189,13 @@ class Net {
         }
       }
     }
+    // the snapshotted pin-only shapes, merged by layer
+    Geom::LayerRects pinSnapshotShapes() const
+    {
+      Geom::LayerRects out;
+      for (auto& ps : _pinSnapshot) Geom::MergeLayerRects(out, ps.second);
+      return out;
+    }
     // Remove all routed connections: drop the route shapes, restore the ports to
     // their snapshotted pin-only shapes and mark the net unrouted again.
     void clearRoutes()
